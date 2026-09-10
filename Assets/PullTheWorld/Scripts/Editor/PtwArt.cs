@@ -40,12 +40,18 @@ namespace PullTheWorld.EditorTools
         // should go.
         // These are pre-post-processing. Tonemapping, contrast and vignette all pull the frame
         // down, so the authored backdrop sits above the #97A3B3 target to land on it on screen.
-        public static readonly Color BgTop = Hex("#A6B3C4");
-        public static readonly Color BgBottom = Hex("#93A2B5");
+        // Raised for v2 after a capture-compare pass. PALETTE.md's target for the ground is
+        // #97A3B3, and the v1 values landed nearer #5A6875 on screen once Neutral tonemapping and
+        // the vignette had taken their cut - the whole frame read as dusk. These sit high enough
+        // to come out at the target.
+        public static readonly Color BgTop = Hex("#C6D3E1");
+        public static readonly Color BgBottom = Hex("#A9B8C8");
 
-        // Olive-leaning, not Kelly green. The first render came out far too saturated.
-        public static readonly Color Grass = Hex("#6B8749");
-        public static readonly Color GrassDark = Hex("#4C6435");
+        // Olive-leaning, not Kelly green. The first render came out far too saturated; the v1
+        // value then over-corrected into a dark bottle green that killed all the colour in the
+        // frame. This is PALETTE.md's measured lit value rather than another guess.
+        public static readonly Color Grass = Hex("#6E8B4B");
+        public static readonly Color GrassDark = Hex("#5C7A3E");
         // Stone was the one material both independent samples initially got wrong (averaging
         // across the bright and dark concept cards dragged it ~27 points too dark). Re-measured
         // on the LEVEL 1 card alone: lit #A6ABB6, mid #7C8087, shadow #494D52.
@@ -85,6 +91,8 @@ namespace PullTheWorld.EditorTools
         public const string MWoodDark = "M_WoodDark";
         public const string MPlayer = "M_Player";
         public const string MPlayerShade = "M_PlayerShade";
+        public const string MPlayerEye = "M_PlayerEye";
+        public const string MKey = "M_Key";
         public const string MRock = "M_Rock";
         public const string MFoliage = "M_Foliage";
         public const string MFoliageDark = "M_FoliageDark";
@@ -134,6 +142,9 @@ namespace PullTheWorld.EditorTools
             Lit(MWoodDark, WoodDark, 0.08f);
             Lit(MPlayer, PlayerBody, 0.22f);
             Lit(MPlayerShade, PlayerShade, 0.18f);
+            // Eyes are near-black rather than pure black so they still pick up a rim of key light
+            // and do not read as holes punched in the ball.
+            Lit(MPlayerEye, Hex("#25303C"), 0.30f);
             Lit(MRock, RockGrey, 0.12f);
             Lit(MFoliage, Foliage, 0.10f);
             Lit(MFoliageDark, FoliageDark, 0.08f);
@@ -146,6 +157,11 @@ namespace PullTheWorld.EditorTools
             // the moving world is judged against.
             Lit(MFarStone, Hex("#7E8A9A"), 0.08f);
             Lit(MFarGrass, Hex("#6E7E68"), 0.06f);
+
+            // The key has to out-read every rock in the level from across the screen, so it gets a
+            // real emissive rather than just a bright albedo. Kept below the door's amber so the
+            // goal still wins the frame.
+            Emissive(MKey, Hex("#FFD96B"), Hex("#FFC03A"), 1.9f, 0.42f);
 
             Emissive(MGlowWarm, Warm, Warm, 3.2f, 0.3f);
             Emissive(MGlowCyan, Cyan, Cyan, 2.6f, 0.3f);
@@ -180,14 +196,14 @@ namespace PullTheWorld.EditorTools
             m.SetColor("_TopColor", BgTop);
             m.SetColor("_BottomColor", BgBottom);
             m.SetColor("_GlowColor", Hex("#F0F6FF"));
-            m.SetFloat("_GlowStrength", 0.34f);
+            m.SetFloat("_GlowStrength", 0.46f);
             m.SetVector("_GlowCenter", new Vector4(0f, 0.04f, 0f, 0f));
             m.SetFloat("_GlowRadius", 0.66f);
             m.SetFloat("_GlowAspect", 1.4f);
             m.SetFloat("_CloudStrength", 0.115f);
             m.SetFloat("_CloudScale", 1.7f);
             m.SetFloat("_CloudSpeed", 0.006f);
-            m.SetFloat("_EdgeDarken", 0.2f);
+            m.SetFloat("_EdgeDarken", 0.09f);
             m.renderQueue = (int)RenderQueue.Background;
             EditorUtility.SetDirty(m);
         }

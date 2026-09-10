@@ -3,22 +3,33 @@ using UnityEngine;
 namespace PullTheWorld
 {
     /// <summary>
-    /// The objective. Deliberately does NOT use a physics trigger: the world is one big compound
-    /// collider, so trigger callbacks would land on the wrong GameObject. A plain distance test to
-    /// the anchor is cheaper, fully deterministic and trivial to assert in a test.
+    /// The objective: a glowing doorway the player has to be delivered into by gravity.
+    ///
+    /// Deliberately does NOT use a physics trigger. The whole static level is one compound collider
+    /// hanging off a single kinematic Rigidbody, so trigger callbacks arrive on whichever
+    /// GameObject PhysX felt like reporting rather than on this door. An explicit distance test
+    /// against the player is cheaper, fully deterministic, and trivial to assert in a test. v1
+    /// learned this the hard way and the reasoning still holds.
+    ///
+    /// Locking is how the key and pressure-plate levels work: a locked door reads cold and dim and
+    /// ignores the player entirely until the level says otherwise.
     /// </summary>
     public class ExitPortal : MonoBehaviour
     {
         [Header("Reach")]
-        [Tooltip("The exact spot that has to arrive at the player - the doorway threshold.")]
+        [Tooltip("The doorway threshold - the exact spot the player has to arrive at.")]
         [SerializeField] Transform mouth;
-        [SerializeField] float reachRadius = 0.85f;
-        [Tooltip("Distance at which the door starts visibly reacting to the player.")]
+        [Tooltip("Added to the player radius, so a fast roll through the doorway still registers.")]
+        [SerializeField] float reachRadius = 0.62f;
+        [Tooltip("Distance at which the door starts visibly reacting to the player approaching.")]
         [SerializeField] float noticeRadius = 4.5f;
 
         [Header("Locking")]
-        [Tooltip("A locked door ignores the player until something unlocks it (e.g. a pressure plate).")]
+        [Tooltip("A locked door ignores the player until a plate or the last key unlocks it.")]
         [SerializeField] bool locked;
+        [Tooltip("On means the door watches the level key count and unlocks itself when they are " +
+                 "all collected. Off means something else drives SetLocked, e.g. a pressure plate.")]
+        [SerializeField] bool unlockedByKeys = true;
 
         [Header("Visuals")]
         [SerializeField] Transform glowQuad;
@@ -34,7 +45,7 @@ namespace PullTheWorld
         [SerializeField] float basePulseAmount = 0.05f;
         [SerializeField] float baseLightIntensity = 2.2f;
 
-        // PTW/PortalEnergy properties. Kept as ids so the per-frame update allocates nothing.
+        // PTW/PortalEnergy properties, cached as ids so the per-frame update allocates nothing.
         static readonly int CoreColorId = Shader.PropertyToID("_CoreColor");
         static readonly int EdgeColorId = Shader.PropertyToID("_EdgeColor");
         static readonly int IntensityId = Shader.PropertyToID("_Intensity");
@@ -63,26 +74,41 @@ namespace PullTheWorld
         {
             if (locked == value) return;
             locked = value;
-            if (!locked && arriveVfx) arriveVfx.Play();
+            if (!locked)
+            {
+                if (arriveVfx) arriveVfx.Play();
+                PtwAudio.Play(PtwSfx.Unlock);
+            }
         }
 
         void Update()
         {
             t += Time.deltaTime;
 
-            var rig = WorldRig.Instance;
             var lm = LevelManager.Instance;
-            if (rig == null) return;
+            var player = PlayerBody.Instance;
 
-            float d = Vector3.Distance(rig.AnchorPos, MouthPosition);
-            proximity = 1f - Mathf.Clamp01(Mathf.Max(0f, d - reachRadius) / Mathf.Max(0.01f, noticeRadius));
+            // Key-driven doors resolve their own locked state so a level does not need wiring.
+            if (unlockedByKeys && lm != null && lm.KeysRequired > 0)
+                SetLocked(!lm.DoorUnlocked);
 
-            if (!consumed && !locked && d <= reachRadius && lm != null && lm.IsPlaying)
+            if (player == null || !player.IsAlive)
+            {
+                ApplyGlow(0f);
+                return;
+            }
+
+            float d = Vector3.Distance(player.transform.position, MouthPosition);
+            float hit = reachRadius + player.Radius;
+            proximity = 1f - Mathf.Clamp01(Mathf.Max(0f, d - hit) / Mathf.Max(0.01f, noticeRadius));
+
+            if (!consumed && !locked && d <= hit && lm != null && lm.IsPlaying)
             {
                 consumed = true;
                 if (arriveVfx) arriveVfx.Play();
                 PtwAudio.Play(PtwSfx.Win);
-                rig.AddShake(0.35f);
+                Haptics.Play(HapticKind.Win);
+                if (WorldRotator.Instance) WorldRotator.Instance.AddShake(0.35f);
                 lm.ReportWin();
             }
 

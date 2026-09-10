@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 8610290134036203312}
   - component: {fileID: 6120905816857574534}
   - component: {fileID: 947238646524017876}
-  - component: {fileID: 1811877877149946938}
+  - component: {fileID: 4027267688758748480}
   m_Layer: 0
   m_Name: Prop_Boulder
   m_TagString: Untagged
@@ -61,7 +61,7 @@ Rigidbody:
   m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 0
-  m_Constraints: 0
+  m_Constraints: 56
   m_CollisionDetection: 2
 --- !u!135 &947238646524017876
 SphereCollider:
@@ -70,7 +70,7 @@ SphereCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 555337267596922766}
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 13400000, guid: 378aafdf2bb38d64e8f29198affcdbf0, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -82,9 +82,9 @@ SphereCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Radius: 0.29
+  m_Radius: 0.34
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &1811877877149946938
+--- !u!114 &4027267688758748480
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -93,20 +93,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 555337267596922766}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 89c753759d50dd84ba0e162446b08cc4, type: 3}
+  m_Script: {fileID: 11500000, guid: feaca93a022761a4e9e6b71aaea0cdb7, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: PullTheWorld.Runtime::PullTheWorld.Pushable
-  minImpactSpeed: 1.6
-  maxImpactSpeed: 9
-  shakeScale: 0.35
-  squashScale: 0.22
-  squashRecover: 11
-  impactCooldown: 0.09
-  playerNoticeRadius: 3.2
-  respawnBelow: -18
-  respawnEnabled: 1
-  visual: {fileID: 2408926992540365509}
-  impactVfx: {fileID: 3965673012739093887}
+  m_EditorClassIdentifier: PullTheWorld.Runtime::PullTheWorld.DynamicProp
+  maxSpeed: 18
+  maxAngularSpeed: 30
 --- !u!1 &612635712551676741
 GameObject:
   m_ObjectHideFlags: 0

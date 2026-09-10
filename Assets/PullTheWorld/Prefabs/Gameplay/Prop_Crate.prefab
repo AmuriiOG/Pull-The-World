@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 8946032059122084437}
   - component: {fileID: 7805608989008134121}
   - component: {fileID: 5514093861322316833}
-  - component: {fileID: 1342323227020613078}
+  - component: {fileID: 3355477927876674731}
   m_Layer: 0
   m_Name: Prop_Crate
   m_TagString: Untagged
@@ -61,7 +61,7 @@ Rigidbody:
   m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 0
-  m_Constraints: 0
+  m_Constraints: 56
   m_CollisionDetection: 2
 --- !u!65 &5514093861322316833
 BoxCollider:
@@ -82,9 +82,9 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.62, y: 0.62, z: 0.62}
+  m_Size: {x: 0.7, y: 0.7, z: 0.7}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &1342323227020613078
+--- !u!114 &3355477927876674731
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -93,20 +93,11 @@ MonoBehaviour:
   m_GameObject: {fileID: 897115684653530186}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 89c753759d50dd84ba0e162446b08cc4, type: 3}
+  m_Script: {fileID: 11500000, guid: feaca93a022761a4e9e6b71aaea0cdb7, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: PullTheWorld.Runtime::PullTheWorld.Pushable
-  minImpactSpeed: 1.6
-  maxImpactSpeed: 9
-  shakeScale: 0.35
-  squashScale: 0.22
-  squashRecover: 11
-  impactCooldown: 0.09
-  playerNoticeRadius: 3.2
-  respawnBelow: -18
-  respawnEnabled: 1
-  visual: {fileID: 6493957637684506080}
-  impactVfx: {fileID: 7801553669166853299}
+  m_EditorClassIdentifier: PullTheWorld.Runtime::PullTheWorld.DynamicProp
+  maxSpeed: 18
+  maxAngularSpeed: 30
 --- !u!1 &1391181505261508649
 GameObject:
   m_ObjectHideFlags: 0

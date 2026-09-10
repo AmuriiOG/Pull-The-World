@@ -29,7 +29,7 @@ namespace PullTheWorld.EditorTools
         public const string FontSemiPath = "Assets/PullTheWorld/Art/Fonts/Poppins-SemiBold SDF.asset";
 
         // Measured: a white-albedo surface in shadow sits at #697CA5, so that IS the ambient.
-        static readonly Color AmbientColor = PtwArt.Hex("#8395B6");
+        static readonly Color AmbientColor = PtwArt.Hex("#9FB2CE");
         static readonly Color KeyColor = PtwArt.Hex("#FFF6EA");
 
         // ==================================================================== entry point ====
@@ -41,51 +41,58 @@ namespace PullTheWorld.EditorTools
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             var systems = new GameObject("~Systems");
-            var director = systems.AddComponent<GameDirector>();
+            systems.AddComponent<GameDirector>();
             systems.AddComponent<PtwAudio>();
 
-            Camera cam = BuildCamera(out IsometricCameraRig camRig);
+            Camera cam = BuildCamera(out PlaneCameraRig camRig);
             BuildLighting();
             BuildVolume();
 
             // ---- world ----
+            // One kinematic body means every static level collider below it becomes a single
+            // compound PhysX actor: one thing to rotate, and no broadphase churn while turning.
             var worldRoot = new GameObject("WorldRoot");
             var wrb = worldRoot.AddComponent<Rigidbody>();
             wrb.isKinematic = true;
             wrb.useGravity = false;
-            // One kinematic body means every static level collider below it becomes a single
-            // compound PhysX actor: cheap to teleport, and no broadphase churn while dragging.
+            wrb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            wrb.interpolation = RigidbodyInterpolation.Interpolate;
 
             var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(
                 PtwPrefabs.Play + "/PlayerRig.prefab");
             var player = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab);
-            player.transform.position = Vector3.zero;
+            player.transform.position = new Vector3(0f, 1.5f, 0f);
 
-            PtwPrefabs.Wire(camRig, "lookTarget", player.transform);
-            camRig.ApplyFraming();
+            // The camera frames the LEVEL, not the player. The player moves now, and a camera that
+            // followed them would re-introduce exactly the ambiguity v2 exists to remove: a moving
+            // camera over a rotating world reads as nothing in particular. The pivot is the origin,
+            // so that is what the camera is centred on, forever.
+            camRig.Apply();
 
-            var rig = systems.AddComponent<WorldRig>();
-            PtwPrefabs.Wire(rig, "worldRoot", worldRoot.transform);
-            PtwPrefabs.Wire(rig, "playerAnchor", player.transform);
-            PtwPrefabs.Wire(rig, "viewCamera", cam);
-            var blocker = player.transform.Find("Blocker");
-            if (blocker) PtwPrefabs.Wire(rig, "playerBlocker", blocker.GetComponent<Collider>());
+            var rotator = systems.AddComponent<WorldRotator>();
+            PtwPrefabs.Wire(rotator, "worldRoot", worldRoot.transform);
+            PtwPrefabs.Wire(rotator, "viewCamera", cam);
 
-            var input = systems.AddComponent<WorldInput>();
-            PtwPrefabs.Wire(input, "rig", rig);
+            var input = systems.AddComponent<RotateInput>();
+            PtwPrefabs.Wire(input, "rotator", rotator);
 
             var levels = systems.AddComponent<LevelManager>();
-            PtwPrefabs.Wire(levels, "rig", rig);
+            PtwPrefabs.Wire(levels, "rotator", rotator);
+            PtwPrefabs.Wire(levels, "player", player.GetComponent<PlayerBody>());
             PtwPrefabs.Wire(levels, "levelParent", worldRoot.transform);
+            PtwPrefabs.Wire(levels, "cameraRig", camRig);
             levels.EditorSetLevels(PtwLevels.LoadAll());
 
-            // Ocean removed at the user's request. BuildOcean() is kept below and can be
-            // re-enabled with one line; the static reference it provided is now supplied by the
-            // hazed distant islands instead.
-            BuildGrabMarker(rig, worldRoot.transform);
-            BuildBackdropScenery(rig);
-            BuildDust(rig);
-            BuildUi(rig, levels, cam);
+            BuildBackdropScenery();
+            var (burst, roll) = BuildDust();
+
+            var feedback = systems.AddComponent<ImpactFeedback>();
+            PtwPrefabs.Wire(feedback, "player", player.GetComponent<PlayerBody>());
+            PtwPrefabs.Wire(feedback, "rotator", rotator);
+            PtwPrefabs.Wire(feedback, "dust", burst);
+            PtwPrefabs.Wire(feedback, "rollDust", roll);
+
+            BuildUi(levels, cam);
 
             // Drop Level 1 into the scene as an authoring preview. Without this, opening Game.unity
             // shows nothing but a character floating in an empty backdrop, because levels are
@@ -106,14 +113,16 @@ namespace PullTheWorld.EditorTools
         }
 
         // ======================================================================== camera =====
-        static Camera BuildCamera(out IsometricCameraRig rigOut)
+        static Camera BuildCamera(out PlaneCameraRig rigOut)
         {
             var go = new GameObject("MainCamera");
             go.tag = "MainCamera";
             var cam = go.AddComponent<Camera>();
             cam.orthographic = true;
             cam.clearFlags = CameraClearFlags.SolidColor;
-            cam.backgroundColor = PtwArt.BgBottom;
+            // Matches the TOP of the backdrop gradient, so if the fill quad ever fails to cover the
+            // frame the uncovered area blends instead of banding.
+            cam.backgroundColor = PtwArt.BgTop;
             cam.allowHDR = true;
             cam.allowMSAA = true;
 
@@ -124,7 +133,7 @@ namespace PullTheWorld.EditorTools
             data.renderShadows = true;
 
             go.AddComponent<AudioListener>();
-            rigOut = go.AddComponent<IsometricCameraRig>();
+            rigOut = go.AddComponent<PlaneCameraRig>();
 
             // Backdrop welded to the camera so it can never drift.
             var bg = PtwPrefabs.MeshNode("Backdrop", "Mesh_QuadXY", go.transform, PtwArt.MBackground);
@@ -141,13 +150,17 @@ namespace PullTheWorld.EditorTools
         static void BuildLighting()
         {
             var keyGo = new GameObject("KeyLight");
-            // Upper-left, high pitch: verified to throw shadows down-and-right on screen for a
-            // camera at (36, 45, 0), which is what the reference does in every panel.
-            keyGo.transform.rotation = Quaternion.Euler(50f, 150f, 0f);
+            // Upper-left-front, re-aimed for v2's near-front-on camera. Worked out rather than
+            // eyeballed: this rotation gives a light direction of about (0.47, -0.74, 0.47), so
+            // top faces take the most light (dot 0.74), the front faces the camera actually sees
+            // are clearly lit (0.47), the left faces are lit, and the right faces fall into shade.
+            // That is what gives a flat-shaded chamfered cube its form, and it keeps the reference
+            // sheet's "key from upper-left, shadows down and to the right" reading intact.
+            keyGo.transform.rotation = Quaternion.Euler(46f, 40f, 0f);
             var key = keyGo.AddComponent<Light>();
             key.type = LightType.Directional;
             key.color = KeyColor;
-            key.intensity = 1.55f;
+            key.intensity = 1.6f;
             key.shadows = LightShadows.Soft;
             key.shadowStrength = 0.78f;
             key.shadowBias = 0.04f;
@@ -190,7 +203,12 @@ namespace PullTheWorld.EditorTools
             tone.mode.value = TonemappingMode.Neutral;
 
             var bloom = profile.Add<Bloom>(true);
-            bloom.threshold.overrideState = true; bloom.threshold.value = 0.95f;
+            // Threshold well above 1.0 so ONLY emissives bloom, which is what the style bible asks
+            // for: "bloom on emissives only - anchor ring, door glow, fire". At 0.95 it was also
+            // catching brightly lit SURFACES; with the island tilted, the grass cap's top face
+            // turns towards the key light (dot 0.88 against 0.74 upright) and was close to
+            // clipping. The emissives all sit at 1.9-4.5 intensity, so they still bloom from here.
+            bloom.threshold.overrideState = true; bloom.threshold.value = 1.3f;
             bloom.intensity.overrideState = true; bloom.intensity.value = 0.85f;
             bloom.scatter.overrideState = true; bloom.scatter.value = 0.62f;
             bloom.tint.overrideState = true; bloom.tint.value = Color.white;
@@ -198,7 +216,7 @@ namespace PullTheWorld.EditorTools
             bloom.highQualityFiltering.value = false;   // mobile budget
 
             var color = profile.Add<ColorAdjustments>(true);
-            color.postExposure.overrideState = true; color.postExposure.value = 0.05f;
+            color.postExposure.overrideState = true; color.postExposure.value = 0.18f;
             // Restrained: the first pass ran contrast 9 / saturation 4 and crushed the backdrop
             // into a slate grey while pushing the grass to a candy green.
             color.contrast.overrideState = true; color.contrast.value = 3f;
@@ -207,7 +225,7 @@ namespace PullTheWorld.EditorTools
             var vig = profile.Add<Vignette>(true);
             // A tall portrait frame puts a lot of screen inside the vignette falloff, so this has
             // to stay very light or the whole backdrop goes dark.
-            vig.intensity.overrideState = true; vig.intensity.value = 0.12f;
+            vig.intensity.overrideState = true; vig.intensity.value = 0.07f;
             vig.smoothness.overrideState = true; vig.smoothness.value = 0.75f;
             vig.color.overrideState = true; vig.color.value = PtwArt.Hex("#2B3644");
 
@@ -341,31 +359,44 @@ namespace PullTheWorld.EditorTools
 
         // ================================================================ backdrop scenery ====
         /// <summary>
-        /// A few distant islands that follow the world at a fraction of its speed. This is the
-        /// depth cue that makes "the world moved" unambiguous rather than merely plausible.
+        /// A few distant islands sitting well behind the play area.
+        ///
+        /// These are COMPLETELY STATIC, and in v2 that is the entire point. v1 slid them at a
+        /// fraction of the world's speed and had a long comment about parallax factors being
+        /// deliberately zero, because a backdrop that scrolls is the signature of a moving camera.
+        /// v2 has a genuinely rotating object in the middle of the frame, so a fixed backdrop is
+        /// the reference that makes the rotation unambiguous: something in shot is definitely not
+        /// turning, therefore the island definitely is.
+        ///
+        /// They get hazed, desaturated materials so they read as distance rather than as level
+        /// geometry the player is failing to reach.
         /// </summary>
-        static void BuildBackdropScenery(WorldRig rig)
+        static void BuildBackdropScenery()
         {
-            var layer = new GameObject("ParallaxBackdrop");
-            // Close enough to actually be SEEN. These are the static reference that tells the eye
-            // the world is what is moving - if they are off-screen (as they were) they contribute
-            // nothing. They get hazed materials so they still read as distance, not as level
-            // geometry the player cannot reach.
-            layer.transform.position = new Vector3(0f, -5.5f, 19f);
-            var pl = layer.AddComponent<ParallaxLayer>();
-            PtwPrefabs.Wire(pl, "rig", rig);
+            var layer = new GameObject("StaticBackdrop");
+            layer.transform.position = new Vector3(0f, -4.5f, 18f);
 
             var grass = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Blocks + "/Block_Grass.prefab");
             var stone = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Blocks + "/Block_Stone.prefab");
             var tree = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Props + "/Prop_TreeSmall.prefab");
 
             var rnd = new System.Random(4242);
+            // Kept in a band BELOW the play area rather than scattered around it.
+            //
+            // The first v2 pass inherited v1's ring of spots, which put islets in the top corners
+            // where they clipped the screen edge and read as stray blocks floating next to the
+            // level rather than as scenery. Portrait framing leaves its slack at the bottom (the
+            // camera frames the level's width, so there is always spare height), so that is where
+            // scenery belongs: it fills the dead space and stays clear of the island and the HUD.
+            // Kept inside |x| < 3.5. Framing is per-level now, so the visible width changes from
+            // level to level (a 40-degree level is framed much tighter than a free-spinning one) -
+            // anything further out than the tightest level's half-width gets sliced by the screen
+            // edge on that level and reads as debris. This band is inside all of them.
             var spots = new[]
             {
-                new Vector3(-9f, 2.5f, -4f), new Vector3(8f, 5f, 2f),
-                new Vector3(-5f, -3.5f, 7f), new Vector3(11f, -2f, -7f),
-                new Vector3(2f, 8f, 5f), new Vector3(-12f, 0f, 1f),
-                new Vector3(6f, -6f, 10f),
+                new Vector3(-3.2f, -1.5f, -3f), new Vector3(2.6f, -3.2f, 2f),
+                new Vector3(-1.2f, -5.8f, 6f),  new Vector3(3.1f, -7.4f, -5f),
+                new Vector3(-2.8f, -8.6f, 4f),  new Vector3(0.6f, -11f, 1f),
             };
 
             foreach (var s in spots)
@@ -375,23 +406,28 @@ namespace PullTheWorld.EditorTools
                 cluster.transform.localPosition = s;
                 float scale = 0.45f + (float)rnd.NextDouble() * 0.3f;
                 cluster.transform.localScale = Vector3.one * scale;
-                cluster.transform.localRotation = Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f, 0f);
+                // Only a small Z tilt. A Y rotation would swing the islet away from a camera that
+                // is looking almost straight down the Z axis and it would vanish edge-on.
+                cluster.transform.localRotation =
+                    Quaternion.Euler(0f, 0f, ((float)rnd.NextDouble() - 0.5f) * 16f);
 
-                int w = 1 + rnd.Next(2), d = 1 + rnd.Next(2);
+                // Built in XY like everything else in v2, so an islet reads as a chunk seen
+                // face-on rather than as a floor plan.
+                int w = 1 + rnd.Next(3), tall = 1 + rnd.Next(2);
                 for (int x = 0; x < w; x++)
-                    for (int z = 0; z < d; z++)
+                    for (int y = 0; y < tall; y++)
                     {
-                        var src = rnd.NextDouble() > 0.45 ? grass : stone;
+                        var src = y == 0 ? (rnd.NextDouble() > 0.4 ? grass : stone) : stone;
                         if (!src) continue;
                         var b = (GameObject)PrefabUtility.InstantiatePrefab(src, cluster.transform);
-                        b.transform.localPosition = new Vector3(x, 0f, z);
+                        b.transform.localPosition = new Vector3(x, -y * PtwMeshes.BlockH, 0f);
                         StripCollidersAndShadows(b);
                     }
 
-                if (tree && rnd.NextDouble() > 0.5)
+                if (tree && rnd.NextDouble() > 0.45)
                 {
                     var t = (GameObject)PrefabUtility.InstantiatePrefab(tree, cluster.transform);
-                    t.transform.localPosition = new Vector3(0f, 0f, 0f);
+                    t.transform.localPosition = new Vector3(rnd.Next(w), 0f, -0.1f);
                     StripCollidersAndShadows(t);
                 }
             }
@@ -440,41 +476,58 @@ namespace PullTheWorld.EditorTools
             r.receiveShadows = true;
         }
 
-        /// <summary>Grip ring parented to the world, so it travels with the terrain you grabbed.</summary>
-        static void BuildGrabMarker(WorldRig rig, Transform worldRoot)
+        /// <summary>
+        /// Two dust emitters, both driven by ImpactFeedback.
+        ///
+        /// v1 had a single system fed by how fast the world was being dragged. v2 has no drag, and
+        /// dust that responded to ROTATION would be wrong anyway - the level turning is not the
+        /// thing hitting something. So it is split by cause: a one-shot burst at the contact point
+        /// of an impact, and a continuous trickle while the ball is skidding along the ground.
+        /// </summary>
+        static (ParticleSystem burst, ParticleSystem roll) BuildDust()
         {
-            var root = new GameObject("GrabMarker");
-            root.transform.SetParent(worldRoot, false);
+            var burst = MakeDustSystem("ImpactDust", 60, 0.06f);
+            var roll = MakeDustSystem("RollDust", 40, 0.042f);
 
-            var visual = PtwPrefabs.MeshNode("Ring", "Mesh_QuadXZ", root.transform, PtwArt.MAnchorRing);
-            visual.transform.localPosition = new Vector3(0f, 0.05f, 0f);
-            visual.transform.localScale = Vector3.one * 1.15f;
-            var vr = visual.GetComponent<MeshRenderer>();
-            vr.shadowCastingMode = ShadowCastingMode.Off;
-            vr.receiveShadows = false;
-            vr.enabled = false;
+            // The roll trickle emits over time; the burst is Emit()-ed by hand.
+            var rollEm = roll.emission;
+            rollEm.enabled = true;
+            rollEm.rateOverTime = 0f;      // multiplier is driven every frame
 
-            var gm = root.AddComponent<GrabMarker>();
-            PtwPrefabs.Wire(gm, "rig", rig);
-            PtwPrefabs.Wire(gm, "visual", visual.transform);
+            return (burst, roll);
         }
 
-        static void BuildDust(WorldRig rig)
+        /// <summary>
+        /// Dust budgets are deliberately small.
+        ///
+        /// M_ParticleSoft is ALPHA BLENDED, not additive, so overlapping blobs of it do not glow -
+        /// they stack towards solid white. The first pass ran 26 particles a second at 0.055 units
+        /// with 0.55 alpha, which is enough overlap to read as a smear behind the ball rather than
+        /// as grit. Keep the rate low, the alpha low, and the tint off pure white.
+        /// </summary>
+        static ParticleSystem MakeDustSystem(string name, int maxParticles, float size)
         {
-            var go = new GameObject("WorldDust");
+            var go = new GameObject(name);
             var ps = go.AddComponent<ParticleSystem>();
+
             var main = ps.main;
+            // World space, so a puff stays where the impact happened instead of being dragged
+            // along by the emitter being repositioned for the next one.
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.playOnAwake = true;
             main.loop = true;
-            main.maxParticles = 90;
-            main.startLifetime = 0.6f;
-            main.startSize = 0.07f;
-            main.startSpeed = 0f;
-            main.startColor = new Color(1f, 1f, 1f, 0.5f);
-            main.gravityModifier = -0.05f;
-            var em = ps.emission; em.enabled = false;   // driven entirely by WorldMotionDust
-            var sh = ps.shape; sh.enabled = false;
+            main.maxParticles = maxParticles;
+            main.startLifetime = 0.42f;
+            main.startSize = size;
+            main.startSpeed = 1.1f;
+            main.startColor = new Color(0.93f, 0.94f, 0.90f, 0.30f);
+            main.gravityModifier = 0.35f;
+
+            var em = ps.emission; em.enabled = false;
+            var sh = ps.shape;
+            sh.enabled = true;
+            sh.shapeType = ParticleSystemShapeType.Sphere;
+            sh.radius = 0.14f;
 
             var rend = go.GetComponent<ParticleSystemRenderer>();
             rend.sharedMaterial = PtwArt.Get(PtwArt.MParticleSoft);
@@ -487,13 +540,16 @@ namespace PullTheWorld.EditorTools
             var g = new Gradient();
             g.SetKeys(
                 new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
-                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.55f, 0.25f),
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.42f, 0.2f),
                         new GradientAlphaKey(0f, 1f) });
             col.color = new ParticleSystem.MinMaxGradient(g);
 
-            var dust = go.AddComponent<WorldMotionDust>();
-            PtwPrefabs.Wire(dust, "rig", rig);
-            PtwPrefabs.Wire(dust, "dust", ps);
+            var sz = ps.sizeOverLifetime;
+            sz.enabled = true;
+            sz.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+                new Keyframe(0f, 0.5f), new Keyframe(0.35f, 1f), new Keyframe(1f, 0.15f)));
+
+            return ps;
         }
 
         // ============================================================================ UI =====
@@ -517,12 +573,23 @@ namespace PullTheWorld.EditorTools
             return fa;
         }
 
-        static void BuildUi(WorldRig rig, LevelManager levels, Camera cam)
+        /// <summary>
+        /// Builds the whole UI: main menu, in-level HUD, level-complete screen, settings overlay
+        /// and the wordless onboarding hints.
+        ///
+        /// Every screen is a full-bleed child of ONE canvas with a UiPanel on it, rather than
+        /// separate canvases. One canvas means one draw order to reason about, and UiPanel means
+        /// every transition in the game is the same fade-and-pop without any screen owning tween
+        /// code. Draw order here is hierarchy order, so the sequence below is deliberate:
+        /// HUD, then onboarding over it, then the menu screens over that, then the flash last of
+        /// all so it can tint everything.
+        /// </summary>
+        static void BuildUi(LevelManager levels, Camera cam)
         {
             var bold = EnsureFont("Assets/PullTheWorld/Art/Fonts/Poppins-Bold.ttf", FontPath);
             var semi = EnsureFont("Assets/PullTheWorld/Art/Fonts/Poppins-SemiBold.ttf", FontSemiPath);
 
-            var canvasGo = new GameObject("HUD");
+            var canvasGo = new GameObject("UI");
             var canvas = canvasGo.AddComponent<Canvas>();
             // Screen Space - CAMERA, not Overlay. Overlay bypasses the camera entirely, so it
             // would be missing from every RenderTexture capture - and the automated screenshots
@@ -541,151 +608,517 @@ namespace PullTheWorld.EditorTools
             es.AddComponent<UnityEngine.EventSystems.EventSystem>();
             es.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
 
-            // Scrims FIRST so everything else draws on top of them. White text on a mid blue-grey
-            // sky has almost no contrast; the reference sheet solves the same problem with dark
-            // caption bars, so these are soft dark gradients top and bottom.
-            AddScrim(canvasGo.transform, "ScrimTop", true, 340f);
-            AddScrim(canvasGo.transform, "ScrimBottom", false, 420f);
-
             var shadowBold = MakeTmpShadowMaterial(bold, "TMP_PoppinsBold_Shadow");
             var shadowSemi = MakeTmpShadowMaterial(semi, "TMP_PoppinsSemi_Shadow");
 
-            // ---- top bar ----
-            var levelLabel = Text(canvasGo.transform, "LevelLabel", "LEVEL 1", bold, 46f,
-                                  new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(48f, -66f),
+            // ================================================================== HUD =========
+            var hudPanel = Panel(canvasGo.transform, "HudPanel", out var hudGroup, popFrom: 1f);
+
+            // Scrims first, so the level number and buttons always have something to sit on.
+            // White text over a mid blue-grey sky has almost no contrast on its own.
+            AddScrim(hudPanel.transform, "ScrimTop", true, 470f);
+            AddScrim(hudPanel.transform, "ScrimBottom", false, 300f);
+
+            var levelLabel = Text(hudPanel.transform, "LevelLabel", "LEVEL 1", bold, 44f,
+                                  new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(48f, -60f),
                                   new Vector2(420f, 60f), TextAlignmentOptions.TopLeft,
-                                  PtwArt.Hex("#FFFFFF"), shadowBold);
+                                  Color.white, shadowBold);
             levelLabel.characterSpacing = 6f;
 
-            var titleLabel = Text(canvasGo.transform, "TitleLabel", "PULL THE WORLD", semi, 28f,
-                                  new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(50f, -116f),
-                                  new Vector2(520f, 40f), TextAlignmentOptions.TopLeft,
-                                  new Color(1f, 1f, 1f, 0.62f), shadowSemi);
-            titleLabel.characterSpacing = 9f;
+            var restartBtn = RoundButton(hudPanel.transform, "RestartButton", new Vector2(1f, 1f),
+                                         new Vector2(-44f, -52f), 96f, MakeRestartSprite());
+            var pauseBtn = RoundButton(hudPanel.transform, "PauseButton", new Vector2(1f, 1f),
+                                       new Vector2(-156f, -52f), 96f, MakeGearSprite());
 
-            // ---- restart ----
-            var btnGo = new GameObject("RestartButton", typeof(RectTransform), typeof(Image), typeof(Button));
-            btnGo.transform.SetParent(canvasGo.transform, false);
-            var brt = btnGo.GetComponent<RectTransform>();
-            brt.anchorMin = brt.anchorMax = new Vector2(1f, 1f);
-            brt.pivot = new Vector2(1f, 1f);
-            brt.anchoredPosition = new Vector2(-44f, -56f);
-            brt.sizeDelta = new Vector2(96f, 96f);
-            var bimg = btnGo.GetComponent<Image>();
-            bimg.sprite = MakeDiscSprite();
-            bimg.color = new Color(1f, 1f, 1f, 0.16f);
-            var btn = btnGo.GetComponent<Button>();
+            // Key counter. Hidden unless the level actually needs keys - a permanent 0/0 on screen
+            // is exactly the sort of clutter the brief asked to avoid.
+            var keyGroup = new GameObject("KeyGroup", typeof(RectTransform));
+            keyGroup.transform.SetParent(hudPanel.transform, false);
+            var kgRt = keyGroup.GetComponent<RectTransform>();
+            kgRt.anchorMin = kgRt.anchorMax = new Vector2(0.5f, 1f);
+            kgRt.pivot = new Vector2(0.5f, 1f);
+            kgRt.anchoredPosition = new Vector2(0f, -58f);
+            kgRt.sizeDelta = new Vector2(220f, 80f);
 
-            // A drawn icon, not a font glyph. Poppins has no U+21BB, so a text-based restart
-            // symbol silently renders as a tofu box.
-            var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
-            iconGo.transform.SetParent(btnGo.transform, false);
-            var irt = iconGo.GetComponent<RectTransform>();
-            irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 0.5f);
-            irt.sizeDelta = new Vector2(52f, 52f);
-            var iimg = iconGo.GetComponent<Image>();
-            iimg.sprite = MakeRestartSprite();
-            iimg.color = Color.white;
-            iimg.raycastTarget = false;
+            var keyIcon = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+            keyIcon.transform.SetParent(keyGroup.transform, false);
+            var kiRt = keyIcon.GetComponent<RectTransform>();
+            kiRt.anchorMin = kiRt.anchorMax = new Vector2(0.5f, 0.5f);
+            kiRt.anchoredPosition = new Vector2(-48f, 0f);
+            kiRt.sizeDelta = new Vector2(46f, 46f);
+            var kiImg = keyIcon.GetComponent<Image>();
+            kiImg.sprite = MakeGemSprite();
+            kiImg.color = PtwArt.Hex("#FFD96B");
+            kiImg.raycastTarget = false;
 
-            // ---- hint ----
-            var hintGo = new GameObject("HintGroup", typeof(RectTransform), typeof(CanvasGroup));
-            hintGo.transform.SetParent(canvasGo.transform, false);
-            var hrt = hintGo.GetComponent<RectTransform>();
-            hrt.anchorMin = new Vector2(0.5f, 0f); hrt.anchorMax = new Vector2(0.5f, 0f);
-            hrt.pivot = new Vector2(0.5f, 0f);
-            hrt.anchoredPosition = new Vector2(0f, 168f);
-            hrt.sizeDelta = new Vector2(880f, 120f);
-            var hintGroup = hintGo.GetComponent<CanvasGroup>();
-            hintGroup.blocksRaycasts = false; hintGroup.interactable = false;
-            var hintLabel = Text(hintGo.transform, "HintLabel",
-                                 "Drag anywhere. You stay - the world moves.", semi, 34f,
-                                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero,
-                                 new Vector2(880f, 120f), TextAlignmentOptions.Center, Color.white, shadowSemi);
-            hintLabel.enableWordWrapping = true;
+            var keyLabel = Text(keyGroup.transform, "KeyLabel", "0/1", bold, 40f,
+                                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                                new Vector2(26f, 0f), new Vector2(140f, 60f),
+                                TextAlignmentOptions.Left, Color.white, shadowBold);
 
-            // ---- gesture nudge ----
-            var nudgeGo = new GameObject("DragNudge", typeof(RectTransform), typeof(CanvasGroup), typeof(Image));
-            nudgeGo.transform.SetParent(canvasGo.transform, false);
-            var nrt = nudgeGo.GetComponent<RectTransform>();
-            nrt.anchorMin = nrt.anchorMax = new Vector2(0.5f, 0f);
-            nrt.pivot = new Vector2(0.5f, 0.5f);
-            nrt.anchoredPosition = new Vector2(0f, 380f);
-            nrt.sizeDelta = new Vector2(74f, 74f);
-            var nimg = nudgeGo.GetComponent<Image>();
-            nimg.sprite = MakeCircleSprite();
-            nimg.color = new Color(1f, 1f, 1f, 0.85f);
-            nimg.raycastTarget = false;
-            var nudgeGroup = nudgeGo.GetComponent<CanvasGroup>();
-            nudgeGroup.blocksRaycasts = false; nudgeGroup.alpha = 0f;
+            // ========================================================== onboarding =========
+            var onboardGo = new GameObject("Onboarding", typeof(RectTransform));
+            onboardGo.transform.SetParent(canvasGo.transform, false);
+            Stretch(onboardGo.GetComponent<RectTransform>());
 
-            // ---- twist tutorial: two fingers rocking back and forth ----
-            var twistGo = new GameObject("TwistNudge", typeof(RectTransform), typeof(CanvasGroup));
-            twistGo.transform.SetParent(canvasGo.transform, false);
-            var twistRt = twistGo.GetComponent<RectTransform>();
-            twistRt.anchorMin = twistRt.anchorMax = new Vector2(0.5f, 0f);
-            twistRt.pivot = new Vector2(0.5f, 0.5f);
-            twistRt.anchoredPosition = new Vector2(0f, 400f);
-            twistRt.sizeDelta = new Vector2(240f, 240f);
-            var twistGroup = twistGo.GetComponent<CanvasGroup>();
-            twistGroup.blocksRaycasts = false;
-            twistGroup.alpha = 0f;
+            // Rotate hint: a finger that sweeps an arc. Parented to a centred pivot node so
+            // OnboardingHint can place it by polar coordinates and nothing else has to know.
+            var rotGroupGo = new GameObject("RotateHint", typeof(RectTransform), typeof(CanvasGroup));
+            rotGroupGo.transform.SetParent(onboardGo.transform, false);
+            var rgRt = rotGroupGo.GetComponent<RectTransform>();
+            rgRt.anchorMin = rgRt.anchorMax = new Vector2(0.5f, 0.5f);
+            rgRt.pivot = new Vector2(0.5f, 0.5f);
+            rgRt.anchoredPosition = Vector2.zero;
+            rgRt.sizeDelta = new Vector2(10f, 10f);
+            var rotGroup = rotGroupGo.GetComponent<CanvasGroup>();
+            rotGroup.alpha = 0f;
+            rotGroup.blocksRaycasts = false;
+            rotGroup.interactable = false;
 
-            for (int i = 0; i < 2; i++)
-            {
-                var dot = new GameObject("Finger" + i, typeof(RectTransform), typeof(Image));
-                dot.transform.SetParent(twistGo.transform, false);
-                var dotRt = dot.GetComponent<RectTransform>();
-                dotRt.anchorMin = dotRt.anchorMax = new Vector2(0.5f, 0.5f);
-                dotRt.pivot = new Vector2(0.5f, 0.5f);
-                dotRt.sizeDelta = new Vector2(68f, 68f);
-                dotRt.anchoredPosition = new Vector2(i == 0 ? -88f : 88f, 0f);
-                var dotImg = dot.GetComponent<Image>();
-                dotImg.sprite = MakeCircleSprite();
-                dotImg.color = new Color(1f, 1f, 1f, 0.92f);
-                dotImg.raycastTarget = false;
-            }
+            var finger = new GameObject("Finger", typeof(RectTransform), typeof(Image));
+            finger.transform.SetParent(rotGroupGo.transform, false);
+            var fRt = finger.GetComponent<RectTransform>();
+            fRt.anchorMin = fRt.anchorMax = new Vector2(0.5f, 0.5f);
+            fRt.pivot = new Vector2(0.5f, 0.5f);
+            fRt.sizeDelta = new Vector2(84f, 84f);
+            var fImg = finger.GetComponent<Image>();
+            fImg.sprite = MakeCircleSprite();
+            fImg.color = new Color(1f, 1f, 1f, 0.92f);
+            fImg.raycastTarget = false;
 
-            // ---- level complete ----
-            var doneGo = new GameObject("CompleteGroup", typeof(RectTransform), typeof(CanvasGroup));
-            doneGo.transform.SetParent(canvasGo.transform, false);
-            var drt = doneGo.GetComponent<RectTransform>();
-            drt.anchorMin = drt.anchorMax = new Vector2(0.5f, 0.5f);
-            drt.pivot = new Vector2(0.5f, 0.5f);
-            drt.anchoredPosition = new Vector2(0f, 430f);
-            drt.sizeDelta = new Vector2(900f, 150f);
-            var doneGroup = doneGo.GetComponent<CanvasGroup>();
-            doneGroup.blocksRaycasts = false; doneGroup.alpha = 0f;
-            var doneLabel = Text(doneGo.transform, "CompleteLabel", "LEVEL COMPLETE", bold, 62f,
-                                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero,
-                                 new Vector2(900f, 150f), TextAlignmentOptions.Center, Color.white, shadowBold);
-            doneLabel.characterSpacing = 5f;
+            // Point hint: a ring parked on a world object. Positioned in SCREEN space by
+            // OnboardingHint every frame, because its target is bolted to a rotating level.
+            var pointGroupGo = new GameObject("PointHint", typeof(RectTransform), typeof(CanvasGroup));
+            pointGroupGo.transform.SetParent(onboardGo.transform, false);
+            Stretch(pointGroupGo.GetComponent<RectTransform>());
+            var pointGroup = pointGroupGo.GetComponent<CanvasGroup>();
+            pointGroup.alpha = 0f;
+            pointGroup.blocksRaycasts = false;
+            pointGroup.interactable = false;
 
-            // ---- flash ----
+            var ring = new GameObject("Ring", typeof(RectTransform), typeof(Image));
+            ring.transform.SetParent(pointGroupGo.transform, false);
+            var ringRt = ring.GetComponent<RectTransform>();
+            ringRt.anchorMin = ringRt.anchorMax = new Vector2(0.5f, 0.5f);
+            ringRt.pivot = new Vector2(0.5f, 0.5f);
+            ringRt.sizeDelta = new Vector2(150f, 150f);
+            var ringImg = ring.GetComponent<Image>();
+            ringImg.sprite = MakeRingSprite();
+            ringImg.color = new Color(0.53f, 0.87f, 0.99f, 0.95f);
+            ringImg.raycastTarget = false;
+
+            var onboarding = onboardGo.AddComponent<OnboardingHint>();
+            PtwPrefabs.Wire(onboarding, "rotateGroup", rotGroup);
+            PtwPrefabs.Wire(onboarding, "rotateFinger", fRt);
+            PtwPrefabs.Wire(onboarding, "pointGroup", pointGroup);
+            PtwPrefabs.Wire(onboarding, "pointRing", ringRt);
+            PtwPrefabs.Wire(onboarding, "worldCamera", cam);
+
+            // ============================================================ main menu =========
+            var menuPanel = Panel(canvasGo.transform, "MainMenuPanel", out var menuGroup);
+            Dim(menuPanel.transform, "Dim", new Color(0.05f, 0.08f, 0.12f, 0.74f));
+
+            var title = Text(menuPanel.transform, "Title", "PULL\nTHE WORLD", bold, 118f,
+                             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                             new Vector2(0f, 520f), new Vector2(1000f, 340f),
+                             TextAlignmentOptions.Center, Color.white, shadowBold);
+            title.characterSpacing = 2f;
+            title.lineSpacing = -14f;
+
+            var tagline = Text(menuPanel.transform, "Tagline", "TURN THE WORLD. LET IT FALL.",
+                               semi, 34f, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                               new Vector2(0f, 300f), new Vector2(940f, 60f),
+                               TextAlignmentOptions.Center,
+                               new Color(1f, 1f, 1f, 0.72f), shadowSemi);
+            tagline.characterSpacing = 8f;
+
+            var playBtn = PillButton(menuPanel.transform, "PlayButton", "PLAY", bold, 62f,
+                                     new Vector2(0f, -120f), new Vector2(560f, 160f),
+                                     PtwArt.Hex("#5AC26A"), shadowBold);
+
+            var progressLabel = Text(menuPanel.transform, "ProgressLabel", "0 / 10", semi, 38f,
+                                     new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                                     new Vector2(0f, -270f), new Vector2(500f, 60f),
+                                     TextAlignmentOptions.Center,
+                                     new Color(1f, 1f, 1f, 0.8f), shadowSemi);
+            progressLabel.characterSpacing = 6f;
+
+            var menuSettingsBtn = RoundButton(menuPanel.transform, "SettingsButton",
+                                              new Vector2(0.5f, 0.5f), new Vector2(0f, -430f),
+                                              108f, MakeGearSprite());
+
+            // ======================================================= level complete =========
+            var donePanel = Panel(canvasGo.transform, "LevelCompletePanel", out var doneGroup);
+            Dim(donePanel.transform, "Dim", new Color(0.05f, 0.08f, 0.12f, 0.62f));
+
+            var doneTitle = Text(donePanel.transform, "CompleteTitle", "LEVEL COMPLETE", bold, 76f,
+                                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                                 new Vector2(0f, 470f), new Vector2(1000f, 200f),
+                                 TextAlignmentOptions.Center, Color.white, shadowBold);
+            doneTitle.characterSpacing = 4f;
+            doneTitle.enableWordWrapping = true;
+
+            var continueBtn = PillButton(donePanel.transform, "ContinueButton", "CONTINUE",
+                                         bold, 54f, new Vector2(0f, -430f), new Vector2(620f, 150f),
+                                         PtwArt.Hex("#5AC26A"), shadowBold);
+
+            // Confetti lives in the WORLD, parented to the camera just inside the UI plane, so it
+            // draws in front of the panel. A ParticleSystem under a ScreenSpaceCamera canvas
+            // sorts behind it and would be invisible exactly when it matters.
+            var celebration = MakeCelebrationVfx(cam.transform);
+
+            // ============================================================== settings =========
+            var setPanel = Panel(canvasGo.transform, "SettingsPanel", out var setGroup);
+            Dim(setPanel.transform, "Dim", new Color(0.04f, 0.07f, 0.10f, 0.42f));
+
+            var card = new GameObject("Card", typeof(RectTransform), typeof(Image));
+            card.transform.SetParent(setPanel.transform, false);
+            var cardRt = card.GetComponent<RectTransform>();
+            cardRt.anchorMin = cardRt.anchorMax = new Vector2(0.5f, 0.5f);
+            cardRt.pivot = new Vector2(0.5f, 0.5f);
+            cardRt.anchoredPosition = Vector2.zero;
+            cardRt.sizeDelta = new Vector2(840f, 900f);
+            var cardImg = card.GetComponent<Image>();
+            cardImg.sprite = MakePanelSprite();
+            cardImg.color = PtwArt.Hex("#1B2733");
+
+            Text(card.transform, "SettingsTitle", "SETTINGS", bold, 60f,
+                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 330f),
+                 new Vector2(700f, 90f), TextAlignmentOptions.Center, Color.white, shadowBold)
+                .characterSpacing = 8f;
+
+            var soundToggle = ToggleRow(card.transform, "SoundToggle", "SOUND", semi, 150f, shadowSemi);
+            var musicToggle = ToggleRow(card.transform, "MusicToggle", "MUSIC", semi, 20f, shadowSemi);
+            var hapticsToggle = ToggleRow(card.transform, "HapticsToggle", "HAPTICS", semi, -110f, shadowSemi);
+
+            var closeBtn = PillButton(card.transform, "CloseButton", "CLOSE", bold, 48f,
+                                      new Vector2(0f, -320f), new Vector2(520f, 132f),
+                                      PtwArt.Hex("#38495B"), shadowBold);
+
+            // ================================================================= flash =========
             var flashGo = new GameObject("Flash", typeof(RectTransform), typeof(Image));
             flashGo.transform.SetParent(canvasGo.transform, false);
-            var frt = flashGo.GetComponent<RectTransform>();
-            frt.anchorMin = Vector2.zero; frt.anchorMax = Vector2.one;
-            frt.offsetMin = Vector2.zero; frt.offsetMax = Vector2.zero;
+            Stretch(flashGo.GetComponent<RectTransform>());
             var flash = flashGo.GetComponent<Image>();
             flash.color = Color.clear;
             flash.raycastTarget = false;
 
-            var hud = canvasGo.AddComponent<HudController>();
-            PtwPrefabs.Wire(hud, "levelLabel", levelLabel);
-            PtwPrefabs.Wire(hud, "titleLabel", titleLabel);
-            PtwPrefabs.Wire(hud, "restartButton", btn);
-            PtwPrefabs.Wire(hud, "hintGroup", hintGroup);
-            PtwPrefabs.Wire(hud, "hintLabel", hintLabel);
-            PtwPrefabs.Wire(hud, "dragNudge", nrt);
-            PtwPrefabs.Wire(hud, "dragNudgeGroup", nudgeGroup);
-            PtwPrefabs.Wire(hud, "twistNudge", twistRt);
-            PtwPrefabs.Wire(hud, "twistNudgeGroup", twistGroup);
-            PtwPrefabs.Wire(hud, "completeGroup", doneGroup);
-            PtwPrefabs.Wire(hud, "completeLabel", doneLabel);
-            PtwPrefabs.Wire(hud, "flashImage", flash);
-            PtwPrefabs.Wire(hud, "levels", levels);
-            PtwPrefabs.Wire(hud, "rig", rig);
+            // ================================================================== wire =========
+            var root = canvasGo.AddComponent<UiRoot>();
+            PtwPrefabs.Wire(root, "mainMenu", menuGroup);
+            PtwPrefabs.Wire(root, "hud", hudGroup);
+            PtwPrefabs.Wire(root, "levelComplete", doneGroup);
+            PtwPrefabs.Wire(root, "settings", setGroup);
+
+            PtwPrefabs.Wire(root, "playButton", playBtn);
+            PtwPrefabs.Wire(root, "menuSettingsButton", menuSettingsBtn);
+            PtwPrefabs.Wire(root, "progressLabel", progressLabel);
+
+            PtwPrefabs.Wire(root, "restartButton", restartBtn);
+            PtwPrefabs.Wire(root, "pauseButton", pauseBtn);
+            PtwPrefabs.Wire(root, "levelLabel", levelLabel);
+            PtwPrefabs.Wire(root, "keyLabel", keyLabel);
+            PtwPrefabs.Wire(root, "keyGroup", keyGroup);
+
+            PtwPrefabs.Wire(root, "continueButton", continueBtn);
+            PtwPrefabs.Wire(root, "completeTitle", doneTitle);
+            PtwPrefabs.Wire(root, "celebrationVfx", celebration);
+
+            PtwPrefabs.Wire(root, "closeSettingsButton", closeBtn);
+            PtwPrefabs.Wire(root, "soundToggle", soundToggle);
+            PtwPrefabs.Wire(root, "musicToggle", musicToggle);
+            PtwPrefabs.Wire(root, "hapticsToggle", hapticsToggle);
+
+            PtwPrefabs.Wire(root, "flashImage", flash);
+            PtwPrefabs.Wire(root, "levels", levels);
+            PtwPrefabs.Wire(root, "onboarding", onboarding);
+        }
+
+        // ================================================================= ui helpers =======
+        static void Stretch(RectTransform rt)
+        {
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+        }
+
+        /// <summary>A full-bleed screen with a CanvasGroup and a UiPanel already on it.</summary>
+        static GameObject Panel(Transform parent, string name, out UiPanel panel, float popFrom = 0.92f)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(CanvasGroup));
+            go.transform.SetParent(parent, false);
+            Stretch(go.GetComponent<RectTransform>());
+
+            panel = go.AddComponent<UiPanel>();
+            PtwPrefabs.Wire(panel, "group", go.GetComponent<CanvasGroup>());
+            PtwPrefabs.Wire(panel, "popFrom", popFrom);
+            return go;
+        }
+
+        static Image Dim(Transform parent, string name, Color color)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            Stretch(go.GetComponent<RectTransform>());
+            var img = go.GetComponent<Image>();
+            img.color = color;
+            return img;
+        }
+
+        static Button RoundButton(Transform parent, string name, Vector2 anchor, Vector2 pos,
+                                  float size, Sprite icon)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.pivot = anchor;
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(size, size);
+
+            var img = go.GetComponent<Image>();
+            img.sprite = MakeDiscSprite();
+            img.color = new Color(1f, 1f, 1f, 0.16f);
+
+            var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+            iconGo.transform.SetParent(go.transform, false);
+            var irt = iconGo.GetComponent<RectTransform>();
+            irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 0.5f);
+            irt.pivot = new Vector2(0.5f, 0.5f);
+            irt.sizeDelta = new Vector2(size * 0.55f, size * 0.55f);
+            var iimg = iconGo.GetComponent<Image>();
+            iimg.sprite = icon;
+            iimg.color = Color.white;
+            iimg.raycastTarget = false;
+
+            return go.GetComponent<Button>();
+        }
+
+        static Button PillButton(Transform parent, string name, string label, TMP_FontAsset font,
+                                 float fontSize, Vector2 pos, Vector2 size, Color tint,
+                                 Material shadowMat)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = size;
+
+            var img = go.GetComponent<Image>();
+            // A very round sprite stretched wide reads as a proper pill, which is why this does
+            // not need 9-slicing.
+            img.sprite = MakePillSprite();
+            img.color = tint;
+
+            var t = Text(go.transform, "Label", label, font, fontSize,
+                         new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero,
+                         size, TextAlignmentOptions.Center, Color.white, shadowMat);
+            t.characterSpacing = 6f;
+
+            var btn = go.GetComponent<Button>();
+            // A visible press state matters more on mobile than anywhere else - there is no
+            // hover, so the tap flash is the only confirmation the button was hit.
+            var colors = btn.colors;
+            colors.pressedColor = new Color(0.82f, 0.82f, 0.82f, 1f);
+            colors.selectedColor = Color.white;
+            colors.fadeDuration = 0.08f;
+            btn.colors = colors;
+            return btn;
+        }
+
+        /// <summary>A label plus a pill-shaped on/off switch, laid out as one row inside a card.</summary>
+        static Toggle ToggleRow(Transform parent, string name, string label, TMP_FontAsset font,
+                                float y, Material shadowMat)
+        {
+            var row = new GameObject(name, typeof(RectTransform), typeof(Toggle));
+            row.transform.SetParent(parent, false);
+            var rt = row.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(0f, y);
+            rt.sizeDelta = new Vector2(700f, 110f);
+
+            Text(row.transform, "Label", label, font, 42f,
+                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(20f, 0f),
+                 new Vector2(400f, 80f), TextAlignmentOptions.Left,
+                 new Color(1f, 1f, 1f, 0.9f), shadowMat).characterSpacing = 6f;
+
+            // Track
+            var track = new GameObject("Track", typeof(RectTransform), typeof(Image));
+            track.transform.SetParent(row.transform, false);
+            var trRt = track.GetComponent<RectTransform>();
+            trRt.anchorMin = trRt.anchorMax = new Vector2(1f, 0.5f);
+            trRt.pivot = new Vector2(1f, 0.5f);
+            trRt.anchoredPosition = new Vector2(-20f, 0f);
+            trRt.sizeDelta = new Vector2(150f, 74f);
+            var trImg = track.GetComponent<Image>();
+            trImg.sprite = MakePillSprite();
+            trImg.color = PtwArt.Hex("#2E3E4E");
+
+            // ON is a green FILL over the whole track, not a knob that slides.
+            //
+            // The obvious version - a grey knob at the left and a green one at the right, with the
+            // green one as the Toggle's graphic - does not work, and the first capture showed why:
+            // a plain Toggle only shows and hides its `graphic`, it cannot move anything. So in the
+            // ON state BOTH knobs are visible and the control reads as two unrelated dots rather
+            // than as a switch. Animating a thumb would need a script per row. A pill that lights
+            // up green is unambiguous with no moving parts.
+            var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+            fill.transform.SetParent(track.transform, false);
+            Stretch(fill.GetComponent<RectTransform>());
+            var fillImg = fill.GetComponent<Image>();
+            fillImg.sprite = MakePillSprite();
+            fillImg.color = PtwArt.Hex("#4FBF6A");
+            fillImg.raycastTarget = false;
+
+            var pip = new GameObject("Pip", typeof(RectTransform), typeof(Image));
+            pip.transform.SetParent(fill.transform, false);
+            var pipRt = pip.GetComponent<RectTransform>();
+            pipRt.anchorMin = pipRt.anchorMax = new Vector2(1f, 0.5f);
+            pipRt.pivot = new Vector2(1f, 0.5f);
+            pipRt.anchoredPosition = new Vector2(-8f, 0f);
+            pipRt.sizeDelta = new Vector2(46f, 46f);
+            var pipImg = pip.GetComponent<Image>();
+            pipImg.sprite = MakeDiscSprite();
+            pipImg.color = new Color(1f, 1f, 1f, 0.92f);
+            pipImg.raycastTarget = false;
+
+            var toggle = row.GetComponent<Toggle>();
+            toggle.targetGraphic = trImg;
+            toggle.graphic = fillImg;      // whole fill (and its pip) hides when off
+            toggle.isOn = true;
+            return toggle;
+        }
+
+        /// <summary>Confetti for the win moment. Burst only - it is played by UiRoot.</summary>
+        static ParticleSystem MakeCelebrationVfx(Transform cameraTransform)
+        {
+            var go = new GameObject("CelebrationVfx");
+            go.transform.SetParent(cameraTransform, false);
+            // Just inside the canvas plane (1.0) so it renders over the panel.
+            go.transform.localPosition = new Vector3(0f, -0.25f, 0.9f);
+
+            var ps = go.AddComponent<ParticleSystem>();
+            var main = ps.main;
+            main.playOnAwake = false;
+            main.loop = false;
+            main.duration = 1.6f;
+            main.maxParticles = 220;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(1.1f, 1.9f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.55f, 1.3f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.012f, 0.026f);
+            main.gravityModifier = 0.12f;
+            main.simulationSpace = ParticleSystemSimulationSpace.Local;
+
+            var grad = new ParticleSystem.MinMaxGradient(PtwArt.Hex("#FFD96B"), PtwArt.Hex("#7FE39A"));
+            grad.mode = ParticleSystemGradientMode.TwoColors;
+            main.startColor = grad;
+
+            var em = ps.emission;
+            em.enabled = true;
+            em.rateOverTime = 0f;
+            em.SetBursts(new[] { new ParticleSystem.Burst(0f, 120) });
+
+            var sh = ps.shape;
+            sh.enabled = true;
+            sh.shapeType = ParticleSystemShapeType.Cone;
+            sh.angle = 42f;
+            sh.radius = 0.05f;
+            sh.rotation = new Vector3(-90f, 0f, 0f);   // fire upward on screen
+
+            var rend = go.GetComponent<ParticleSystemRenderer>();
+            rend.sharedMaterial = PtwArt.Get(PtwArt.MParticleAdd);
+            rend.renderMode = ParticleSystemRenderMode.Billboard;
+            rend.shadowCastingMode = ShadowCastingMode.Off;
+            rend.receiveShadows = false;
+
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            var g = new Gradient();
+            g.SetKeys(
+                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(1f, 0.6f),
+                        new GradientAlphaKey(0f, 1f) });
+            col.color = new ParticleSystem.MinMaxGradient(g);
+
+            return ps;
+        }
+
+        // ================================================================== ui sprites ======
+        static Sprite pillSprite;
+        /// <summary>Stadium shape. Stretched wide it stays a pill, so it needs no 9-slicing.</summary>
+        static Sprite MakePillSprite()
+        {
+            if (pillSprite) return pillSprite;
+            return pillSprite = PaintSpriteXY("Tex_Pill", 128, p =>
+            {
+                float d = RoundedBox(p, new Vector2(0.62f, 0.62f), 0.36f);
+                return Mathf.Clamp01(-d / 0.03f);
+            });
+        }
+
+        static Sprite panelSprite;
+        static Sprite MakePanelSprite()
+        {
+            if (panelSprite) return panelSprite;
+            return panelSprite = PaintSpriteXY("Tex_Panel", 128, p =>
+            {
+                float d = RoundedBox(p, new Vector2(0.86f, 0.86f), 0.12f);
+                return Mathf.Clamp01(-d / 0.02f);
+            });
+        }
+
+        /// <summary>Signed distance to a rounded box, negative inside.</summary>
+        static float RoundedBox(Vector2 p, Vector2 half, float radius)
+        {
+            Vector2 q = new Vector2(Mathf.Abs(p.x), Mathf.Abs(p.y)) - (half - Vector2.one * radius);
+            return new Vector2(Mathf.Max(q.x, 0f), Mathf.Max(q.y, 0f)).magnitude
+                   + Mathf.Min(Mathf.Max(q.x, q.y), 0f) - radius;
+        }
+
+        static Sprite ringSprite;
+        /// <summary>Attention ring for the onboarding "look at this" hint.</summary>
+        static Sprite MakeRingSprite()
+        {
+            if (ringSprite) return ringSprite;
+            return ringSprite = PaintSprite("Tex_HintRing", 128, (d, ang) =>
+                Mathf.Clamp01(1f - Mathf.Abs(d - 0.74f) / 0.1f));
+        }
+
+        static Sprite gearSprite;
+        /// <summary>
+        /// A cog, drawn rather than typed. Poppins has no gear glyph, and v1 already learned that
+        /// a missing glyph renders as a silent tofu box rather than as an error.
+        /// </summary>
+        static Sprite MakeGearSprite()
+        {
+            if (gearSprite) return gearSprite;
+            const int teeth = 8;
+            return gearSprite = PaintSprite("Tex_Gear", 128, (d, ang) =>
+            {
+                // Outer radius pulses with angle to make the teeth.
+                float wave = Mathf.Cos(ang * Mathf.Deg2Rad * teeth);
+                float outer = 0.72f + 0.16f * Mathf.Clamp01(wave * 2f);
+                float body = Mathf.Clamp01((outer - d) / 0.05f);
+                float hole = Mathf.Clamp01((d - 0.3f) / 0.05f);
+                return body * hole;
+            });
+        }
+
+        static Sprite gemSprite;
+        /// <summary>Diamond, matching the silhouette of the key mesh so the HUD icon reads.</summary>
+        static Sprite MakeGemSprite()
+        {
+            if (gemSprite) return gemSprite;
+            return gemSprite = PaintSpriteXY("Tex_Gem", 128, p =>
+            {
+                // |x|/a + |y|/b <= 1 is a diamond.
+                float v = Mathf.Abs(p.x) / 0.58f + Mathf.Abs(p.y) / 0.86f;
+                return Mathf.Clamp01((1f - v) / 0.08f);
+            });
         }
 
         /// <summary>Soft dark gradient bar, so overlaid text always has something to sit on.</summary>
@@ -702,7 +1135,7 @@ namespace PullTheWorld.EditorTools
 
             var img = go.GetComponent<Image>();
             img.sprite = MakeScrimSprite("Tex_Scrim" + (top ? "Top" : "Bottom"), top);
-            img.color = new Color(0.055f, 0.085f, 0.125f, 0.62f);
+            img.color = new Color(0.055f, 0.085f, 0.125f, 0.44f);
             img.raycastTarget = false;
         }
 

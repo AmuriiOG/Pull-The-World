@@ -4,64 +4,105 @@ using UnityEngine;
 
 namespace PullTheWorld
 {
-    public enum LevelState { Playing, Won, Failed }
+    public enum LevelState { Menu, Playing, Won, Failed }
 
     /// <summary>
-    /// Swaps level prefabs in and out under WorldRoot and owns the win / fail / restart flow.
-    /// Adding a level is: make a prefab with a LevelDefinition on it, drop it in the list.
+    /// Swaps level prefabs in and out under the rotating world root and owns the
+    /// win / fail / restart / advance flow. Adding a level is: make a prefab with a
+    /// LevelDefinition on it, drop it in the list.
+    ///
+    /// The one ordering rule that matters: the level is parented and the rotator is bound BEFORE
+    /// the player is spawned, because the spawn point is expressed in level-local space and would
+    /// otherwise be resolved against the previous level's rotation.
     /// </summary>
     public class LevelManager : MonoBehaviour
     {
         public static LevelManager Instance { get; private set; }
 
         [Header("Content")]
-        [Tooltip("Played in order. Add a prefab here and it is in the game.")]
+        [Tooltip("Played in order. A prefab in this list is in the game.")]
         [SerializeField] LevelDefinition[] levels;
-        [SerializeField] int startLevel;
 
         [Header("References")]
-        [SerializeField] WorldRig rig;
+        [SerializeField] WorldRotator rotator;
+        [SerializeField] PlayerBody player;
         [SerializeField] Transform levelParent;
+        [Tooltip("Re-framed on every level load so each island fills the screen the same amount.")]
+        [SerializeField] PlaneCameraRig cameraRig;
+        [Tooltip("Framing used while the main menu is up. Deliberately much wider than any level: " +
+                 "the preview island is scenery behind the title here, not the subject, and at " +
+                 "gameplay framing it fills the screen and collides with every menu widget.")]
+        [SerializeField] Vector2 menuViewExtents = new Vector2(26f, 26f);
 
         [Header("Timing")]
-        [SerializeField] float winCelebrateTime = 1.35f;
-        [SerializeField] float failRestartDelay = 0.85f;
-        [SerializeField] bool autoAdvance = true;
+        [Tooltip("How long the celebration runs before the level-complete panel appears.")]
+        [SerializeField] float winCelebrateTime = 0.9f;
+        [Tooltip("Death is instant but the reset is not, so the player sees what killed them.")]
+        [SerializeField] float failRestartDelay = 0.75f;
+        [Tooltip("Off means the level-complete panel waits for a tap instead of auto-advancing.")]
+        [SerializeField] bool autoAdvance;
 
         LevelDefinition current;
         int index;
-        LevelState state = LevelState.Playing;
+        LevelState state = LevelState.Menu;
         Coroutine pending;
+        int keysCollected;
+        int keysRequired;
 
         public event Action<LevelDefinition> OnLevelLoaded;
         public event Action<LevelDefinition> OnLevelWon;
         public event Action<LevelDefinition> OnLevelFailed;
+        /// <summary>collected, required</summary>
+        public event Action<int, int> OnKeysChanged;
+        public event Action<LevelState> OnStateChanged;
 
         public LevelDefinition Current => current;
         public int CurrentIndex => index;
         public int LevelCount => levels != null ? levels.Length : 0;
         public LevelState State => state;
         public bool IsPlaying => state == LevelState.Playing;
+        public int KeysCollected => keysCollected;
+        public int KeysRequired => keysRequired;
+        public bool DoorUnlocked => keysCollected >= keysRequired;
 
         void Awake()
         {
             Instance = this;
-            if (!rig) rig = FindFirstObjectByType<WorldRig>();
-            if (!levelParent && rig) levelParent = rig.WorldRoot;
+            if (!rotator) rotator = FindFirstObjectByType<WorldRotator>();
+            if (!player) player = FindFirstObjectByType<PlayerBody>();
+            if (!cameraRig) cameraRig = FindFirstObjectByType<PlaneCameraRig>();
+            if (!levelParent && rotator) levelParent = rotator.WorldRoot;
         }
 
         void OnDestroy() { if (Instance == this) Instance = null; }
 
+        void OnEnable()
+        {
+            if (player) player.OnDied += HandlePlayerDied;
+        }
+
+        void OnDisable()
+        {
+            if (player) player.OnDied -= HandlePlayerDied;
+        }
+
         void Start()
         {
-            ClearEditorPreview();
-            if (LevelCount > 0) LoadLevel(Mathf.Clamp(startLevel, 0, LevelCount - 1));
+            SetState(LevelState.Menu);
+            if (cameraRig) cameraRig.FrameExtents(menuViewExtents);
+            // The scene opens on the menu; UiRoot decides when to actually start a level.
+            //
+            // The editor preview level is deliberately NOT cleared here. v1 cleared it on Start
+            // because it went straight into gameplay, but v2 opens on a main menu - and a menu
+            // floating over an empty void looks broken. Leaving the preview island in place gives
+            // the menu a real backdrop for free, and LoadLevel clears it the moment PLAY is
+            // pressed.
         }
 
         /// <summary>
-        /// The scene ships with Level 1 already placed under WorldRoot so that opening the scene
-        /// shows the actual game instead of an empty void. That preview is thrown away the moment
-        /// play starts, and the real level is instantiated in its place.
+        /// The scene ships with a level already placed under the world root so opening it in the
+        /// editor shows the game rather than an empty void, and so the main menu has something
+        /// behind it. Thrown away the moment a real level is loaded.
         /// </summary>
         void ClearEditorPreview()
         {
@@ -73,6 +114,7 @@ namespace PullTheWorld
             }
         }
 
+        // -------------------------------------------------------------------- level loading --
         public void LoadLevel(int i)
         {
             if (levels == null || levels.Length == 0) return;
@@ -80,7 +122,11 @@ namespace PullTheWorld
 
             index = Mathf.Clamp(i, 0, levels.Length - 1);
 
-            if (current) Destroy(current.gameObject);
+            // Clears both the previous level and the editor preview island, which are the same
+            // kind of thing as far as the world root is concerned.
+            ClearEditorPreview();
+            current = null;
+            DynamicRegistry.Prune();
 
             current = Instantiate(levels[index], levelParent);
             current.transform.localPosition = Vector3.zero;
@@ -89,14 +135,20 @@ namespace PullTheWorld
             current.name = levels[index].name;
             current.EnsureWiring();
 
-            state = LevelState.Playing;
+            // Order matters - see the class comment.
+            if (rotator)
+                rotator.BindLevel(current.startAngle, current.allowRotation, current.angleLimit);
 
-            if (rig)
-            {
-                rig.BindLevel(current.startFocus, current.startSpin,
-                              current.FocusBounds, current.useBounds, current.allowRotation);
-            }
+            // Framed before the player spawns so the first frame is already composed.
+            if (cameraRig) cameraRig.FrameExtents(current.viewExtents);
 
+            keysRequired = Mathf.Max(0, current.requiredKeys);
+            keysCollected = 0;
+            OnKeysChanged?.Invoke(keysCollected, keysRequired);
+
+            if (player) player.Spawn(current.WorldSpawnPoint);
+
+            SetState(LevelState.Playing);
             OnLevelLoaded?.Invoke(current);
         }
 
@@ -105,32 +157,67 @@ namespace PullTheWorld
         public void Next()
         {
             if (index + 1 < LevelCount) LoadLevel(index + 1);
-            else LoadLevel(0); // loop the prototype rather than dead-ending a demo
+            else ReturnToMenu();   // finished the slice; back to the menu rather than a dead end
         }
 
-        /// <summary>Called by ExitPortal when the door has reached the player.</summary>
+        public void ReturnToMenu()
+        {
+            if (pending != null) { StopCoroutine(pending); pending = null; }
+            if (current) { Destroy(current.gameObject); current = null; }
+            DynamicRegistry.Prune();
+            if (player) player.gameObject.SetActive(false);
+            if (rotator) rotator.CancelDrive();
+            if (cameraRig) cameraRig.FrameExtents(menuViewExtents);
+            SetState(LevelState.Menu);
+        }
+
+        // ---------------------------------------------------------------------- key pickups --
+        /// <summary>Called by Collectible when the player touches it.</summary>
+        public void CollectKey()
+        {
+            if (state != LevelState.Playing) return;
+            keysCollected++;
+            OnKeysChanged?.Invoke(keysCollected, keysRequired);
+        }
+
+        // -------------------------------------------------------------------- win / fail -----
+        /// <summary>Called by ExitPortal once the player has actually entered an unlocked door.</summary>
         public void ReportWin()
         {
             if (state != LevelState.Playing) return;
             state = LevelState.Won;
+            OnStateChanged?.Invoke(state);
+
+            if (player) player.Freeze();
+            if (rotator) { rotator.CancelDrive(); rotator.RotationAllowed = false; }
+
+            GameProgress.ReportCleared(index);
             OnLevelWon?.Invoke(current);
-            if (autoAdvance) pending = StartCoroutine(WinRoutine());
+
+            pending = StartCoroutine(WinRoutine());
         }
 
-        /// <summary>Called by Hazard when the player has been reached by something nasty.</summary>
+        /// <summary>Called by Hazard, or by the player falling out of the world.</summary>
         public void ReportFail()
         {
             if (state != LevelState.Playing) return;
             state = LevelState.Failed;
+            OnStateChanged?.Invoke(state);
+
+            if (rotator) rotator.CancelDrive();
             OnLevelFailed?.Invoke(current);
+
             pending = StartCoroutine(FailRoutine());
         }
+
+        void HandlePlayerDied() => ReportFail();
 
         IEnumerator WinRoutine()
         {
             yield return new WaitForSeconds(winCelebrateTime);
             pending = null;
-            Next();
+            if (autoAdvance) Next();
+            // Otherwise UiRoot has shown the level-complete panel and waits for a tap.
         }
 
         IEnumerator FailRoutine()
@@ -140,8 +227,15 @@ namespace PullTheWorld
             Restart();
         }
 
+        void SetState(LevelState s)
+        {
+            if (state == s) return;
+            state = s;
+            OnStateChanged?.Invoke(state);
+        }
+
 #if UNITY_EDITOR
-        /// <summary>Used by the build tooling to populate the list without touching the scene by hand.</summary>
+        /// <summary>Used by the build tooling to fill the list without touching the scene by hand.</summary>
         public void EditorSetLevels(LevelDefinition[] defs) { levels = defs; }
 #endif
     }

@@ -20,14 +20,19 @@ namespace PullTheWorld.EditorTools
         /// <summary>Horizontal cell size.</summary>
         public const float Grid = 1f;
         /// <summary>
-        /// Blocks are NOT cubes. Measured off the reference (corrected for each panel camera
-        /// pitch, two panels agreeing at 0.71 and 0.78), a block is about 0.75 as tall as it is
-        /// wide. That squatness is a surprisingly large part of why the reference reads as a
-        /// friendly toy diorama rather than a Minecraft grid, so the vertical grid step is 0.75.
+        /// Cell height. v1 used 0.75 because it measured the reference sheet's isometric blocks as
+        /// noticeably squat, and that squatness was part of why the diorama read as a friendly toy.
+        ///
+        /// v2 uses square cells, and the reason is the mechanic rather than taste: the level is
+        /// rotated continuously through every angle, so a non-square grid makes the same island
+        /// read as a different shape at 0 and 90 degrees, and a puzzle the player has already
+        /// solved visually stops looking solved. Square cells rotate to themselves. The friendly
+        /// proportion is carried by the 0.06 chamfer and the grass cap instead, which do survive
+        /// rotation.
         /// </summary>
-        public const float BlockH = 0.75f;
+        public const float BlockH = 1f;
         /// <summary>Grass cap is ~18% of block height and caps grey stone directly - no dirt layer.</summary>
-        public const float GrassCap = 0.135f;
+        public const float GrassCap = 0.26f;
 
         public static void BuildAll()
         {
@@ -59,6 +64,9 @@ namespace PullTheWorld.EditorTools
             Save(PlateIndicator(), "Mesh_PlateIndicator");
 
             Save(Player(), "Mesh_Player");
+            Save(PlayerBall(), "Mesh_PlayerBall");
+            Save(PlayerFace(), "Mesh_PlayerFace");
+            Save(Key(), "Mesh_Key");
             Save(QuadXZ(), "Mesh_QuadXZ");
             Save(QuadXY(), "Mesh_QuadXY");
             Save(WaterTile(6, 1f), "Mesh_WaterTile");
@@ -362,6 +370,56 @@ namespace PullTheWorld.EditorTools
             mb.AddBlob(0, new Vector3(0f, 0.4f, 0f), new Vector3(0.17f, 0.21f, 0.145f), 2, 0f, 1, false);
             mb.AddBlob(0, new Vector3(0f, 0.75f, 0f), new Vector3(0.2f, 0.198f, 0.19f), 2, 0f, 2, false);
             return mb.ToMesh("Player");
+        }
+
+        /// <summary>
+        /// The v2 character: a faceted ball.
+        ///
+        /// A humanoid was the wrong body for this game. The player is now a dynamic physics object
+        /// that rolls, and a rolling upright character either has to be animated into a skate
+        /// (expensive, and it hides the physics) or tumble end over end (which looks broken). A ball
+        /// is honest about what the simulation is doing, and it is the only shape that behaves
+        /// predictably on tilting geometry - a box sits at PhysX's friction angle on a slope and
+        /// catches on tile seams, which is why v1 abandoned crates as puzzle pieces.
+        ///
+        /// Kept FLAT shaded and deliberately low-poly (subdiv 2 octahedron, 128 tris) so the facets
+        /// catch the key light and the spin is readable. A smooth sphere rolling looks static.
+        /// </summary>
+        static Mesh PlayerBall()
+        {
+            var mb = new MeshBuilder();
+            // A hair of vertical squash reads as soft and toy-like rather than as a billiard ball,
+            // and is small enough that it never looks wrong while rolling.
+            mb.AddBlob(0, Vector3.zero, new Vector3(0.34f, 0.325f, 0.34f), 2, 0f, 11);
+            return mb.ToMesh("PlayerBall");
+        }
+
+        /// <summary>
+        /// Two eyes on the ball, as a separate mesh so they can carry their own dark material.
+        ///
+        /// The style bible says the character has no features at all, and for a fixed upright
+        /// figure that was right. For a ball it is not: without a mark on it, a rolling sphere
+        /// under flat-ish lighting barely reads as rotating, and the rotation IS the feedback that
+        /// gravity is doing something. Two eyes fix that and buy the cute read at the same time.
+        /// </summary>
+        static Mesh PlayerFace()
+        {
+            var mb = new MeshBuilder();
+            for (int s = -1; s <= 1; s += 2)
+                mb.AddBlob(0, new Vector3(0.115f * s, 0.055f, -0.295f),
+                           new Vector3(0.062f, 0.072f, 0.05f), 1, 0f, 3 + s);
+            return mb.ToMesh("PlayerFace");
+        }
+
+        /// <summary>
+        /// The key: a faceted gem. Reads as valuable at phone size without needing a texture, and
+        /// an octahedron silhouette is distinct from every rock in the game at a glance.
+        /// </summary>
+        static Mesh Key()
+        {
+            var mb = new MeshBuilder();
+            mb.AddBlob(0, Vector3.zero, new Vector3(0.15f, 0.23f, 0.15f), 1, 0f, 7);
+            return mb.ToMesh("Key");
         }
 
         // ========================================================================= utility ==

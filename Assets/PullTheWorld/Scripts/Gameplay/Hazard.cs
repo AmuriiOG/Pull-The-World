@@ -3,18 +3,20 @@ using UnityEngine;
 namespace PullTheWorld
 {
     /// <summary>
-    /// Fire / spikes / anything that ends the run if it reaches the player.
-    /// Can be smothered by dropping a heavy prop on it, which is the Level 4 lesson.
-    /// Like ExitPortal this uses explicit overlap queries rather than physics triggers, because
-    /// the whole static world is a single compound collider.
+    /// Fire, spikes, anything that ends the run on contact.
+    ///
+    /// Can be smothered by dropping a heavy prop on it, which is the "rocks are tools" lesson, and
+    /// fire can additionally be doused by water. Like ExitPortal this uses explicit overlap queries
+    /// rather than physics triggers, because the whole static level is a single compound collider
+    /// and trigger callbacks do not reliably arrive on this GameObject.
     /// </summary>
     public class Hazard : MonoBehaviour
     {
         [Header("Danger zone")]
         [SerializeField] Transform zoneCenter;
-        [SerializeField] Vector3 zoneSize = new Vector3(0.9f, 0.9f, 0.9f);
-        [Tooltip("How close the player anchor has to get before this kills.")]
-        [SerializeField] float killRadius = 0.55f;
+        [Tooltip("Added to the player radius. Keep it tight - an unfair hitbox on a physics puzzle " +
+                 "reads as the game cheating rather than as the player misjudging.")]
+        [SerializeField] float killRadius = 0.42f;
 
         [Header("Smothering")]
         [Tooltip("Dropping a heavy prop on this puts it out for good.")]
@@ -22,8 +24,13 @@ namespace PullTheWorld
         [SerializeField] float smotherMass = 0.5f;
         [SerializeField] Vector3 smotherBoxSize = new Vector3(0.95f, 1.1f, 0.95f);
 
+        [Header("Water")]
+        [Tooltip("Fire goes out when water reaches it. Spikes do not care.")]
+        [SerializeField] bool dousedByWater = true;
+
         [Header("Visuals")]
         [SerializeField] GameObject activeVisuals;
+        [SerializeField] GameObject spentVisuals;
         [SerializeField] ParticleSystem flameVfx;
         [SerializeField] ParticleSystem smotherVfx;
         [SerializeField] Light hazardLight;
@@ -31,13 +38,14 @@ namespace PullTheWorld
         [Header("State")]
         [SerializeField] bool armed = true;
 
-        readonly Collider[] overlapBuffer = new Collider[8];
+        readonly Collider[] overlapBuffer = new Collider[12];
         bool smothered;
         float lightBase;
         float t;
 
         public bool Armed => armed && !smothered;
         public bool Smothered => smothered;
+        public bool DousedByWater => dousedByWater;
         Transform Zone => zoneCenter ? zoneCenter : transform;
 
         void Awake()
@@ -57,7 +65,6 @@ namespace PullTheWorld
         void Update()
         {
             t += Time.deltaTime;
-
             if (!Armed) return;
 
             if (canBeSmothered && CheckSmothered())
@@ -66,47 +73,54 @@ namespace PullTheWorld
                 return;
             }
 
-            var rig = WorldRig.Instance;
             var lm = LevelManager.Instance;
-            if (rig == null || lm == null || !lm.IsPlaying) return;
+            var player = PlayerBody.Instance;
+            if (lm == null || !lm.IsPlaying || player == null || !player.IsAlive) return;
 
-            if (Vector3.Distance(rig.AnchorPos, Zone.position) <= killRadius)
+            float d = Vector3.Distance(player.transform.position, Zone.position);
+            if (d <= killRadius + player.Radius)
             {
                 PtwAudio.Play(PtwSfx.Fail);
-                rig.AddShake(0.6f);
-                var player = FindFirstObjectByType<PlayerAnchor>();
-                if (player) player.Stumble();
-                lm.ReportFail();
-            }
-
-            if (hazardLight)
-            {
-                hazardLight.intensity = lightBase * (0.82f + Mathf.PerlinNoise(t * 6f, 0f) * 0.36f);
+                Haptics.Play(HapticKind.Fail);
+                if (WorldRotator.Instance) WorldRotator.Instance.AddShake(0.5f);
+                player.Kill();
             }
         }
 
+        /// <summary>
+        /// Anything heavy sitting in the box above this puts it out. Mass rather than a tag so a
+        /// boulder, a crate and an enemy corpse all work without being enumerated.
+        /// </summary>
         bool CheckSmothered()
         {
-            int n = Physics.OverlapBoxNonAlloc(
-                Zone.position + Zone.up * (smotherBoxSize.y * 0.4f),
-                smotherBoxSize * 0.5f, overlapBuffer, Zone.rotation, ~0, QueryTriggerInteraction.Ignore);
-
+            int n = Physics.OverlapBoxNonAlloc(Zone.position + Zone.up * 0.35f,
+                                               smotherBoxSize * 0.5f, overlapBuffer,
+                                               Zone.rotation, ~0, QueryTriggerInteraction.Ignore);
             for (int i = 0; i < n; i++)
             {
-                var c = overlapBuffer[i];
-                if (!c) continue;
-                var prop = c.GetComponentInParent<Pushable>();
-                if (prop && prop.Mass >= smotherMass) return true;
+                var rb = overlapBuffer[i].attachedRigidbody;
+                if (!rb || rb.isKinematic) continue;
+                // The player is not a fire extinguisher.
+                if (PlayerBody.Instance && rb == PlayerBody.Instance.Body) continue;
+                if (rb.mass >= smotherMass) return true;
             }
             return false;
         }
 
+        /// <summary>Called by WaterVolume when water overlaps this hazard.</summary>
+        public void Douse()
+        {
+            if (!dousedByWater || smothered) return;
+            Smother();
+        }
+
         void Smother()
         {
+            if (smothered) return;
             smothered = true;
             if (smotherVfx) smotherVfx.Play();
             PtwAudio.Play(PtwSfx.Smother);
-            if (WorldRig.Instance) WorldRig.Instance.AddShake(0.22f);
+            Haptics.Play(HapticKind.Break);
             ApplyVisualState();
         }
 
@@ -114,23 +128,32 @@ namespace PullTheWorld
         {
             bool on = Armed;
             if (activeVisuals) activeVisuals.SetActive(on);
-            if (hazardLight) hazardLight.enabled = on;
+            if (spentVisuals) spentVisuals.SetActive(!on);
+
             if (flameVfx)
             {
                 var em = flameVfx.emission;
                 em.enabled = on;
                 if (!on) flameVfx.Clear();
             }
+            if (hazardLight) hazardLight.enabled = on;
+        }
+
+        void LateUpdate()
+        {
+            // Fire light flickers so it never reads as a static emissive decal.
+            if (!hazardLight || !Armed) return;
+            float flicker = 1f + Mathf.Sin(t * 11.3f) * 0.09f + Mathf.Sin(t * 23.7f) * 0.05f;
+            hazardLight.intensity = lightBase * flicker;
         }
 
 #if UNITY_EDITOR
         void OnDrawGizmosSelected()
         {
-            Gizmos.color = new Color(1f, 0.25f, 0.1f, 0.85f);
+            Gizmos.color = new Color(1f, 0.35f, 0.1f, 0.85f);
             Gizmos.DrawWireSphere(Zone.position, killRadius);
-            Gizmos.matrix = Matrix4x4.TRS(Zone.position + Zone.up * (smotherBoxSize.y * 0.4f),
-                                          Zone.rotation, Vector3.one);
-            Gizmos.color = new Color(0.4f, 0.7f, 1f, 0.5f);
+            Gizmos.matrix = Matrix4x4.TRS(Zone.position + Zone.up * 0.35f, Zone.rotation, Vector3.one);
+            Gizmos.color = new Color(0.3f, 0.7f, 1f, 0.5f);
             Gizmos.DrawWireCube(Vector3.zero, smotherBoxSize);
         }
 #endif

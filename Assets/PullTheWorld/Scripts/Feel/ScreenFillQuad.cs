@@ -15,15 +15,26 @@ namespace PullTheWorld
         [SerializeField] Camera targetCamera;
         [Tooltip("How far in front of the camera to sit. Must be inside the far clip plane.")]
         [SerializeField] float distance = 100f;
-        [Tooltip("A little overscan so no seam shows at any aspect ratio.")]
-        [SerializeField] float padding = 1.06f;
+        [Tooltip("Overscan so no seam shows at any aspect ratio. Raised from 1.06 because the " +
+                 "capture path re-frames the camera and renders in the same call, without a " +
+                 "LateUpdate in between - see Fit().")]
+        [SerializeField] float padding = 1.35f;
 
         float lastSize = -1f, lastAspect = -1f;
 
         void OnEnable() { if (!targetCamera) targetCamera = GetComponentInParent<Camera>(); Fit(); }
         void LateUpdate() { Fit(); }
 
-        void Fit()
+        /// <summary>
+        /// Public so PlaneCameraRig can call it the instant it changes the framing.
+        ///
+        /// LateUpdate alone is not enough. Framing is now per-level, and the capture path sets a
+        /// RenderTexture, re-frames for the capture aspect and calls Camera.Render() all inside one
+        /// call - no LateUpdate runs in between, so the quad would still be sized for the previous
+        /// frame and could leave the camera's clear colour showing as a hard band across the top of
+        /// the shot.
+        /// </summary>
+        public void Fit()
         {
             if (!targetCamera || !targetCamera.orthographic) return;
 

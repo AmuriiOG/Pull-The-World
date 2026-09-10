@@ -1,0 +1,104 @@
+=========================================================================
+ PULL THE WORLD - concept art prompt (standalone, paste the whole file)
+ Style is locked to the original concept sheet.
+ See PicReference/VISUAL_LANGUAGE.md and _source/PullTheWorld_ConceptSheet.png
+=========================================================================
+
+PULL THE WORLD - FUTURE IDEA (NOT IN THE PROTOTYPE) - "Save Them"
+WARNING: the rescue NPC is explicitly OUT of the locked prototype mechanic set. Concept
+exploration only. Do not treat as shippable art.
+Reference: _source/panels/20_save-them.png
+Target output: 1024 x 1536 portrait PNG.
+
+SCENE
+A tighter, more dangerous island of grass-capped and plain stone cubes.
+Left of centre, stranded on a small isolated grass-capped block with drops on every
+side, a SECOND humanoid figure - identical in shape to the player (ball head, capsule
+body, stubby limbs, no face) but coloured warm yellow, shadow #E6BA55, base #F8CE4C, lit
+#FDE260. It stands upright with a slight forward lean, and it does NOT have an anchor
+disc - only the player gets a disc. That difference is the whole read: the yellow one is
+stuck, the white one is not.
+Between the two figures, hazards: a row of five pale grey metal spikes jutting up from
+the top of one stone cube on the left, and on the right a sunken pit of molten lava -
+flat faceted molten surface in hot orange, shadow #D54D1B, base #E15519, lit #EE6B1F,
+with a darker cracked crust around its rim, glowing and casting warm orange light on the
+surrounding stone.
+Centre, the ivory player figure upright on the glowing cyan anchor disc.
+Upper right, on a raised grass-topped stone plinth, the stone archway door with its
+amber-gold glowing doorway.
+One wooden crate sits on the ground to the right of the lava, honey-brown planks with
+darker frame edges.
+Balance the three light sources so they stay distinct: cyan at the player, hot orange at
+the lava, calm amber at the door.
+
+STYLE
+Stylized low-poly 3D render. Flat-shaded faceted geometry, no textures and no normal
+maps at all - every colour comes from flat material albedo only. Clean mobile puzzle
+game art direction: soft, uncluttered, instantly readable at phone size, on a mid cool
+blue-grey ground.
+Muted, restrained, naturalistic colour - premium rather than candy-coloured. Chunky
+rounded cubes: every terrain block is a 1x1x1 unit cube with a small ~0.06
+chamfer on all edges so edges read soft rather than razor sharp. A grass block is a
+stone base with a thin grass cap on top, the cap about 0.18 of the cube tall, and it
+overhangs the base by a hair. All materials matte - metallic 0, smoothness ~0.15, no
+glossy speculars, no reflections.
+
+CAMERA AND FRAMING
+Strict 45 degree isometric. ORTHOGRAPHIC projection - no perspective convergence at
+all: every 1x1 cube is the same size on screen regardless of depth, and every vertical
+edge is exactly vertical and parallel to every other. Camera euler rotation (36, 45, 0),
+locked, never moves. Vertical portrait composition, 2:3. The player figure sits at the
+optical centre of the frame. Keep a generous empty background margin all the way around
+the diorama - the level is a small floating island of blocks, not a full-bleed
+environment.
+
+THE PLAYER
+A small chunky faceted humanoid with NO face and no features whatsoever: a rounded ball
+head, a soft capsule body, stubby arms, short legs. Off-white ivory. About 1.6 cubes
+tall. Always perfectly upright, and always standing on their own glowing cyan anchor
+disc - a flat dark disc with a bright cyan glowing ring around its rim, spilling soft
+cyan light onto whatever is below it. The player NEVER stands directly on the terrain;
+the disc is the fixed point of the entire game.
+
+LIGHTING
+Soft single key light from the upper left front, diffuse and gentle, no hard-edged
+shadows. Soft ambient occlusion in the crevices where blocks meet. Contact drop-shadows
+under the diorama are VERY subtle - soft, wide, and only about 4% darker than the
+background plane, never dark pools. Mild bloom on emissive elements only - the cyan
+ring, the door glow, fire. Neutral tonemapping, mild vignette darkening the corners.
+
+PALETTE
+Measured off the LEVEL 1 panel of the concept sheet. These are FINAL-FRAME pixel values,
+after bloom, vignette and tonemapping - a render should LAND here.
+  background plane   #97A3B3  flat, mid cool blue-grey
+  contact shadow     #939EAD  only ~4% darker than the ground - soft, wide, very subtle
+  grass cap          shadow #2A562E  base #598146  lit #7B9C55
+  stone              shadow #494D52  base #7C8087  lit #A6ABB6
+  wood / crate       shadow #6F4D31  base #926540  lit #B2885C
+  player ivory       shadow #CDD0DF  base #DBDEE9  lit #EDEEF3
+  anchor cyan rim    #86DFFC  the hot emissive core - the BRIGHTEST cyan in the frame
+  anchor cyan spill  #5A76A4 -> #7290BB -> #8BB1DB  the wide soft glow around it
+  door glow amber    #CEB469 -> #E4C26C -> #F8CE61
+  fire orange        #EE6E1E -> #F48429 -> #FB9D1C
+
+SATURATION DISCIPLINE
+This palette is deliberately MUTED and naturalistic - noticeably less saturated than a
+typical hyper-casual mobile game, and that restraint is most of why it reads as premium.
+Do not drift candy-coloured. The grass is a soft olive-leaning green, not a vivid lime.
+The stone is a warm-neutral grey, not blue-white. The ground is a mid cool blue-grey,
+NOT near-white. Only the three emissives - cyan ring, amber door, orange fire - are
+allowed to be genuinely saturated, and the ivory player must stay the brightest
+non-emissive thing in the frame.
+
+AVOID
+No perspective distortion, no wide-angle lens, no vanishing points. No text, letters,
+numbers, captions, watermarks, logos or UI overlay anywhere in the image. No face or
+facial features on the character. No photorealism, no PBR metal, no glossy speculars,
+no textures, no photographic brick or stone textures, no normal maps. No cluttered
+full-bleed environment, no horizon line, no skybox, no clouds, no grass fields. Not
+Minecraft-blocky and not voxel art - this is smooth chamfered low-poly. No dramatic rim
+lighting, no lens flare, no depth-of-field blur. No visible grid lines or wireframe. The
+character must not be tilted or lying down.
+No candy-coloured or hyper-saturated palette, no vivid lime green grass, no blue-white
+stone, no near-white or white background - the ground is a mid cool blue-grey. No dark
+or heavy contact shadows.

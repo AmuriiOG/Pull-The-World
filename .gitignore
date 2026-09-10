@@ -66,10 +66,19 @@ node_modules/
 /[Cc]aptures/
 results.xml
 *.TestResults.xml
+# The Test Runner writes a temporary bootstrap scene into Assets/ for the duration of a PlayMode
+# run and normally deletes it afterwards. It survives an interrupted run, and it is worthless.
+/[Aa]ssets/InitTestScene*.unity
+/[Aa]ssets/InitTestScene*.unity.meta
 
-# Concept-art reference from a parallel session; not used by the build.
-# README's "Known gaps" explicitly says to exclude this on git init.
-/PicReference/
+# PicReference/ is deliberately TRACKED as of the v2 rework.
+#
+# The v1 README said to exclude it on git init, on the grounds that it was concept art from a
+# parallel session that the build did not use. That stopped being true: PALETTE.md and
+# VISUAL_LANGUAGE.md in there are now the working art direction for the game, and the panel
+# renders are what the capture-compare loop judges against. Reference material that decides what
+# the game looks like belongs in the repo. It is ~11 MB of PNG, which is a rounding error next to
+# the 7 GB of Library/ this file already excludes.
 
 # Builds / packages / crash reports
 *.apk

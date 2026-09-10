@@ -63,7 +63,9 @@ namespace PullTheWorld
 
         void PlayInternal(PtwSfx sfx, float volume, float pitch)
         {
-            if (!audioEnabled || pool == null) return;
+            // GameProgress is the single gate for the player's Sound setting, checked here rather
+            // than at each of the ~30 call sites.
+            if (!audioEnabled || pool == null || !GameProgress.SoundOn) return;
 
             AudioClip clip = null;
             float slotVol = 0.7f;

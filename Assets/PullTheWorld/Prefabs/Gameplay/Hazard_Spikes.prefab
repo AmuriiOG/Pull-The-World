@@ -46,12 +46,13 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: PullTheWorld.Runtime::PullTheWorld.Hazard
   zoneCenter: {fileID: 0}
-  zoneSize: {x: 0.9, y: 0.9, z: 0.9}
   killRadius: 0.5
   canBeSmothered: 0
   smotherMass: 0.5
   smotherBoxSize: {x: 0.95, y: 1.1, z: 0.95}
+  dousedByWater: 1
   activeVisuals: {fileID: 0}
+  spentVisuals: {fileID: 0}
   flameVfx: {fileID: 0}
   smotherVfx: {fileID: 0}
   hazardLight: {fileID: 0}

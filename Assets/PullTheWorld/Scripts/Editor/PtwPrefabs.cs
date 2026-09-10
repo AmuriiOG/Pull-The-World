@@ -27,7 +27,8 @@ namespace PullTheWorld.EditorTools
             BuildPortal();
             BuildHazards();
             BuildPlateAndGate();
-            BuildWaterProp();
+            BuildKey();
+            BuildPlatform();
             BuildPlayer();
 
             AssetDatabase.SaveAssets();
@@ -104,13 +105,19 @@ namespace PullTheWorld.EditorTools
             brb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             brb.interpolation = RigidbodyInterpolation.None;
             var bsc = boulder.AddComponent<SphereCollider>();
-            bsc.radius = 0.29f;
+            bsc.radius = 0.34f;
+            // Rocks are the main puzzle tool in v2 and they have to ROLL on a modest tilt, so they
+            // get a slick physics material for the same reason v1 gave one to its crate.
+            bsc.sharedMaterial = EnsurePhysicsMaterial("PM_Rolling", 0.22f, 0.26f, 0.02f);
+            // Locked to the puzzle plane, exactly like the player. A rock that drifts in Z ends up
+            // visually behind or in front of the level it is supposed to be sitting on.
+            brb.constraints = RigidbodyConstraints.FreezePositionZ
+                            | RigidbodyConstraints.FreezeRotationX
+                            | RigidbodyConstraints.FreezeRotationY;
             MeshNode("Visual", "Mesh_Boulder", boulder.transform, PtwArt.MRock);
-            var bvfx = Dust("ImpactVfx", boulder.transform, PtwArt.Get(PtwArt.MParticleSoft),
-                            PtwArt.StoneLight, 0.09f, 0.45f);
-            var bp = boulder.AddComponent<Pushable>();
-            Wire(bp, "visual", boulder.transform.Find("Visual"));
-            Wire(bp, "impactVfx", bvfx);
+            Dust("ImpactVfx", boulder.transform, PtwArt.Get(PtwArt.MParticleSoft),
+                 PtwArt.StoneLight, 0.09f, 0.45f);
+            boulder.AddComponent<DynamicProp>();
             Save(boulder, Play);
 
             var crate = Node("Prop_Crate");
@@ -121,17 +128,18 @@ namespace PullTheWorld.EditorTools
             crb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
             crb.interpolation = RigidbodyInterpolation.None;
             var cbc = crate.AddComponent<BoxCollider>();
-            cbc.size = Vector3.one * 0.62f;
+            cbc.size = Vector3.one * 0.7f;
             // A cube on a slope only slides once the tilt beats the friction angle. PhysX defaults
             // (0.6) put that at ~31 degrees, which is almost exactly the tilt a 45 degree spin
             // produces - so the crate just sat there. Slick it up so it starts moving at ~17.
             cbc.sharedMaterial = EnsurePhysicsMaterial("PM_Crate", 0.24f, 0.28f, 0.0f);
+            crb.constraints = RigidbodyConstraints.FreezePositionZ
+                            | RigidbodyConstraints.FreezeRotationX
+                            | RigidbodyConstraints.FreezeRotationY;
             MeshNode("Visual", "Mesh_Crate", crate.transform, PtwArt.MWood, PtwArt.MWoodDark);
-            var cvfx = Dust("ImpactVfx", crate.transform, PtwArt.Get(PtwArt.MParticleSoft),
-                            PtwArt.Wood, 0.08f, 0.4f);
-            var cp = crate.AddComponent<Pushable>();
-            Wire(cp, "visual", crate.transform.Find("Visual"));
-            Wire(cp, "impactVfx", cvfx);
+            Dust("ImpactVfx", crate.transform, PtwArt.Get(PtwArt.MParticleSoft),
+                 PtwArt.Wood, 0.08f, 0.4f);
+            crate.AddComponent<DynamicProp>();
             Save(crate, Play);
         }
 
@@ -232,39 +240,109 @@ namespace PullTheWorld.EditorTools
             ind.GetComponent<MeshRenderer>().shadowCastingMode =
                 UnityEngine.Rendering.ShadowCastingMode.Off;
 
+            // The pad and the indicator both ride on one "Slab" node so the whole face sinks
+            // together - sinking the pad while leaving the glowing inlay behind looked like the
+            // indicator was floating off the plate.
+            var slab = Node("Slab", plate.transform);
+            pad.transform.SetParent(slab.transform, false);
+            ind.transform.SetParent(slab.transform, false);
+
             var pp = plate.AddComponent<PressurePlate>();
-            Wire(pp, "pad", pad.transform);
-            Wire(pp, "indicator", ind.GetComponent<MeshRenderer>());
+            Wire(pp, "slab", slab.transform);
+            Wire(pp, "inlayRenderer", ind.GetComponent<MeshRenderer>());
             Save(plate, Play);
 
             float h = PtwMeshes.BlockH;
             var gate = Node("Gate_Stone");
-            var grb = gate.AddComponent<Rigidbody>();
-            grb.isKinematic = true;
-            grb.useGravity = false;
-            AddBox(gate, new Vector3(0f, -h * 0.5f, 0f), new Vector3(1f, h, 1f));
-            MeshNode("Visual", "Mesh_GateBlock", gate.transform, PtwArt.MStone, PtwArt.MStoneDark);
-            var mg = gate.AddComponent<MovingGate>();
-            Wire(mg, "openOffset", new Vector3(0f, -h * 1.02f, 0f));
+            // No Rigidbody: the gate is an ordinary child collider of the level's compound body.
+            // See Gate's class comment for why that is fine here but not for a moving platform.
+            var gslab = Node("Slab", gate.transform);
+            AddBox(gslab, new Vector3(0f, -h * 0.5f, 0f), new Vector3(1f, h, 0.9f));
+            MeshNode("Visual", "Mesh_GateBlock", gslab.transform, PtwArt.MStone, PtwArt.MStoneDark);
+
+            // A thin lit strip at the gate mouth, not a full-cell quad. At 1x1 with an emissive
+            // material it rendered as a glowing white card stuck to the level rather than as a
+            // threshold, and it was the most obviously wrong thing in the level 5 capture.
+            var threshold = MeshNode("Threshold", "Mesh_QuadXY", gate.transform, PtwArt.MGlowCyan);
+            threshold.transform.localPosition = new Vector3(0f, -h * 0.97f, -0.47f);
+            threshold.transform.localScale = new Vector3(0.86f, 0.09f, 1f);
+            threshold.GetComponent<MeshRenderer>().shadowCastingMode =
+                UnityEngine.Rendering.ShadowCastingMode.Off;
+
+            var gt = gate.AddComponent<Gate>();
+            Wire(gt, "slab", gslab.transform);
+            Wire(gt, "travel", h * 1.02f);
+            Wire(gt, "localDirection", Vector3.down);
+            Wire(gt, "thresholdRenderer", threshold.GetComponent<MeshRenderer>());
             Save(gate, Play);
         }
 
-        // ========================================================================= water =====
-        static void BuildWaterProp()
+        // =========================================================================== key =====
+        static void BuildKey()
         {
-            var water = Node("Prop_Water");
+            var key = Node("Key_Gem");
 
-            var surface = MeshNode("Surface", "Mesh_WaterTile", water.transform, PtwArt.MWater);
-            var sr = surface.GetComponent<MeshRenderer>();
-            sr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            sr.receiveShadows = false;
+            // Spinner child so the idle spin and bob never touch the root - the root is what the
+            // pickup distance is measured from, and a bobbing pickup radius feels arbitrary.
+            var spinner = Node("Spinner", key.transform);
+            var gem = MeshNode("Gem", "Mesh_Key", spinner.transform, PtwArt.MKey);
+            gem.GetComponent<MeshRenderer>().shadowCastingMode =
+                UnityEngine.Rendering.ShadowCastingMode.Off;
 
-            var pour = Droplets("PourVfx", water.transform, PtwArt.Get(PtwArt.MParticleSoft));
+            var halo = MeshNode("Halo", "Mesh_QuadXY", spinner.transform, PtwArt.MPortalGlow);
+            halo.transform.localScale = Vector3.one * 1.5f;
+            halo.transform.localPosition = new Vector3(0f, 0f, 0.05f);
+            halo.GetComponent<MeshRenderer>().shadowCastingMode =
+                UnityEngine.Rendering.ShadowCastingMode.Off;
 
-            var wv = water.AddComponent<WaterVolume>();
-            Wire(wv, "surface", sr);
-            Wire(wv, "pourVfx", pour);
-            Save(water, Play);
+            var lightGo = Node("KeyLight", key.transform);
+            var kl = lightGo.AddComponent<Light>();
+            kl.type = LightType.Point;
+            kl.color = PtwArt.Hex("#FFD96B");
+            kl.intensity = 1.3f;
+            kl.range = 2.6f;
+            kl.shadows = LightShadows.None;
+
+            var collect = Burst("CollectVfx", key.transform,
+                                PtwArt.Get(PtwArt.MParticleAdd), PtwArt.Hex("#FFD96B"), 26);
+
+            var visuals = Node("Visuals", key.transform);
+            spinner.transform.SetParent(visuals.transform, true);
+            lightGo.transform.SetParent(visuals.transform, true);
+
+            var col = key.AddComponent<Collectible>();
+            Wire(col, "spinner", spinner.transform);
+            Wire(col, "collectVfx", collect);
+            Wire(col, "visuals", visuals);
+            Save(key, Play);
+        }
+
+        // ====================================================================== platform =====
+        static void BuildPlatform()
+        {
+            float h = PtwMeshes.BlockH;
+
+            var plat = Node("Platform_Moving");
+            var rb = plat.AddComponent<Rigidbody>();
+            rb.isKinematic = true;
+            rb.useGravity = false;
+
+            AddBox(plat, new Vector3(0f, -h * 0.25f, 0f), new Vector3(2f, h * 0.5f, 0.9f));
+
+            var visual = MeshNode("Visual", "Mesh_BlockStone", plat.transform,
+                                  PtwArt.MStoneDark);
+            visual.transform.localScale = new Vector3(2f, 0.5f, 0.9f);
+
+            // A stripe of cyan on the top face so a moving surface is instantly distinguishable
+            // from the static terrain it slides past.
+            var stripe = MeshNode("Stripe", "Mesh_QuadXZ", plat.transform, PtwArt.MGlowCyan);
+            stripe.transform.localPosition = new Vector3(0f, 0.012f, 0f);
+            stripe.transform.localScale = new Vector3(1.9f, 1f, 0.28f);
+            stripe.GetComponent<MeshRenderer>().shadowCastingMode =
+                UnityEngine.Rendering.ShadowCastingMode.Off;
+
+            plat.AddComponent<MovingPlatform>();
+            Save(plat, Play);
         }
 
         static ParticleSystem Droplets(string name, Transform parent, Material mat)
@@ -303,39 +381,40 @@ namespace PullTheWorld.EditorTools
         }
 
         // ======================================================================== player =====
+        /// <summary>
+        /// The v2 player: one dynamic sphere.
+        ///
+        /// No anchor ring, no kinematic blocker capsule, no pinned transform. All of that existed
+        /// to sell "you are the fixed point of the universe", which is the fiction v2 threw out.
+        /// What is left is a physics body with a face on it.
+        ///
+        /// The collider lives on the ROOT and the mesh on a child, because the root is spun by the
+        /// solver and squash has to be applied without fighting that rotation.
+        /// </summary>
         static void BuildPlayer()
         {
             var rig = Node("PlayerRig");
 
-            var body = MeshNode("Body", "Mesh_Player", rig.transform, PtwArt.MPlayer, PtwArt.MPlayerShade);
+            var rb = rig.AddComponent<Rigidbody>();
+            rb.mass = 1f;
+            var sc = rig.AddComponent<SphereCollider>();
+            sc.radius = 0.335f;
+            // Low friction so a gentle tilt starts it moving, and a little bounce so a drop has
+            // some life without the ball becoming a pinball.
+            sc.sharedMaterial = EnsurePhysicsMaterial("PM_Player", 0.30f, 0.34f, 0.06f);
 
-            // No anchor ring. It was doing the "you are the fixed point" job visually, but it also
-            // reads as a UI decal stuck to the character, which reinforces exactly the wrong thing
-            // (character-centric camera). That job is now done by the world-attached grab marker
-            // and the static ocean instead.
+            var visual = Node("Visual", rig.transform);
+            MeshNode("Ball", "Mesh_PlayerBall", visual.transform, PtwArt.MPlayer);
+            MeshNode("Face", "Mesh_PlayerFace", visual.transform, PtwArt.MPlayerEye);
 
-            var shadow = MeshNode("ContactShadow", "Mesh_QuadXZ", rig.transform, PtwArt.MBlobShadow);
-            shadow.transform.localPosition = new Vector3(0f, 0.008f, 0f);
-            shadow.transform.localScale = new Vector3(0.95f, 1f, 0.95f);
-            shadow.GetComponent<MeshRenderer>().shadowCastingMode =
-                UnityEngine.Rendering.ShadowCastingMode.Off;
+            // No fake blob shadow. v1 needed one because its camera was steeply isometric and a
+            // flat XZ quad read clearly under the character. This camera is almost front-on
+            // (13 degrees), so a horizontal quad is seen edge-on and is effectively invisible.
+            // A real shadow from the directional key light does the job properly here, and the
+            // chamfered blocks give it something to fall across.
 
-            // Solid body so loose props bump off the player, and so WorldRig has something to
-            // depenetrate the level against. Starts above foot height on purpose: the floor the
-            // player stands on must never count as a blocker.
-            var blocker = Node("Blocker", rig.transform);
-            var brb = blocker.AddComponent<Rigidbody>();
-            brb.isKinematic = true;
-            brb.useGravity = false;
-            var cap = blocker.AddComponent<CapsuleCollider>();
-            cap.center = new Vector3(0f, 0.58f, 0f);
-            cap.radius = 0.26f;
-            cap.height = 0.92f;
-            cap.direction = 1;
-
-            var pa = rig.AddComponent<PlayerAnchor>();
-            Wire(pa, "body", body.transform);
-            Wire(pa, "contactShadow", shadow.transform);
+            var pb = rig.AddComponent<PlayerBody>();
+            Wire(pb, "visual", visual.transform);
             Save(rig, Play);
         }
 
