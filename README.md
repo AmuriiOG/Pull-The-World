@@ -336,6 +336,18 @@ v2 lives on `prototype/rotate-gravity-v2`. Nothing about v2 can damage v1.
 * Art is close to `PicReference/` but **not converged** — the palette was raised once after a
   capture-compare pass because the v1 values landed near `#5A6875` on screen against a `#97A3B3`
   target and the whole frame read as dusk.
+* **Open bug: a pale blue-white line along the grass cap's top face** when the island is tilted.
+  Ruled out by rebuilding without each in turn: bloom (threshold is now 1.3), the dust systems,
+  specular highlights (now off), and the gate's threshold strip. Best remaining diagnosis is that
+  the top face is simply over-lit — its normal turns towards the key light as the island tilts
+  (dot 0.88 against 0.74 upright) and the cool flat ambient (`#9FB2CE` at full intensity)
+  desaturates the result towards blue-white. **Try lowering the ambient rather than the key light.**
+
+  Method note, because this cost more time than it should have: do **not** read pixel coordinates
+  off a capture in an image viewer. The viewer rescales, and two hand-picked probe points both
+  landed on plain grass 130px from the target. What worked was printing a coarse luminance map of
+  the real 1080×1920 frame from inside a test, then disabling renderers one at a time and watching
+  a single pixel to see whose removal changed it.
 * `PicReference/` is now **tracked** (the v1 README said to exclude it). `PALETTE.md` and
   `VISUAL_LANGUAGE.md` in there are the working art direction, and the panel renders are what the
   capture-compare loop is judged against. Note that `VISUAL_LANGUAGE.md` still describes v1's
