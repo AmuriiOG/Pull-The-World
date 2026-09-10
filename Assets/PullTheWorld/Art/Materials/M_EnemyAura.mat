@@ -19,9 +19,11 @@ Material:
   m_DoubleSidedGI: 0
   m_CustomRenderQueue: 3000
   stringTagMap:
-    RenderType: Opaque
+    RenderType: Transparent
   disabledShaderPasses:
   - MOTIONVECTORS
+  - DepthOnly
+  - SHADOWCASTER
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
@@ -31,7 +33,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MainTex:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: eac49943dfd782b4ab20183b093ab931, type: 2}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     m_Ints: []
@@ -44,7 +46,7 @@ Material:
     - _Cull: 2
     - _Cutoff: 0.5
     - _DstBlend: 1
-    - _DstBlendAlpha: 0
+    - _DstBlendAlpha: 1
     - _QueueOffset: 0
     - _SampleGI: 0
     - _SrcBlend: 5
@@ -54,7 +56,7 @@ Material:
     - _ZWrite: 0
     m_Colors:
     - _BaseColor: {r: 1, g: 0.1, b: 0.18, a: 0.45}
-    - _Color: {r: 1, g: 1, b: 1, a: 1}
+    - _Color: {r: 1, g: 0.09999997, b: 0.17999998, a: 0.45}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
 --- !u!114 &4711755980601930610
