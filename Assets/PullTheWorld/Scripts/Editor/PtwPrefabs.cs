@@ -29,9 +29,43 @@ namespace PullTheWorld.EditorTools
             BuildPlateAndGate();
             BuildKey();
             BuildPlatform();
+            BuildWaterProp();
             BuildPlayer();
 
             AssetDatabase.SaveAssets();
+        }
+
+        // ========================================================================= water =====
+        static void BuildWaterProp()
+        {
+            var water = Node("Prop_Water");
+
+            // Surface: the v1 wave shader on a subdivided XZ tile, sitting at the fill height.
+            var surface = MeshNode("Surface", "Mesh_WaterTile", water.transform, PtwArt.MWater);
+            surface.transform.localScale = new Vector3(0.94f, 1f, 0.9f);
+            var sr = surface.GetComponent<MeshRenderer>();
+            sr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            sr.receiveShadows = false;
+
+            // Body: translucent box from the bed up to the surface. This is what the side-on
+            // camera actually sees of a pool; the surface tile is a sliver at 20 degrees of pitch.
+            var body = MeshNode("Body", "Mesh_WaterBody", water.transform, PtwArt.MWaterBody);
+            body.transform.localScale = new Vector3(1f, 0.5f, 1f);   // depth is half a cell
+            var br = body.GetComponent<MeshRenderer>();
+            br.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            br.receiveShadows = false;
+
+            var pour = Droplets("PourVfx", water.transform, PtwArt.Get(PtwArt.MParticleSoft));
+            var splash = Burst("SplashVfx", water.transform, PtwArt.Get(PtwArt.MParticleSoft),
+                               PtwArt.Hex("#9FE8FA"), 12);
+
+            var wv = water.AddComponent<WaterVolume>();
+            Wire(wv, "surface", sr);
+            Wire(wv, "surfaceTransform", surface.transform);
+            Wire(wv, "body", body.transform);
+            Wire(wv, "pourVfx", pour);
+            Wire(wv, "splashVfx", splash);
+            Save(water, Play);
         }
 
         // ======================================================================== blocks =====
@@ -63,6 +97,14 @@ namespace PullTheWorld.EditorTools
             // ground, or the player could stand in the middle of a lake.
             var basin = MeshNode("Block_Basin", "Mesh_BlockStone", null, PtwArt.MStoneDark);
             Save(basin, Blocks);
+
+            // v2 pool bed: the bottom half of a floor cell, SOLID, dark on every face so it reads
+            // as the floor of a pond rather than as a grass block that got wet. WaterVolume sits
+            // on its top and fills the other half of the cell.
+            var bed = MeshNode("Block_Pool_Bed", "Mesh_BlockGrassHalf", null,
+                               PtwArt.MStoneDark, PtwArt.MStoneDark);
+            AddTileBox(bed, new Vector3(0f, -h * 0.25f, 0f), new Vector3(1f, h * 0.5f, 1f));
+            Save(bed, Blocks);
 
             var r = MeshNode("Block_Ramp", "Mesh_BlockRamp", null, PtwArt.MStone, PtwArt.MGrass);
             for (int i = 0; i < 3; i++)
@@ -114,10 +156,10 @@ namespace PullTheWorld.EditorTools
             brb.constraints = RigidbodyConstraints.FreezePositionZ
                             | RigidbodyConstraints.FreezeRotationX
                             | RigidbodyConstraints.FreezeRotationY;
-            MeshNode("Visual", "Mesh_Boulder", boulder.transform, PtwArt.MRock);
+            MeshNode("Visual", "Mesh_Boulder", boulder.transform, PtwArt.MRock).AddComponent<Punch>();
             Dust("ImpactVfx", boulder.transform, PtwArt.Get(PtwArt.MParticleSoft),
                  PtwArt.StoneLight, 0.09f, 0.45f);
-            boulder.AddComponent<DynamicProp>();
+            boulder.AddComponent<DynamicProp>();   // finds Visual / ImpactVfx by name
             Save(boulder, Play);
 
             var crate = Node("Prop_Crate");
@@ -136,7 +178,7 @@ namespace PullTheWorld.EditorTools
             crb.constraints = RigidbodyConstraints.FreezePositionZ
                             | RigidbodyConstraints.FreezeRotationX
                             | RigidbodyConstraints.FreezeRotationY;
-            MeshNode("Visual", "Mesh_Crate", crate.transform, PtwArt.MWood, PtwArt.MWoodDark);
+            MeshNode("Visual", "Mesh_Crate", crate.transform, PtwArt.MWood, PtwArt.MWoodDark).AddComponent<Punch>();
             Dust("ImpactVfx", crate.transform, PtwArt.Get(PtwArt.MParticleSoft),
                  PtwArt.Wood, 0.08f, 0.4f);
             crate.AddComponent<DynamicProp>();
@@ -244,6 +286,7 @@ namespace PullTheWorld.EditorTools
             // together - sinking the pad while leaving the glowing inlay behind looked like the
             // indicator was floating off the plate.
             var slab = Node("Slab", plate.transform);
+            slab.AddComponent<Punch>();               // flinches when pressed
             pad.transform.SetParent(slab.transform, false);
             ind.transform.SetParent(slab.transform, false);
 
@@ -257,6 +300,7 @@ namespace PullTheWorld.EditorTools
             // No Rigidbody: the gate is an ordinary child collider of the level's compound body.
             // See Gate's class comment for why that is fine here but not for a moving platform.
             var gslab = Node("Slab", gate.transform);
+            gslab.AddComponent<Punch>();              // flinches when it starts to move
             AddBox(gslab, new Vector3(0f, -h * 0.5f, 0f), new Vector3(1f, h, 0.9f));
             MeshNode("Visual", "Mesh_GateBlock", gslab.transform, PtwArt.MStone, PtwArt.MStoneDark);
 

@@ -76,6 +76,10 @@ namespace PullTheWorld
 
                 PtwAudio.Play(pressed ? PtwSfx.PlateOn : PtwSfx.PlateOff);
                 Haptics.Play(HapticKind.Plate);
+                // The whole plate flinches. Together with the sink and the inlay lighting up, a
+                // press now reads as a mechanism engaging rather than a colour change.
+                if (slab) { var p = slab.GetComponent<Punch>(); if (p) p.Hit(pressed ? 0.7f : 0.3f); }
+                if (pressed && WorldRotator.Instance) WorldRotator.Instance.AddShake(0.18f);
                 ApplyIndicator();
                 PushTargets();
             }

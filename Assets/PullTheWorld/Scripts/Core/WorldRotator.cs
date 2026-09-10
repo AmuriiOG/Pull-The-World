@@ -150,13 +150,22 @@ namespace PullTheWorld
             rotationAllowed = allowRotation;
             angleLimit = Mathf.Max(0f, limit);
 
-            angle = angleTarget = startAngle;
+            // Start a few degrees off and let the spring settle home. The level arrives with a
+            // little swing instead of snapping into place, and it demonstrates the one verb the
+            // game has before the player has touched anything. Small enough that the ball does
+            // not go anywhere on a flat floor.
+            angle = startAngle + introKick;
+            angleTarget = startAngle;
             angleVel = flingVel = 0f;
             tickAccum = 0f;
             driving = false;
 
             ApplyImmediate();
         }
+
+        [Header("Intro")]
+        [Tooltip("Degrees the level starts tilted before springing to its start angle on load.")]
+        [SerializeField] float introKick = 4f;
 
         /// <summary>Teleport with no spring settle. Used on level load and restart.</summary>
         public void ApplyImmediate()

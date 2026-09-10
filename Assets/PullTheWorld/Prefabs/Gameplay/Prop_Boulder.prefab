@@ -98,6 +98,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: PullTheWorld.Runtime::PullTheWorld.DynamicProp
   maxSpeed: 18
   maxAngularSpeed: 30
+  buoyancy: 0.55
+  impactReference: 6
+  minImpactSpeed: 1.8
+  visualPunch: {fileID: 0}
+  impactVfx: {fileID: 0}
 --- !u!1 &612635712551676741
 GameObject:
   m_ObjectHideFlags: 0
@@ -4954,6 +4959,7 @@ GameObject:
   - component: {fileID: 2408926992540365509}
   - component: {fileID: 3884614977880671687}
   - component: {fileID: 8453651966038311449}
+  - component: {fileID: 5521049548019035663}
   m_Layer: 0
   m_Name: Visual
   m_TagString: Untagged
@@ -5032,3 +5038,19 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!114 &5521049548019035663
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8993445172013433517}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b723d6274d156c14a8594a88c68c15d9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PullTheWorld.Runtime::PullTheWorld.Punch
+  frequency: 3.4
+  damping: 0.42
+  scalePerStrength: 0.22
+  maxAmplitude: 0.5

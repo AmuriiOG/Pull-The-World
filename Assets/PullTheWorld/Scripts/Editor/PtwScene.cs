@@ -165,7 +165,7 @@ namespace PullTheWorld.EditorTools
             var key = keyGo.AddComponent<Light>();
             key.type = LightType.Directional;
             key.color = KeyColor;
-            key.intensity = 1.6f;
+            key.intensity = 1.4f;
             key.shadows = LightShadows.Soft;
             key.shadowStrength = 0.78f;
             key.shadowBias = 0.04f;
@@ -642,6 +642,7 @@ namespace PullTheWorld.EditorTools
                                   new Vector2(420f, 60f), TextAlignmentOptions.TopLeft,
                                   Color.white, shadowBold);
             levelLabel.characterSpacing = 6f;
+            levelLabel.gameObject.AddComponent<Punch>();   // punched on every level load
 
             // The level's name under its number. Levels have had titles since v1 and nothing
             // showed them; a name is a cheap way to make each one feel authored rather than
@@ -666,6 +667,7 @@ namespace PullTheWorld.EditorTools
             kgRt.pivot = new Vector2(0.5f, 1f);
             kgRt.anchoredPosition = new Vector2(0f, -58f);
             kgRt.sizeDelta = new Vector2(220f, 80f);
+            keyGroup.AddComponent<Punch>();                // punched on every gem collected
 
             var keyIcon = new GameObject("Icon", typeof(RectTransform), typeof(Image));
             keyIcon.transform.SetParent(keyGroup.transform, false);
@@ -759,8 +761,19 @@ namespace PullTheWorld.EditorTools
                                new Color(1f, 1f, 1f, 0.72f), shadowSemi);
             tagline.characterSpacing = 8f;
 
-            var playBtn = PillButton(menuPanel.transform, "PlayButton", "PLAY", bold, 62f,
-                                     new Vector2(0f, -120f), new Vector2(560f, 160f),
+            // PLAY breathes. The pulse lives on a wrapper so it does not fight the press-juice
+            // on the button itself - two components driving one localScale would tear.
+            var playWrap = new GameObject("PlayPulse", typeof(RectTransform));
+            playWrap.transform.SetParent(menuPanel.transform, false);
+            var pwRt = playWrap.GetComponent<RectTransform>();
+            pwRt.anchorMin = pwRt.anchorMax = new Vector2(0.5f, 0.5f);
+            pwRt.pivot = new Vector2(0.5f, 0.5f);
+            pwRt.anchoredPosition = new Vector2(0f, -120f);
+            pwRt.sizeDelta = new Vector2(560f, 160f);
+            playWrap.AddComponent<UiPulse>();
+
+            var playBtn = PillButton(playWrap.transform, "PlayButton", "PLAY", bold, 62f,
+                                     Vector2.zero, new Vector2(560f, 160f),
                                      PtwArt.Hex("#5AC26A"), shadowBold);
 
             var progressLabel = Text(menuPanel.transform, "ProgressLabel", "0 / 10", semi, 38f,
@@ -952,6 +965,7 @@ namespace PullTheWorld.EditorTools
             iimg.color = Color.white;
             iimg.raycastTarget = false;
 
+            go.AddComponent<UiButtonJuice>();
             return go.GetComponent<Button>();
         }
 
@@ -986,6 +1000,7 @@ namespace PullTheWorld.EditorTools
             colors.selectedColor = Color.white;
             colors.fadeDuration = 0.08f;
             btn.colors = colors;
+            go.AddComponent<UiButtonJuice>();   // shrink on press, pop on release
             return btn;
         }
 

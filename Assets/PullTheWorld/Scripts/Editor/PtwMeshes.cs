@@ -70,6 +70,7 @@ namespace PullTheWorld.EditorTools
             Save(QuadXZ(), "Mesh_QuadXZ");
             Save(QuadXY(), "Mesh_QuadXY");
             Save(WaterTile(6, 1f), "Mesh_WaterTile");
+            Save(WaterBody(), "Mesh_WaterBody");
             Save(WaterTile(30, 72f), "Mesh_OceanPlane");
 
             AssetDatabase.SaveAssets();
@@ -88,8 +89,15 @@ namespace PullTheWorld.EditorTools
             // The cap overhangs the body slightly. In the reference the grass is essentially a TOP
             // face with a small tufted fringe, so the cap is thin and the overhang throws the
             // little shadow line that separates green from stone.
+            //
+            // Chamfer is near-zero ON THE CAP, deliberately. A 45-degree bevel along the cap top
+            // front edge faces both up AND towards the camera, which makes it the single most-lit
+            // surface in the scene once the island tilts (dot 0.95 against 0.88 for the top face)
+            // - it rendered as a hard pale line the length of every grass row and survived every
+            // lighting change aimed at it. The body block below keeps its full chamfer, so the
+            // block silhouette stays soft; only the thin green slab goes crisp.
             mb.AddChamferBox(1, new Vector3(0f, -cap * 0.5f, 0f),
-                             new Vector3(1.035f, cap, 1.035f), 0.042f);
+                             new Vector3(1.035f, cap, 1.035f), 0.012f);
             return mb.ToMesh("BlockGrass");
         }
 
@@ -458,6 +466,19 @@ namespace PullTheWorld.EditorTools
             mb.AddFlatQuad(0, new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, -0.5f, 0f),
                               new Vector3(0.5f, 0.5f, 0f), new Vector3(-0.5f, 0.5f, 0f), Vector3.back);
             return mb.ToMesh("QuadXY");
+        }
+
+        /// <summary>
+        /// The translucent body of a pool: a unit-height box pivoted at its BOTTOM so WaterVolume
+        /// can scale Y to drain it. Slightly narrower than a cell so it sits inside the basin, and
+        /// almost unchamfered so its top edge meets the surface tile cleanly. Only the front face
+        /// is ever really seen; the surface tile does the waves.
+        /// </summary>
+        static Mesh WaterBody()
+        {
+            var mb = new MeshBuilder();
+            mb.AddChamferBox(0, new Vector3(0f, 0.5f, 0f), new Vector3(0.94f, 1f, 0.9f), 0.01f);
+            return mb.ToMesh("WaterBody");
         }
 
         // ========================================================================== saving ==

@@ -50,7 +50,7 @@ namespace PullTheWorld.EditorTools
         // Olive-leaning, not Kelly green. The first render came out far too saturated; the v1
         // value then over-corrected into a dark bottle green that killed all the colour in the
         // frame. This is PALETTE.md's measured lit value rather than another guess.
-        public static readonly Color Grass = Hex("#6E8B4B");
+        public static readonly Color Grass = Hex("#648C42");
         public static readonly Color GrassDark = Hex("#5C7A3E");
         // Stone was the one material both independent samples initially got wrong (averaging
         // across the bright and dark concept cards dragged it ~27 points too dark). Re-measured
@@ -110,6 +110,7 @@ namespace PullTheWorld.EditorTools
         public const string MParticleSoft = "M_ParticleSoft";
         public const string MPortalEnergy = "M_PortalEnergy";
         public const string MWater = "M_Water";
+        public const string MWaterBody = "M_WaterBody";
         public const string MOcean = "M_Ocean";
         public const string MFarStone = "M_FarStone";
         public const string MFarGrass = "M_FarGrass";
@@ -184,6 +185,10 @@ namespace PullTheWorld.EditorTools
             BuildBackdrop();
             BuildPortalEnergy();
             BuildWater();
+
+            // The pool's translucent body. The side-on camera sees this face, not the surface
+            // tile, so it carries the colour: shallow blue, ~55% opaque, faintly glossy.
+            LitTransparent(MWaterBody, new Color(0.19f, 0.56f, 0.80f, 0.56f), 0.55f);
 
             AssetDatabase.SaveAssets();
         }
@@ -355,6 +360,33 @@ namespace PullTheWorld.EditorTools
             m.SetColor("_EmissionColor", emission * intensity);
             m.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
             EditorUtility.SetDirty(m);
+            return m;
+        }
+
+        /// <summary>
+        /// URP/Lit in alpha-blended transparent mode. Same keyword dance as UnlitTextured's
+        /// transparent branch - setting _Surface alone does nothing, the shader branches on the
+        /// _SURFACE_TYPE_TRANSPARENT keyword and the blend/zwrite floats.
+        /// </summary>
+        public static Material LitTransparent(string id, Color color, float smoothness)
+        {
+            var m = LoadOrCreate(id, LitShader);
+            m.SetColor("_BaseColor", color);
+            m.SetFloat("_Smoothness", smoothness);
+            m.SetFloat("_Metallic", 0f);
+            m.SetFloat("_Surface", 1f);
+            m.SetFloat("_Blend", 0f);
+            m.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+            m.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+            m.SetFloat("_ZWrite", 0f);
+            m.SetFloat("_SpecularHighlights", 1f);         // water is the one thing that should glint
+            m.DisableKeyword("_SPECULARHIGHLIGHTS_OFF");
+            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.DisableKeyword("_EMISSION");
+            m.enableInstancing = true;
+            m.renderQueue = (int)RenderQueue.Transparent - 1;   // under the wave surface
+            EditorUtility.SetDirty(m);
+            cache[id] = m;
             return m;
         }
 

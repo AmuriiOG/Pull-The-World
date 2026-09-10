@@ -172,6 +172,7 @@ b.Save();
 `g` terrain (grassed automatically if the cell above is empty, stone if not) · `s` stone ·
 `d` dark stone · `#` built stone · `P` spawn · `D` door · `K` key · `b` boulder · `c` crate ·
 `f` fire · `k` spikes · `p` plate · `X` gate · `M` moving platform ·
+`w` pool (goes **in the floor row** in place of a block) ·
 `T`/`t` tree · `r` rock · `u` bush · `y` crystal
 
 Then `Rebuild Levels` + `Rebuild Scene`.
@@ -222,10 +223,31 @@ every level loads; they cannot tell you whether a puzzle is interesting.
 | 16 | Ferry to the Gem | the moving platform, now delivering you to a key |
 | 17 | One Rock, Two Fires | a single rock smothers both on one pass |
 | 18 | The Last Turn | every piece, in an order that has to be worked out |
+| 19 | Wade Through | water, with no stakes: roll in, bob, roll out |
+| 20 | Pour It Out | water as a tool — tip the pool onto the fire |
 
-Levels 1–6, 7–12 and 13–18 each get their own sky (`SkyTheme`: meadow, dusk, night) so the set
-does not read as eighteen copies of one screen. The palettes stay muted on purpose — the ivory
-player must remain the brightest non-emissive thing on screen in every chapter.
+Levels are split into three chapters, each with its own sky (`SkyTheme`: meadow, dusk, night) so
+the set does not read as twenty copies of one screen. The palettes stay muted on purpose — the
+ivory player must remain the brightest non-emissive thing on screen in every chapter.
+
+## Water
+
+A pool is a **half-height solid bed** in a floor cell with a `WaterVolume` filling the other half,
+so the surface sits level with the grass and the ball rolls straight in. Three behaviours, all
+cheap and all on explicit overlap queries like the rest of the gameplay layer:
+
+* **Floats.** Anything dynamic inside gets an upward force scaled by submersion and by its own
+  buoyancy (`PlayerBody` 1.6 → floats; `DynamicProp` 0.55 → sinks), plus drag. The ball bobs
+  across at surface level; a rock settles onto the bed — which is what lets a rock sit on a plate
+  under a pool.
+* **Pours.** Past ~22° of world tilt the pool drains from whichever lip is downhill: droplets, a
+  sound, the surface visibly sloping (the v1 `PTW/Water` shader's `_Tilt`). Anything burning just
+  past that lip is put out. Water is **finite** — tipping the wrong way first wastes it, which is
+  the whole puzzle on level 20.
+* **Douses** fire it actually touches, immediately.
+
+There is no fluid sim and there should not be one on a phone. Buoyancy is reckoned against
+**world** down, because the pool tilts with the level and gravity does not.
 
 ---
 
@@ -285,6 +307,35 @@ Unity.exe -runTests -batchmode -projectPath . -testPlatform PlayMode \
 
 **Do not** pass `-nographics` to the test run — the captures need a renderer.
 
+### Android
+
+```bash
+Unity.exe -batchmode -quit -buildTarget Android -projectPath . \
+  -executeMethod PullTheWorld.EditorTools.PtwBuild.BatchAndroid [-ptwOut path\to\file.apk]
+```
+
+Defaults to `%USERPROFILE%\Desktop\AmuriiBuild\AmuriiBuild.apk`. Also in the menu as
+**Pull The World → Build Android APK**. IL2CPP, **ARM64 only** (Mono is 32-bit and a store upload
+needs 64-bit anyway; a single architecture halves the IL2CPP time), debug keystore — so it installs
+on a phone but cannot go to a store as-is. The Editor's bundled SDK/NDK/OpenJDK are used; nothing
+else needs installing. Expect the first Android build to take several minutes: switching target
+re-imports every asset for the platform, then IL2CPP compiles the whole game to C++.
+
+## Juice
+
+None of this uses a tween library. The project already had an unconditionally stable spring
+integrator (`Spring.cs`), and every bit of motion below is a spring:
+
+* `Punch` — scale kick with overshoot. On rocks (impact squash + dust + thud), the pressure plate
+  (flinches when pressed), the gate (flinches when it starts to move), the HUD level label (every
+  load) and the gem counter (every pickup).
+* `UiButtonJuice` — every button shrinks while the finger is down and pops on release. On a phone
+  there is no hover, so this is the only confirmation a tap landed.
+* `UiPulse` — PLAY breathes. It sits on a wrapper so it does not fight the press-juice on the
+  button itself; two components driving one `localScale` tear.
+* The level arrives with a 4° swing and settles (`WorldRotator.introKick`), which demonstrates the
+  one verb the game has before the player touches anything.
+
 **Do not** trust the exit code alone. `PtwBuild` reports `PTW_BATCH_SUCCESS` even when individual
 prefab saves have failed. Grep the log for `error CS`, `PTW: no serialized field` (a `Wire()` field
 name typo) and `missing script`.
@@ -302,7 +353,7 @@ reports success. This cost half of the levels in one build — `DynamicProp` was
 
 ## Tests
 
-16 PlayMode tests. They assert the promises v2 makes, which are nearly the opposite of v1's:
+18 PlayMode tests. They assert the promises v2 makes, which are nearly the opposite of v1's:
 
 * the camera **never** moves — the one invariant inherited unchanged
 * gravity is constant and points down, before and after rotation
@@ -318,6 +369,12 @@ reports success. This cost half of the levels in one build — `DynamicProp` was
   which is exactly how it leaked one per level load in the first build)
 * opening settings during play stops the clock, and closing them starts it again
 * restart-all needs two taps, and the second really does wipe progress and go to level 1
+* water floats the player (it comes to rest near the surface, alive, not on the bed)
+* pouring a pool onto a fire puts it out, and drains the pool doing it
+
+The suite snapshots your saved progress before the first test and restores it after the last.
+`PhysicsNeverExplodes` legitimately wins levels while sweeping them, and before that guard a test
+run left the developer's game at "LEVEL 18 OF 18".
 
 They also write real 1080×1920 PNGs to `/Captures` — every level, two tilted shots, and the three
 UI screens (`ui_01_main_menu`, `ui_02_settings`, `ui_03_level_complete`). The UI ones are in the
@@ -347,8 +404,6 @@ v2 lives on `prototype/rotate-gravity-v2`. Nothing about v2 can damage v1.
 
 * **Level design needs a play pass.** See the section above — the layouts are deliberately safe and
   therefore thinner than they should be.
-* **Water is not implemented.** `PTW/Water`, `M_Water` and `M_Ocean` still exist in the project from
-  v1 and nothing references them. Fire is put out with a rock instead, which the brief allows.
 * **No enemies and no breakables** yet. Both were in the brief; neither is in the build.
 * The **moving platform** is the least-tested mechanic. It is built quite differently from the gate
   on purpose: a gate only has to block, so it is a plain child collider of the compound body, but a
@@ -361,12 +416,12 @@ v2 lives on `prototype/rotate-gravity-v2`. Nothing about v2 can damage v1.
 * Art is close to `PicReference/` but **not converged** — the palette was raised once after a
   capture-compare pass because the v1 values landed near `#5A6875` on screen against a `#97A3B3`
   target and the whole frame read as dusk.
-* **Open bug: a pale blue-white line along the grass cap's top face** when the island is tilted.
-  Ruled out by rebuilding without each in turn: bloom (threshold is now 1.3), the dust systems,
-  specular highlights (now off), and the gate's threshold strip. Best remaining diagnosis is that
-  the top face is simply over-lit — its normal turns towards the key light as the island tilts
-  (dot 0.88 against 0.74 upright) and the cool flat ambient (`#9FB2CE` at full intensity)
-  desaturates the result towards blue-white. **Try lowering the ambient rather than the key light.**
+* **Fixed: the pale line along tilted grass.** It was the grass cap's *front-top chamfer bevel*:
+  a 45° strip that faces both up and toward the camera, which makes it the single most-lit surface
+  in the scene once the island tilts (dot ≈ 0.95 against 0.88 for the top face), pushed to
+  blue-white by a cool ambient. Two changes fixed it: the ambient came down from `#9FB2CE` to
+  `#7D90AB`, and the cap's chamfer went from 0.042 to 0.012 so the bevel is a hairline. The body
+  block keeps its full chamfer, so the silhouette stays soft.
 
   Method note, because this cost more time than it should have: do **not** read pixel coordinates
   off a capture in an image viewer. The viewer rescales, and two hand-picked probe points both

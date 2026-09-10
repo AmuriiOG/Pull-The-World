@@ -37,12 +37,15 @@ namespace PullTheWorld.EditorTools
     ///     b  boulder            c  crate
     ///     f  fire               k  spikes                  p  plate (a dark block with a pad)
     ///     X  gate               M  moving platform
+    ///     w  pool - goes IN THE FLOOR ROW in place of a block: a half-height bed with water in
+    ///        the top half, so the surface is level with the grass. Floats the ball, sinks rocks,
+    ///        pours downhill when tilted and puts out fire it pours onto.
     ///     T  tree   t  small tree   r  rock   u  bush   y  crystal
     /// </summary>
     public static class PtwLevels
     {
         public const string Dir = "Assets/PullTheWorld/Prefabs/Levels";
-        public const int Count = 18;
+        public const int Count = 20;
 
         public static void BuildAll()
         {
@@ -51,6 +54,7 @@ namespace PullTheWorld.EditorTools
             Level06(); Level07(); Level08(); Level09(); Level10();
             Level11(); Level12(); Level13(); Level14();
             Level15(); Level16(); Level17(); Level18();
+            Level19(); Level20();
             AssetDatabase.SaveAssets();
         }
 
@@ -472,6 +476,47 @@ namespace PullTheWorld.EditorTools
             b.Save();
         }
 
+        /// <summary>
+        /// Water arrives with no stakes. A two-cell pool sits in the floor between start and door;
+        /// the ball rolls in, bobs, and rolls out the other side. The only thing being taught is
+        /// that water is safe, slow, and floats you.
+        /// </summary>
+        static void Level19()
+        {
+            var b = new Builder(19, "Wade Through") { AngleLimit = 60f };
+            b.Map(
+                "# . P . . . . . . . D #",
+                "# g g g g w w g g g g #",
+                "# g g g g g g g g g g #",
+                "# g g g g g g g g g g #",
+                ". g g g g g g g g g g .",
+                ". . g g g g g g g g . .",
+                ". . . g g g g g g . . ."
+            );
+            b.Save();
+        }
+
+        /// <summary>
+        /// Water as a tool. A fire blocks the way to the door and there is a pool right next to it,
+        /// on the uphill side. Tip towards the door and the pool pours onto the flame and puts it
+        /// out; the ball follows, floats across the emptying pool and rolls on. Tip the other way
+        /// first and the water pours out harmlessly - it is finite, so that is a real mistake.
+        /// </summary>
+        static void Level20()
+        {
+            var b = new Builder(20, "Pour It Out") { AngleLimit = 65f };
+            b.Map(
+                "# . P . . . f . . . D #",
+                "# g g g g w g g g g g #",
+                "# g g g g g g g g g g #",
+                "# g g g g g g g g g g #",
+                ". g g g g g g g g g g .",
+                ". . g g g g g g g g . .",
+                ". . . g g g g g g . . ."
+            );
+            b.Save();
+        }
+
         // ======================================================================= builder =====
         class Builder
         {
@@ -537,8 +582,9 @@ namespace PullTheWorld.EditorTools
                 Recentre();
             }
 
+            // 'w' counts as solid for the grass rule: the pool bed covers the block beneath it.
             static bool IsSolid(char c) =>
-                c == 'g' || c == 's' || c == 'd' || c == '#' || c == 'p';
+                c == 'g' || c == 's' || c == 'd' || c == '#' || c == 'p' || c == 'w';
 
             void Place(char c, int col, int row, int rows, System.Func<int, int, char> at)
             {
@@ -552,7 +598,7 @@ namespace PullTheWorld.EditorTools
                 // asserting at generation time rather than discovering in a capture: the first
                 // build put a tree one cell too high and it hung in mid-air, which costs five
                 // seconds to fix and a surprisingly long time to notice in a screenshot.
-                const string mustBeGrounded = "DfktTruy";
+                const string mustBeGrounded = "DfktTruyw";
                 if (mustBeGrounded.IndexOf(c) >= 0 && !IsSolid(at(col, row + 1)))
                 {
                     Debug.LogWarning($"PTW: level {number} has '{c}' at col {col}, row {row} " +
@@ -579,6 +625,17 @@ namespace PullTheWorld.EditorTools
                         Block("Block_Stone_Dark", col, top);
                         plate = Prop("PressurePlate", col, top)?.GetComponent<PressurePlate>();
                         break;
+
+                    // A pool replaces a FLOOR block: half-height bed in the bottom of the cell,
+                    // water prop pivoted on the bed's top filling the rest. The surface ends up
+                    // level with the neighbouring grass, so the ball rolls in and floats through.
+                    case 'w':
+                    {
+                        float bedTop = bottom + PtwMeshes.BlockH * 0.5f;
+                        Block("Block_Pool_Bed", col, bedTop);
+                        Prop("Prop_Water", col, bedTop);
+                        break;
+                    }
 
                     // --- spawn and goal ------------------------------------------------------
                     case 'P':

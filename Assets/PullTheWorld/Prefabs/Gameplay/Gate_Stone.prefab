@@ -98,6 +98,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2734029366250708400}
+  - component: {fileID: 3759452051107575378}
   - component: {fileID: 5796297435225308471}
   m_Layer: 0
   m_Name: Slab
@@ -122,6 +123,22 @@ Transform:
   - {fileID: 1321973715243428192}
   m_Father: {fileID: 7332927429642423047}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &3759452051107575378
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3187452935014566222}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b723d6274d156c14a8594a88c68c15d9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: PullTheWorld.Runtime::PullTheWorld.Punch
+  frequency: 3.4
+  damping: 0.42
+  scalePerStrength: 0.22
+  maxAmplitude: 0.5
 --- !u!65 &5796297435225308471
 BoxCollider:
   m_ObjectHideFlags: 0

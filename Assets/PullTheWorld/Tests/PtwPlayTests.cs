@@ -397,6 +397,57 @@ namespace PullTheWorld.Tests
             Assert.AreEqual(1f, Time.timeScale, 0.0001f, "Restart-all left the game paused");
         }
 
+        /// <summary>
+        /// Water floats the player. Drop the ball into level 19's pool and it must come to rest
+        /// near the SURFACE, not on the bed - and still be alive, because water is not a hazard.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator WaterFloatsThePlayer()
+        {
+            yield return LoadLevel(18);                     // level 19: Wade Through
+            var water = levels.Current.GetComponentInChildren<WaterVolume>();
+            Assert.IsNotNull(water, "Level 19 has no WaterVolume");
+
+            // Teleport above the pool and let it fall in.
+            Vector3 surface = water.SurfaceWorldPoint;
+            player.Body.position = surface + Vector3.up * 1.2f;
+            player.Body.linearVelocity = Vector3.zero;
+            yield return Wait(2.0f);
+
+            Assert.IsTrue(player.IsAlive, "Water killed the player");
+            float y = player.transform.position.y;
+            Assert.Greater(y, water.BedWorldPoint.y + 0.2f,
+                           $"Player sank to the bed (y={y:F2}, bed={water.BedWorldPoint.y:F2})");
+            Assert.Less(y, surface.y + player.Radius + 0.35f,
+                        $"Player is not in the water at all (y={y:F2}, surface={surface.y:F2})");
+        }
+
+        /// <summary>
+        /// Water puts out fire when poured onto it. On level 20 the pool is immediately uphill of
+        /// the flame; tip towards the door and the fire must be out within a couple of seconds.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator PouringDousesTheFire()
+        {
+            yield return LoadLevel(19);                     // level 20: Pour It Out
+            var fire = levels.Current.GetComponentInChildren<Hazard>();
+            var water = levels.Current.GetComponentInChildren<WaterVolume>();
+            Assert.IsNotNull(fire, "Level 20 has no fire");
+            Assert.IsNotNull(water, "Level 20 has no pool");
+            Assert.IsTrue(fire.Armed, "Fire should start lit");
+
+            // The player rolls too, and may die in the flame before the pour lands. Park it out of
+            // the way so this stays a test of the water rule rather than of the race.
+            player.Freeze();
+            player.Body.position = new Vector3(0f, 12f, 0f);
+
+            yield return RotateTo(-50f, 3f);                // door side down
+            yield return WaitUntil(() => fire.Smothered, 3f, "the fire to be doused");
+
+            Assert.IsTrue(fire.Smothered, "Pouring the pool onto the fire did not put it out");
+            Assert.Less(water.Fill, 0.95f, "The pool did not drain while pouring");
+        }
+
         // ====================================================================== captures =====
         [UnityTest]
         public IEnumerator CaptureAllLevels()

@@ -291,6 +291,7 @@ namespace PullTheWorld
 
             if (levelLabel) levelLabel.text = def ? $"LEVEL {def.number}" : "";
             if (levelTitle) levelTitle.text = def ? def.title.ToUpperInvariant() : "";
+            PunchOn(levelLabel, 0.6f);
             SetRotationInput(true);
             if (onboarding) onboarding.Begin(def);
         }
@@ -299,6 +300,14 @@ namespace PullTheWorld
         {
             if (keyGroup) keyGroup.SetActive(required > 0);
             if (keyLabel && required > 0) keyLabel.text = $"{collected}/{required}";
+            if (collected > 0) PunchOn(keyGroup ? keyGroup.transform : null, 0.9f);
+        }
+
+        static void PunchOn(Component c, float strength)
+        {
+            if (!c) return;
+            var p = c.GetComponent<Punch>();
+            if (p) p.Hit(strength);
         }
 
         void HandleWon(LevelDefinition def)

@@ -32,13 +32,60 @@ namespace PullTheWorld
         [Tooltip("Hard ceiling on spin, in radians per second. A rock spinning faster than this " +
                  "reads as broken rather than as fast.")]
         [SerializeField] float maxAngularSpeed = 30f;
+        [Tooltip("How hard water pushes this up, in gravities when fully submerged. Below 1 sinks. " +
+                 "Rocks sink; that is what lets a rock sit on a plate under a pool.")]
+        [SerializeField] float buoyancy = 0.55f;
+
+        public float Buoyancy => buoyancy;
+
+        [Header("Impact feel")]
+        [Tooltip("Impact speed for a full squash and a full dust burst.")]
+        [SerializeField] float impactReference = 6f;
+        [SerializeField] float minImpactSpeed = 1.8f;
+        [Tooltip("Optional. Found by name (Visual / ImpactVfx) if left empty.")]
+        [SerializeField] Punch visualPunch;
+        [SerializeField] ParticleSystem impactVfx;
 
         Rigidbody rb;
+
+        void Awake()
+        {
+            if (!visualPunch)
+            {
+                var v = transform.Find("Visual");
+                if (v) visualPunch = v.GetComponent<Punch>();
+            }
+            if (!impactVfx)
+            {
+                var fx = transform.Find("ImpactVfx");
+                if (fx) impactVfx = fx.GetComponent<ParticleSystem>();
+            }
+        }
 
         void OnEnable()
         {
             if (!rb) rb = GetComponent<Rigidbody>();
             DynamicRegistry.Register(rb);
+        }
+
+        /// <summary>
+        /// A rock that lands with a squash, a puff and a thud reads as heavy. One that stops dead
+        /// reads as a placeholder. v1's Pushable did this and it was lost in the rewrite.
+        /// </summary>
+        void OnCollisionEnter(Collision c)
+        {
+            float speed = c.relativeVelocity.magnitude;
+            if (speed < minImpactSpeed) return;
+            float strength = Mathf.Clamp01(speed / Mathf.Max(0.01f, impactReference));
+
+            if (visualPunch) visualPunch.Hit(strength * 0.8f);
+            if (impactVfx && c.contactCount > 0)
+            {
+                impactVfx.transform.position = c.GetContact(0).point;
+                impactVfx.Emit(Mathf.Max(1, Mathf.RoundToInt(6f * strength)));
+            }
+            PtwAudio.Play(PtwSfx.Impact, Mathf.Lerp(0.15f, 0.6f, strength), Mathf.Lerp(0.8f, 0.6f, strength));
+            if (strength > 0.5f && WorldRotator.Instance) WorldRotator.Instance.AddShake(0.25f * strength);
         }
 
         void OnDisable() => DynamicRegistry.Unregister(rb);

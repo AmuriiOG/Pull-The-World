@@ -75,6 +75,11 @@ namespace PullTheWorld
         [SerializeField] float dieSeconds = 0.32f;
         [SerializeField] float dieSwell = 1.35f;
 
+        [Header("Water")]
+        [Tooltip("How hard water pushes the ball up, in gravities when fully submerged. Above 1 " +
+                 "floats: the ball bobs across a pool at surface level while rocks sink through it.")]
+        [SerializeField] float buoyancy = 1.6f;
+
         [Header("Death")]
         [Tooltip("Distance from the level centre past which the player counts as having fallen off. " +
                  "Generous enough to allow a real fall to be seen before the level resets.")]
@@ -102,6 +107,7 @@ namespace PullTheWorld
         public event Action OnDied;
 
         public Rigidbody Body => body;
+        public float Buoyancy => buoyancy;
         public float Radius => sphere ? sphere.radius * transform.lossyScale.x : 0.35f;
         public bool IsAlive => alive;
         public bool IsGrounded { get; private set; }

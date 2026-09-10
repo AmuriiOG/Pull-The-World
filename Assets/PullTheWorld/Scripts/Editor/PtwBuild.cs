@@ -81,6 +81,12 @@ namespace PullTheWorld.EditorTools
                 PlayerSettings.companyName == "DefaultCompany")
                 PlayerSettings.companyName = "Obscure Games";
 
+            // The app label on the phone. It was the project folder name, "3D Pull-The-World",
+            // which is not what anyone wants under an icon.
+            if (string.IsNullOrEmpty(PlayerSettings.productName) ||
+                PlayerSettings.productName.StartsWith("3D "))
+                PlayerSettings.productName = "Pull The World";
+
             var android = UnityEditor.Build.NamedBuildTarget.Android;
             string id = PlayerSettings.GetApplicationIdentifier(android);
             if (string.IsNullOrEmpty(id) || id.Contains("DefaultCompany") || id.EndsWith(".") )
@@ -115,6 +121,69 @@ namespace PullTheWorld.EditorTools
             Debug.Log("PTW: importing TMP essential resources...");
             AssetDatabase.ImportPackage(unitypackage, false);
             AssetDatabase.Refresh();
+        }
+
+        // ================================================================== android ==========
+        /// <summary>
+        /// Builds a sideloadable APK. Headless:
+        ///   Unity.exe -batchmode -quit -buildTarget Android -projectPath . \
+        ///     -executeMethod PullTheWorld.EditorTools.PtwBuild.BatchAndroid [-ptwOut path.apk]
+        ///
+        /// IL2CPP + ARM64 only. Mono would be faster to build but is 32-bit, and a store upload
+        /// requires 64-bit anyway; ARM64 alone halves the IL2CPP time versus building both.
+        /// Debug keystore, so this installs on a phone but cannot go to a store as-is.
+        /// </summary>
+        [MenuItem("Pull The World/Build Android APK", priority = 60)]
+        public static void BuildAndroidMenu() => BuildAndroid(DefaultApkPath());
+
+        public static void BatchAndroid()
+        {
+            string outPath = ArgAfter("-ptwOut") ?? DefaultApkPath();
+            RunBatch(() => BuildAndroid(outPath));
+        }
+
+        static string DefaultApkPath()
+        {
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            return Path.Combine(desktop, "AmuriiBuild", "AmuriiBuild.apk");
+        }
+
+        static string ArgAfter(string flag)
+        {
+            var args = Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; i++)
+                if (args[i] == flag) return args[i + 1];
+            return null;
+        }
+
+        public static void BuildAndroid(string outPath)
+        {
+            EnsurePlayerSettings();
+
+            var android = UnityEditor.Build.NamedBuildTarget.Android;
+            PlayerSettings.SetScriptingBackend(android, ScriptingImplementation.IL2CPP);
+            PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+            PlayerSettings.Android.buildApkPerCpuArchitecture = false;
+            EditorUserBuildSettings.buildAppBundle = false;
+
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(outPath)));
+
+            var opts = new BuildPlayerOptions
+            {
+                scenes = new[] { PtwScene.ScenePath },
+                locationPathName = outPath,
+                target = BuildTarget.Android,
+                options = BuildOptions.None,
+            };
+
+            Debug.Log("PTW: building Android APK -> " + outPath);
+            var report = BuildPipeline.BuildPlayer(opts);
+            var s = report.summary;
+            if (s.result != UnityEditor.Build.Reporting.BuildResult.Succeeded)
+                throw new Exception($"Android build {s.result}: {s.totalErrors} error(s). See the log above.");
+
+            Debug.Log($"PTW_APK {Path.GetFullPath(outPath)} bytes={s.totalSize} " +
+                      $"time={s.totalTime.TotalSeconds:F0}s warnings={s.totalWarnings}");
         }
 
         // ============================================================= batch entry points ====

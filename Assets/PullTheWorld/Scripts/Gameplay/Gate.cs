@@ -56,6 +56,9 @@ namespace PullTheWorld
             open = value;
             PtwAudio.Play(PtwSfx.Unlock, 0.8f, open ? 1f : 0.8f);
             Haptics.Play(HapticKind.Gate);
+            // A heavy slab starting to move should be felt: a flinch on the slab and a shake.
+            if (slab) { var p = slab.GetComponent<Punch>(); if (p) p.Hit(0.5f); }
+            if (WorldRotator.Instance) WorldRotator.Instance.AddShake(0.22f);
         }
 
         void Update()
