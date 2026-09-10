@@ -208,6 +208,7 @@ namespace PullTheWorld
             if (paused == on) return;
             paused = on;
             Time.timeScale = on ? 0f : 1f;
+            PtwMusic.SetDucked(on);
         }
 
         void SetRotationInput(bool on)

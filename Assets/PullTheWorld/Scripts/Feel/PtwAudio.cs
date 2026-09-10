@@ -6,7 +6,8 @@ namespace PullTheWorld
 {
     public enum PtwSfx
     {
-        Grab, Release, Impact, Win, Fail, PlateOn, PlateOff, Smother, SpinTick, Unlock
+        Grab, Release, Impact, Win, Fail, PlateOn, PlateOff, Smother, SpinTick, Unlock,
+        EnemyAlert, EnemySnarl, EnemyBite, EnemyDie,
     }
 
     /// <summary>
@@ -51,6 +52,10 @@ namespace PullTheWorld
                 pool[i] = src;
             }
             BuildBank();
+
+            // The soundtrack lives on the same object. Added here as well as by the scene generator
+            // so a scene built before music existed still gets it.
+            if (!GetComponent<PtwMusic>()) gameObject.AddComponent<PtwMusic>();
         }
 
         void OnDestroy() { if (instance == this) instance = null; }
@@ -124,10 +129,37 @@ namespace PullTheWorld
 
             generated[PtwSfx.Unlock] = Make("ptw_unlock", 0.5f, t =>
                 Note(t, 0.00f, 587.33f, 7f) + Note(t, 0.10f, 880f, 5f));
+
+            // --- the enemy: throat sounds, all built on Growl (odd harmonics under a fast tremor)
+            // A hiss that turns into a low rumble: "it has seen you".
+            generated[PtwSfx.EnemyAlert] = Make("ptw_enemy_alert", 0.55f, t =>
+                Noise(t) * Env(t, 5f) * 0.32f * (0.6f + 0.4f * Sine(31f, t)) +
+                Growl(78f, t) * (1f - Env(t, 9f)) * Env(t, 3.5f) * 0.42f);
+
+            // The coil before a lunge: a short snarl sweeping down.
+            generated[PtwSfx.EnemySnarl] = Make("ptw_enemy_snarl", 0.32f, t =>
+                Growl(Mathf.Lerp(150f, 72f, Mathf.Clamp01(t * 3f)), t) * Env(t, 7f) * 0.55f +
+                Noise(t) * Env(t, 20f) * 0.3f);
+
+            // The bite: a crunch on top of a thud.
+            generated[PtwSfx.EnemyBite] = Make("ptw_enemy_bite", 0.3f, t =>
+                Noise(t) * Env(t, 28f) * 0.7f +
+                Sine(95f, t) * Env(t, 12f) * 0.5f +
+                Sine(Mathf.Lerp(420f, 120f, Mathf.Clamp01(t * 6f)), t) * Env(t, 30f) * 0.3f);
+
+            // Its death: a squeal falling away into hiss.
+            generated[PtwSfx.EnemyDie] = Make("ptw_enemy_die", 0.7f, t =>
+                Sine(Mathf.Lerp(1100f, 260f, Mathf.Clamp01(t * 1.6f)) * (1f + 0.02f * Sine(24f, t)), t)
+                    * Env(t, 3.2f) * 0.4f +
+                Noise(t) * Env(t, 5f) * 0.25f);
         }
 
         static float Sine(float hz, float t) => Mathf.Sin(2f * Mathf.PI * hz * t);
         static float Env(float t, float rate) => Mathf.Exp(-t * rate);
+
+        /// <summary>A throaty tone: odd harmonics (a rounded square) with a 27 Hz tremor.</summary>
+        static float Growl(float hz, float t) =>
+            (Sine(hz, t) + 0.5f * Sine(hz * 3f, t) + 0.25f * Sine(hz * 5f, t)) * (0.7f + 0.3f * Sine(27f, t));
 
         static float Note(float t, float start, float hz, float decay)
         {

@@ -43,6 +43,7 @@ namespace PullTheWorld.EditorTools
             var systems = new GameObject("~Systems");
             systems.AddComponent<GameDirector>();
             systems.AddComponent<PtwAudio>();
+            systems.AddComponent<PtwMusic>();
 
             Camera cam = BuildCamera(out PlaneCameraRig camRig);
             BuildLighting();

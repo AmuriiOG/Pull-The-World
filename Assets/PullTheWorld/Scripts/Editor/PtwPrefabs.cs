@@ -54,22 +54,73 @@ namespace PullTheWorld.EditorTools
             sc.radius = 0.31f;
             sc.sharedMaterial = EnsurePhysicsMaterial("PM_Rolling", 0.22f, 0.26f, 0.02f);
 
+            // Upright part - body, grin, glaring face, aura. Enemy.cs holds Visual world-upright
+            // and leans it towards the player, so the stare never rolls.
             var visual = Node("Visual", e.transform);
-            MeshNode("Body", "Mesh_Enemy", visual.transform, PtwArt.MEnemy, PtwArt.MEnemySpike);
-            // The player's eye mesh in the fire material: two hot orange points. Hostile, cheap.
-            var face = MeshNode("Face", "Mesh_PlayerFace", visual.transform, PtwArt.MGlowFire);
+            MeshNode("Body", "Mesh_Enemy", visual.transform, PtwArt.MEnemy, PtwArt.MEnemySpike, PtwArt.MEnemyTeeth);
+            var face = MeshNode("Face", "Mesh_EnemyFace", visual.transform, PtwArt.MGlowEvil);
             face.GetComponent<MeshRenderer>().shadowCastingMode =
                 UnityEngine.Rendering.ShadowCastingMode.Off;
+            var aura = MeshNode("Aura", "Mesh_QuadXY", visual.transform, PtwArt.MEnemyAura);
+            aura.transform.localPosition = new Vector3(0f, 0f, 0.06f);       // just behind the body
+            aura.transform.localScale = new Vector3(1.45f, 1.45f, 1f);
+            aura.GetComponent<MeshRenderer>().shadowCastingMode =
+                UnityEngine.Rendering.ShadowCastingMode.Off;
 
-            var death = Burst("DeathVfx", e.transform, PtwArt.Get(PtwArt.MParticleSoft),
-                              PtwArt.Hex("#B04A85"), 24);
+            // Rolling part - the spike ring is a sibling of Visual, so it turns with the rigidbody:
+            // a creature gliding on a saw.
+            var spikes = MeshNode("Spikes", "Mesh_EnemySpikes", e.transform, PtwArt.MEnemySpike);
+
+            var lightGo = Node("EyeLight", visual.transform);
+            lightGo.transform.localPosition = new Vector3(0f, 0.08f, -0.42f);
+            var eye = lightGo.AddComponent<Light>();
+            eye.type = LightType.Point;
+            eye.color = PtwArt.Hex("#FF3A2A");
+            eye.intensity = 0.6f;
+            eye.range = 2.6f;
+            eye.shadows = LightShadows.None;
+
+            var trail = Trail("TrailVfx", e.transform, PtwArt.Get(PtwArt.MParticleSoft), PtwArt.Hex("#4A0F2E"));
+            var death = Burst("DeathVfx", e.transform, PtwArt.Get(PtwArt.MParticleAdd), PtwArt.Hex("#FF3560"), 36);
 
             var dp = e.AddComponent<DynamicProp>();        // registry, speed clamp, sinks in water
             Wire(dp, "respawnIfLost", false);              // an enemy that falls off is dead, not back
             var en = e.AddComponent<Enemy>();
             Wire(en, "visual", visual.transform);
+            Wire(en, "spikes", spikes.transform);
+            Wire(en, "faceRenderer", face.GetComponent<MeshRenderer>());
+            Wire(en, "aura", aura.transform);
+            Wire(en, "auraRenderer", aura.GetComponent<MeshRenderer>());
+            Wire(en, "eyeLight", eye);
+            Wire(en, "trail", trail);
             Wire(en, "deathVfx", death);
             Save(e, Play);
+        }
+
+        /// <summary>Dark smoke shed while moving. Emission is toggled by Enemy with its speed.</summary>
+        static ParticleSystem Trail(string name, Transform parent, Material mat, Color color)
+        {
+            var ps = BaseSystem(name, parent, mat, true);
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(0.45f, 0.8f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.14f, 0.24f);
+            main.startSpeed = 0.15f;
+            main.startColor = new Color(color.r, color.g, color.b, 0.7f);
+            main.gravityModifier = -0.06f;                 // smoke rises
+            main.loop = true;
+            main.playOnAwake = true;
+            var em = ps.emission;
+            em.enabled = true;
+            em.rateOverTime = 0f;
+            em.rateOverDistance = 7f;
+            var sh = ps.shape;
+            sh.enabled = true;
+            sh.shapeType = ParticleSystemShapeType.Sphere;
+            sh.radius = 0.16f;
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            col.color = FadeOut(color);
+            return ps;
         }
 
         // ===================================================================== breakable =====

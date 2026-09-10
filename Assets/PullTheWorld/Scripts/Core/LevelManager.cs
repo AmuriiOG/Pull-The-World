@@ -41,6 +41,9 @@ namespace PullTheWorld
         [SerializeField] float winCelebrateTime = 0.9f;
         [Tooltip("Death is instant but the reset is not, so the player sees what killed them.")]
         [SerializeField] float failRestartDelay = 0.75f;
+        [Tooltip("Restart delay when the ball fell out of the world instead. There is nothing on " +
+                 "screen to look at, so the pause that lets a death pop read is just a wait.")]
+        [SerializeField] float fallRestartDelay = 0.2f;
         [Tooltip("Off means the level-complete panel waits for a tap instead of auto-advancing.")]
         [SerializeField] bool autoAdvance;
 
@@ -232,7 +235,7 @@ namespace PullTheWorld
 
         IEnumerator FailRoutine()
         {
-            yield return new WaitForSeconds(failRestartDelay);
+            yield return new WaitForSeconds(player && player.Fell ? fallRestartDelay : failRestartDelay);
             pending = null;
             Restart();
         }

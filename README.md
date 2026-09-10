@@ -87,8 +87,9 @@ Assets/PullTheWorld/
     Core/      WorldRotator, RotateInput, PlayerBody, PlaneCameraRig,
                LevelManager, LevelDefinition, GameDirector, GameProgress,
                DynamicRegistry, DynamicProp, Spring
-    Gameplay/  ExitPortal, Hazard, Collectible, PressurePlate, Gate, MovingPlatform
-    Feel/      PtwAudio, Haptics, ImpactFeedback, ScreenFillQuad, SkyTheme
+    Gameplay/  ExitPortal, Hazard, Collectible, PressurePlate, Gate, MovingPlatform,
+               WaterVolume, Enemy, Breakable
+    Feel/      PtwAudio, PtwMusic, Haptics, ImpactFeedback, ScreenFillQuad, SkyTheme
     UI/        UiRoot, UiPanel, OnboardingHint
     Editor/    Ptw* generators (art, meshes, prefabs, levels, scene, build)
   Art/         generated meshes, materials, textures, physics materials, Poppins (OFL)
@@ -147,6 +148,13 @@ rotation-invariant, so it is always right.
 
 The player is deliberately **not** a child of the rotating root. It lives in world space and the
 level turns around it.
+
+**Falling off restarts fast.** The ball is doomed the moment it is below the level's framing box
+(`viewExtents.y` plus a small margin) — that box already covers the level's whole rotation range, so
+below it there is nothing that can ever be under the ball. The first build waited for a 26 m radius,
+which at the speed cap was nearly two seconds of empty screen, then a further 0.75 s death pause; a
+fall now restarts in about a quarter of a second (`fallRestartDelay`). On-screen deaths keep the
+longer pause so the pop reads.
 
 ---
 
@@ -247,11 +255,26 @@ every level loads; they cannot tell you whether a puzzle is interesting.
 
 ## Enemies and breakables
 
-**Enemy** — a hostile rock. It obeys gravity exactly like a boulder, so tilting moves it, and it
-kills the player on contact. Two things make it an enemy rather than a moving hazard: it **chases**
-weakly (a small floor-wards acceleration, so you can't wait it out — downhill it comes fast, uphill
-it crawls, and a tilt always wins), and it can be **killed**: bowled over by a heavy prop arriving
-at speed, or rolled into spikes or fire.
+**Enemy** — a hostile thing. It obeys gravity exactly like a boulder, so tilting moves it, and it
+kills the player on contact. It can be **killed**: bowled over by a heavy prop arriving at speed,
+or rolled into spikes or fire.
+
+What makes it scary rather than a purple rock, in order of how much each does:
+
+* **It notices you.** Inside 5.5 m the eyes flare from a dull ember to a hard pulsing red glare,
+  the aura swells, it hisses and does a startle hop. Calm → alert is a visible, audible moment,
+  and you learn the range by being noticed. It loses interest again past 7.5 m.
+* **It lunges.** Alert, grounded, within 2.5 m and roughly level with you, it coils for 0.18 s
+  (the tell — it squashes and snarls) and springs: a burst along the floor with a little lift.
+  Two-second cooldown, so it is a threat you can time, and a tilt still always wins.
+* **It stares.** The body, grin and eyes are held world-upright and lean towards you, while the
+  nine-spike ring rolls with the rigidbody — a creature gliding on a saw, not a tumbling ball
+  with a face painted on. A red point light and an additive aura follow the eyes.
+* **It breathes** — slow and deep when calm, fast and shallow when hunting — and sheds dark smoke
+  when it moves.
+
+Four throat sounds (`EnemyAlert`, `EnemySnarl`, `EnemyBite`, `EnemyDie`) are synthesised like
+everything else, all built on one `Growl()` (odd harmonics under a 27 Hz tremor).
 
 **Breakable crate** — blocks the way until something with mass ≥ 1.2 approaches it at ≥ 3 m/s. The
 player is mass 1.0, so the ball can lean on it forever; only a rock with real momentum breaks it.
@@ -303,6 +326,24 @@ cheap and all on explicit overlap queries like the rest of the gameplay layer:
 
 There is no fluid sim and there should not be one on a phone. Buoyancy is reckoned against
 **world** down, because the pool tilts with the level and gravity does not.
+
+---
+
+## Music
+
+`Feel/PtwMusic.cs`. One slow ambient loop per chapter, **synthesised at runtime** for the same
+reason every sound effect is: the project ships with real audio and zero licensed assets. Each
+loop is four chords of four beats — a soft detuned pad, a plucked arpeggio an octave up, a sub
+bass on each chord change and sparse pentatonic sparkles placed by a seeded RNG — in the
+chapter's own mood: dusk is A minor at 66 BPM, ember D minor at 62, night E minor at 58 with a
+major lift at the end of the loop. The pad releases before each chord ends and the arpeggio rests
+on the last eighth, so the seam is quiet and the clip just loops.
+
+Chapter one is built synchronously at boot (the menu plays it); the other two are built a few
+thousand samples per frame in the background so a chapter change never hitches. Two
+`AudioSource`s crossfade on chapter change; the **Music** setting fades it out and back in; the
+pause screen ducks it. `overrideLoops` has one slot per chapter for an authored track — drop a
+clip in and it replaces the synthesised one.
 
 ---
 
@@ -428,7 +469,7 @@ reports success. This cost half of the levels in one build — `DynamicProp` was
 
 ## Tests
 
-25 PlayMode tests. They assert the promises v2 makes, which are nearly the opposite of v1's:
+27 PlayMode tests. They assert the promises v2 makes, which are nearly the opposite of v1's:
 
 * the camera **never** moves — the one invariant inherited unchanged
 * gravity is constant and points down, before and after rotation

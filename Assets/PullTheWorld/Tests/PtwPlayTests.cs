@@ -605,6 +605,49 @@ namespace PullTheWorld.Tests
                         "The lost rock did not come back to its start cell");
         }
 
+        /// <summary>
+        /// Falling out must restart fast. The ball is doomed the moment it is below the level's
+        /// framing box; waiting for a far radius left seconds of empty screen.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator FallingOffRestartsQuickly()
+        {
+            yield return LoadLevel(0);
+            float below = -(levels.Current.viewExtents.y + 2f);
+            player.Body.position = new Vector3(0f, below, 0f);
+
+            yield return Wait(0.7f);
+
+            Assert.IsTrue(player.IsAlive, "The level did not restart within 0.7 s of the ball leaving the world");
+            Assert.Less(Vector3.Distance(player.transform.position, levels.Current.WorldSpawnPoint), 2.5f,
+                        "The ball was not back at spawn after the fall restart");
+        }
+
+        /// <summary>The soundtrack obeys the Music toggle: it fades out when off and back in when on.</summary>
+        [UnityTest]
+        public IEnumerator MusicFollowsTheSetting()
+        {
+            var music = PtwMusic.Instance;
+            Assert.IsNotNull(music, "No PtwMusic in the scene");
+            bool was = GameProgress.MusicOn;
+            try
+            {
+                GameProgress.MusicOn = false;
+                yield return Wait(2.2f);
+                Assert.IsFalse(music.WantsToPlay, "Music still wants to play with the setting off");
+                Assert.Less(music.LiveVolume, 0.01f, "Music did not fade out when switched off");
+
+                GameProgress.MusicOn = true;
+                yield return Wait(2.2f);
+                Assert.IsTrue(music.WantsToPlay, "Music does not want to play with the setting on");
+                Assert.Greater(music.LiveVolume, 0.05f, "Music did not come back when switched on");
+            }
+            finally
+            {
+                GameProgress.MusicOn = was;
+            }
+        }
+
         /// <summary>First boulder/crate in the level, excluding enemies (which also carry DynamicProp).</summary>
         Rigidbody FirstRock()
         {

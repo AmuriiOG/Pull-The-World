@@ -113,6 +113,9 @@ namespace PullTheWorld.EditorTools
         public const string MWaterBody = "M_WaterBody";
         public const string MEnemy = "M_Enemy";
         public const string MEnemySpike = "M_EnemySpike";
+        public const string MEnemyTeeth = "M_EnemyTeeth";
+        public const string MGlowEvil = "M_GlowEvil";
+        public const string MEnemyAura = "M_EnemyAura";
         public const string MOcean = "M_Ocean";
         public const string MFarStone = "M_FarStone";
         public const string MFarGrass = "M_FarGrass";
@@ -165,8 +168,11 @@ namespace PullTheWorld.EditorTools
 
             // Enemy: a bruised magenta that is in nobody else's palette, with near-black spikes.
             // Hostile has to read in one glance against grey rock and green grass.
-            Lit(MEnemy, Hex("#8E3060"), 0.22f);
-            Lit(MEnemySpike, Hex("#3A1A2C"), 0.30f);
+            // The enemy: a wet, dark bruise-purple body, near-black spikes and mouth, bone teeth.
+            // Darker than anything else on the island so it reads as a hole in the scene.
+            Lit(MEnemy, Hex("#6B1A40"), 0.42f);
+            Lit(MEnemySpike, Hex("#1C0B16"), 0.50f);
+            Lit(MEnemyTeeth, Hex("#EDE6D6"), 0.35f);
 
             // The key has to out-read every rock in the level from across the screen, so it gets a
             // real emissive rather than just a bright albedo. Kept below the door's amber so the
@@ -176,6 +182,8 @@ namespace PullTheWorld.EditorTools
             Emissive(MGlowWarm, Warm, Warm, 3.2f, 0.3f);
             Emissive(MGlowCyan, Cyan, Cyan, 2.6f, 0.3f);
             Emissive(MGlowFire, Fire, Fire, 4.5f, 0.2f);
+            // Enemy eyes. Enemy.cs drives the emission per instance; this is only the resting look.
+            Emissive(MGlowEvil, Hex("#FF2E1E"), Hex("#FF3A22"), 2.0f, 0.3f);
             Emissive(MPlateOn, Hex("#D9615A"), Hex("#D9615A"), 1.2f, 0.3f);
 
             // Screen furniture and effects.
@@ -187,6 +195,7 @@ namespace PullTheWorld.EditorTools
 
             UnlitTextured(MAnchorRing, ringTex, Cyan * 1.5f, additive: true);
             UnlitTextured(MPortalGlow, glowTex, Warm * 1.4f, additive: true);
+            UnlitTextured(MEnemyAura, glowTex, new Color(1f, 0.10f, 0.18f, 0.45f), additive: true);
             MultiplyTextured(MBlobShadow, shadowTex);
             UnlitTextured(MParticleAdd, blobTex, Color.white, additive: true);
             UnlitTextured(MParticleSoft, blobTex, Color.white, additive: false);

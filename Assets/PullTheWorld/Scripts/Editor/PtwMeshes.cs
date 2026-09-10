@@ -68,6 +68,8 @@ namespace PullTheWorld.EditorTools
             Save(PlayerFace(), "Mesh_PlayerFace");
             Save(Key(), "Mesh_Key");
             Save(Enemy(), "Mesh_Enemy");
+            Save(EnemySpikes(), "Mesh_EnemySpikes");
+            Save(EnemyFace(), "Mesh_EnemyFace");
             Save(QuadXZ(), "Mesh_QuadXZ");
             Save(QuadXY(), "Mesh_QuadXY");
             Save(WaterTile(6, 1f), "Mesh_WaterTile");
@@ -474,19 +476,55 @@ namespace PullTheWorld.EditorTools
         /// puzzle plane so its silhouette is hostile at a glance and unmistakably not a rock.
         /// sub0 body, sub1 spikes. The glowing eyes are the PlayerFace mesh in a hot material.
         /// </summary>
+        /// <summary>
+        /// The enemy's body: a lumpy blob with a grin. Submesh 0 body, 1 the dark mouth slot, 2 the
+        /// teeth. The spike ring is a SEPARATE mesh (<see cref="EnemySpikes"/>) because Enemy.cs
+        /// holds the body upright and lets the spikes roll with the rigidbody.
+        /// </summary>
         static Mesh Enemy()
         {
             var mb = new MeshBuilder();
-            mb.AddBlob(0, Vector3.zero, new Vector3(0.30f, 0.29f, 0.30f), 2, 0.07f, 23);
-            const int spikes = 7;
+            mb.AddBlob(0, Vector3.zero, new Vector3(0.30f, 0.28f, 0.30f), 2, 0.09f, 23);
+            // A grin: a dark slot low on the face, and a row of uneven teeth hanging into it.
+            mb.AddChamferBox(1, new Vector3(0f, -0.10f, -0.265f), new Vector3(0.27f, 0.075f, 0.06f), 0.02f);
+            const int teeth = 5;
+            for (int i = 0; i < teeth; i++)
+            {
+                float x = Mathf.Lerp(-0.10f, 0.10f, i / (teeth - 1f));
+                float len = i % 2 == 0 ? 0.07f : 0.05f;
+                mb.AddCylinder(2, new Vector3(x, -0.065f, -0.29f), 0.02f, 0.003f, len, 4, false, true,
+                               Quaternion.FromToRotation(Vector3.up, Vector3.down));
+            }
+            return mb.ToMesh("Enemy");
+        }
+
+        /// <summary>Nine uneven spikes on a ring: the part that rolls. Uneven so it reads jagged, not gear-like.</summary>
+        static Mesh EnemySpikes()
+        {
+            var mb = new MeshBuilder();
+            const int spikes = 9;
             for (int i = 0; i < spikes; i++)
             {
                 float a = (i + 0.5f) / spikes * Mathf.PI * 2f;
                 Vector3 dir = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
-                mb.AddCylinder(1, dir * 0.22f, 0.075f, 0f, 0.17f, 5, false, false,
+                float len = i % 3 == 0 ? 0.24f : 0.19f;
+                mb.AddCylinder(0, dir * 0.20f, 0.065f, 0f, len, 5, false, false,
                                Quaternion.FromToRotation(Vector3.up, dir));
             }
-            return mb.ToMesh("Enemy");
+            return mb.ToMesh("EnemySpikes");
+        }
+
+        /// <summary>
+        /// Two narrow slabs tilted so the inner ends drop: the universal angry brow. Glowing
+        /// material, driven per instance by Enemy.cs.
+        /// </summary>
+        static Mesh EnemyFace()
+        {
+            var mb = new MeshBuilder();
+            for (int s = -1; s <= 1; s += 2)
+                mb.AddChamferBox(0, new Vector3(0.115f * s, 0.075f, -0.285f), new Vector3(0.15f, 0.05f, 0.05f),
+                                 0.018f, Quaternion.Euler(0f, 0f, 22f * s));
+            return mb.ToMesh("EnemyFace");
         }
 
         /// <summary>

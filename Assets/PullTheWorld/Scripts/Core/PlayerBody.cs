@@ -81,8 +81,12 @@ namespace PullTheWorld
         [SerializeField] float buoyancy = 1.6f;
 
         [Header("Death")]
-        [Tooltip("Distance from the level centre past which the player counts as having fallen off. " +
-                 "Generous enough to allow a real fall to be seen before the level resets.")]
+        [Tooltip("How far below the level's framing box the ball has to be to count as fallen. The " +
+                 "box already covers the level's whole rotation range, so below it there is nothing " +
+                 "left to land on and waiting any longer is just dead air before the restart.")]
+        [SerializeField] float fallMargin = 1.2f;
+        [Tooltip("Absolute backstop: distance from the level centre past which the ball is gone " +
+                 "whatever direction it went. Only matters when no level is loaded.")]
         [SerializeField] float fallRadius = 26f;
 
         [Header("Grounding")]
@@ -152,6 +156,7 @@ namespace PullTheWorld
         /// <summary>Drop the player in at a fresh spawn point. Called on load and restart.</summary>
         public void Spawn(Vector3 worldPosition)
         {
+            Fell = false;
             alive = true;
             aliveTime = 0f;
             squash = 0f;
@@ -231,9 +236,26 @@ namespace PullTheWorld
             ProbeGround();
 
             // Falling off the edge is a legitimate way to lose, and the only one that needs a
-            // distance check rather than a collision.
-            if (alive && transform.position.sqrMagnitude > fallRadius * fallRadius)
+            // distance check rather than a collision. The first build waited for a 26 m radius,
+            // which at the speed cap is nearly two seconds of empty screen; the level's framing
+            // box says much sooner that nothing can be under the ball any more.
+            if (alive && BelowTheWorld())
+            {
+                Fell = true;
                 Kill();
+            }
+        }
+
+        /// <summary>True once the ball died by falling out, so the restart can skip the pause meant for on-screen deaths.</summary>
+        public bool Fell { get; private set; }
+
+        bool BelowTheWorld()
+        {
+            Vector3 p = transform.position;
+            if (p.sqrMagnitude > fallRadius * fallRadius) return true;
+            var lm = LevelManager.Instance;
+            if (!lm || !lm.Current) return false;
+            return p.y < -(lm.Current.viewExtents.y + fallMargin);
         }
 
         void ProbeGround()
