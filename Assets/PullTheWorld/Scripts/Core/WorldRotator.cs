@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace PullTheWorld
@@ -104,6 +105,13 @@ namespace PullTheWorld
         float shake;            // 0..1 envelope
         float shakePhase;
 
+        // Bodies riding the level: the carried velocity injected last step, per body, so it can be
+        // taken back out before this step's goes in. See CoRotate.
+        readonly Dictionary<Rigidbody, Vector3> carried = new Dictionary<Rigidbody, Vector3>(32);
+        static readonly List<Rigidbody> scratch = new List<Rigidbody>(32);
+        float appliedAngle;     // angle plus shake actually handed to PhysX last step
+        float carriedOmega;     // rad/s injected into spins last step
+
         /// <summary>Fires each time another <see cref="tickEvery"/> degrees has passed.</summary>
         public event Action OnRotationTick;
         public event Action OnDriveBegin;
@@ -172,6 +180,10 @@ namespace PullTheWorld
         {
             WorldRoot.rotation = Quaternion.AngleAxis(angle, Vector3.forward);
             if (body) body.position = WorldRoot.position;
+            // A teleport is not a turn the bodies should ride; start the ride bookkeeping fresh.
+            appliedAngle = angle;
+            carriedOmega = 0f;
+            carried.Clear();
             // GameDirector turns autoSyncTransforms off, so a direct transform write has to be
             // pushed into PhysX by hand or the first frame of queries uses the stale pose.
             Physics.SyncTransforms();
@@ -269,9 +281,77 @@ namespace PullTheWorld
                 shake = Spring.Decay(shake, shakeHalfLife, dt);
             }
 
-            var target = Quaternion.AngleAxis(angle + offset, Vector3.forward);
+            float applied = angle + offset;
+            var target = Quaternion.AngleAxis(applied, Vector3.forward);
+            CoRotate(applied - appliedAngle, dt);
+            appliedAngle = applied;
             if (body) body.MoveRotation(target);
             else WorldRoot.rotation = target;
+        }
+
+        /// <summary>
+        /// Make every dynamic body ride the level as if bolted to it for this step's turn, so that
+        /// gravity is the ONLY thing that moves anything relative to the level.
+        ///
+        /// Without this the level is a turntable and PhysX treats it as one. A rock resting on the
+        /// floor picks up the floor's tangential velocity through the contact; when the finger stops
+        /// the level stops but the rock keeps going - straight up if it was on the rising side. A
+        /// 110 deg/s drag hopped a rock 1.2 m and clean over a crate in testing. Low-friction rocks
+        /// also lag the floor sliding under them and drift uphill while a drag is in progress. Both
+        /// vanish when the carried velocity is put in and taken out explicitly instead of being left
+        /// to friction.
+        ///
+        /// Per body: strip last step's carried velocity, rotate what is left (the body's own motion
+        /// relative to the level) by this step's turn, add the exact chord velocity that moves it
+        /// with the level, and remember that for next time. Spin gets the level's angular velocity
+        /// the same way. When the level is still nothing is touched, so bodies can sleep.
+        /// </summary>
+        void CoRotate(float movedDegrees, float dt)
+        {
+            bool moving = Mathf.Abs(movedDegrees) > 1e-5f;
+            if (!moving && carried.Count == 0) { carriedOmega = 0f; return; }
+
+            float omega = moving ? movedDegrees * Mathf.Deg2Rad / Mathf.Max(1e-5f, dt) : 0f;
+            var rot = Quaternion.AngleAxis(movedDegrees, Vector3.forward);
+            Vector3 pivot = WorldRoot.position;
+
+            var bodies = DynamicRegistry.Bodies;
+            for (int i = bodies.Count - 1; i >= 0; i--)
+            {
+                var rb = bodies[i];
+                if (!rb) { bodies.RemoveAt(i); continue; }
+                if (rb.isKinematic || !rb.gameObject.activeInHierarchy) { carried.Remove(rb); continue; }
+
+                carried.TryGetValue(rb, out var was);
+                Vector3 r = rb.position - pivot;
+                Vector3 ride = moving ? (rot * r - r) / dt : Vector3.zero;
+                rb.linearVelocity = rot * (rb.linearVelocity - was) + ride;
+                rb.angularVelocity += (omega - carriedOmega) * Vector3.forward;
+
+                if (moving) carried[rb] = ride; else carried.Remove(rb);
+            }
+
+            carriedOmega = omega;
+            if (!moving) carried.Clear();                       // every ride is zero now
+            else if (carried.Count > bodies.Count + 8) PruneCarried();
+        }
+
+        /// <summary>The velocity <paramref name="rb"/> is currently riding the level with. Zero when still.</summary>
+        public Vector3 CarriedVelocity(Rigidbody rb) =>
+            rb && carried.TryGetValue(rb, out var v) ? v : Vector3.zero;
+
+        /// <summary>Call after zeroing a body's velocity by hand (respawn), so the ride is not subtracted twice.</summary>
+        public void ForgetBody(Rigidbody rb)
+        {
+            if (rb) carried.Remove(rb);
+        }
+
+        void PruneCarried()
+        {
+            scratch.Clear();
+            foreach (var kv in carried)
+                if (!kv.Key || kv.Key.isKinematic) scratch.Add(kv.Key);
+            foreach (var k in scratch) carried.Remove(k);
         }
 
         void EmitTicks(float movedDegrees)

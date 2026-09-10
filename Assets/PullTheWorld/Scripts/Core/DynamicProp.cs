@@ -38,6 +38,13 @@ namespace PullTheWorld
 
         public float Buoyancy => buoyancy;
 
+        [Header("Lost overboard")]
+        [Tooltip("Distance from the world origin beyond which the prop counts as gone. Same as the player's.")]
+        [SerializeField] float fallRadius = 26f;
+        [Tooltip("Put the prop back at its start cell when it leaves the world. On for puzzle tools - a " +
+                 "lost rock would soft-lock a plate or crate level - and off for enemies, which die instead.")]
+        [SerializeField] bool respawnIfLost = true;
+
         [Header("Impact feel")]
         [Tooltip("Impact speed for a full squash and a full dust burst.")]
         [SerializeField] float impactReference = 6f;
@@ -47,9 +54,13 @@ namespace PullTheWorld
         [SerializeField] ParticleSystem impactVfx;
 
         Rigidbody rb;
+        Transform spawnParent;      // the level root, so the start cell turns with the level
+        Vector3 spawnLocal;
 
         void Awake()
         {
+            spawnParent = transform.parent;
+            spawnLocal = transform.localPosition;
             if (!visualPunch)
             {
                 var v = transform.Find("Visual");
@@ -65,6 +76,9 @@ namespace PullTheWorld
         void OnEnable()
         {
             if (!rb) rb = GetComponent<Rigidbody>();
+            // PhysX's default spin ceiling is 7 rad/s: a 0.34 m ball would have to SLIDE above
+            // 2.4 m/s. Our own clamp is the ceiling; let the body actually roll up to it.
+            rb.maxAngularVelocity = maxAngularSpeed;
             DynamicRegistry.Register(rb);
         }
 
@@ -75,6 +89,15 @@ namespace PullTheWorld
         void OnCollisionEnter(Collision c)
         {
             float speed = c.relativeVelocity.magnitude;
+
+            // The rock is the tool. Rock-vs-enemy is its own rigidbody pair so Enter fires here
+            // reliably. (Breakables are NOT reported from here: they sit on the level's compound
+            // body, which the rolling rock already touches, so Enter never comes - Breakable
+            // detects the hit itself.)
+            if (!rb) rb = GetComponent<Rigidbody>();
+            var enemy = c.collider.GetComponentInParent<Enemy>();
+            if (enemy && enemy.gameObject != gameObject) enemy.Crush(speed, rb.mass);
+
             if (speed < minImpactSpeed) return;
             float strength = Mathf.Clamp01(speed / Mathf.Max(0.01f, impactReference));
 
@@ -94,15 +117,45 @@ namespace PullTheWorld
         {
             if (!rb || rb.isKinematic) return;
 
-            var v = rb.linearVelocity;
+            if (respawnIfLost && rb.position.sqrMagnitude > fallRadius * fallRadius)
+            {
+                Respawn();
+                return;
+            }
+
+            // Clamp the prop's OWN motion. The velocity it rides the level with is exact and must
+            // not be cut, or the prop lags the floor on a fast turn.
+            Vector3 ride = WorldRotator.Instance ? WorldRotator.Instance.CarriedVelocity(rb) : Vector3.zero;
+            var v = rb.linearVelocity - ride;
             float sqr = v.sqrMagnitude;
             if (sqr > maxSpeed * maxSpeed)
-                rb.linearVelocity = v * (maxSpeed / Mathf.Sqrt(sqr));
+                rb.linearVelocity = ride + v * (maxSpeed / Mathf.Sqrt(sqr));
 
             var w = rb.angularVelocity;
             float wSqr = w.sqrMagnitude;
             if (wSqr > maxAngularSpeed * maxAngularSpeed)
                 rb.angularVelocity = w * (maxAngularSpeed / Mathf.Sqrt(wSqr));
+        }
+
+        /// <summary>
+        /// Back to the start cell, in the level's CURRENT orientation, so it lands on the island
+        /// however the player has turned it. A hard fling can hop a rock clean off the world; without
+        /// this, the plate and crate levels would sit soft-locked until a manual restart.
+        /// </summary>
+        void Respawn()
+        {
+            Vector3 p = spawnParent ? spawnParent.TransformPoint(spawnLocal) : spawnLocal;
+            rb.position = p;
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            if (WorldRotator.Instance) WorldRotator.Instance.ForgetBody(rb);
+            transform.position = p;             // don't let the interpolated transform lag a frame
+            if (impactVfx)
+            {
+                impactVfx.transform.position = p;
+                impactVfx.Emit(10);
+            }
+            if (visualPunch) visualPunch.Hit(0.6f);
         }
     }
 }

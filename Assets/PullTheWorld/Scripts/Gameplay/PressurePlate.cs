@@ -19,8 +19,10 @@ namespace PullTheWorld
         [SerializeField] Vector3 zoneSize = new Vector3(0.9f, 0.7f, 0.9f);
         [Tooltip("Minimum Rigidbody mass that counts. The player is always heavy enough.")]
         [SerializeField] float requiredMass = 0.35f;
-        [Tooltip("Off means only props press it, so a level can require a rock specifically.")]
-        [SerializeField] bool playerCanPress = true;
+        [Tooltip("Off (the default) means only props press it: the puzzle is to park a ROCK here. " +
+                 "With it on, the player could just roll onto the plate and every plate level " +
+                 "collapsed into 'tilt towards the plate'.")]
+        [SerializeField] bool playerCanPress = false;
 
         [Header("Latching")]
         [Tooltip("On means the plate stays pressed forever once it has been pressed once.")]

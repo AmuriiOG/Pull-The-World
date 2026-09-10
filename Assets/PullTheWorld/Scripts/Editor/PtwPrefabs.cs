@@ -30,9 +30,70 @@ namespace PullTheWorld.EditorTools
             BuildKey();
             BuildPlatform();
             BuildWaterProp();
+            BuildEnemy();
+            BuildBreakable();
             BuildPlayer();
 
             AssetDatabase.SaveAssets();
+        }
+
+        // ========================================================================= enemy =====
+        static void BuildEnemy()
+        {
+            var e = Node("Enemy");
+            var rb = e.AddComponent<Rigidbody>();
+            rb.mass = 1.0f;
+            rb.linearDamping = 0.05f;
+            rb.angularDamping = 0.7f;
+            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
+            rb.constraints = RigidbodyConstraints.FreezePositionZ
+                           | RigidbodyConstraints.FreezeRotationX
+                           | RigidbodyConstraints.FreezeRotationY;
+            var sc = e.AddComponent<SphereCollider>();
+            sc.radius = 0.31f;
+            sc.sharedMaterial = EnsurePhysicsMaterial("PM_Rolling", 0.22f, 0.26f, 0.02f);
+
+            var visual = Node("Visual", e.transform);
+            MeshNode("Body", "Mesh_Enemy", visual.transform, PtwArt.MEnemy, PtwArt.MEnemySpike);
+            // The player's eye mesh in the fire material: two hot orange points. Hostile, cheap.
+            var face = MeshNode("Face", "Mesh_PlayerFace", visual.transform, PtwArt.MGlowFire);
+            face.GetComponent<MeshRenderer>().shadowCastingMode =
+                UnityEngine.Rendering.ShadowCastingMode.Off;
+
+            var death = Burst("DeathVfx", e.transform, PtwArt.Get(PtwArt.MParticleSoft),
+                              PtwArt.Hex("#B04A85"), 24);
+
+            var dp = e.AddComponent<DynamicProp>();        // registry, speed clamp, sinks in water
+            Wire(dp, "respawnIfLost", false);              // an enemy that falls off is dead, not back
+            var en = e.AddComponent<Enemy>();
+            Wire(en, "visual", visual.transform);
+            Wire(en, "deathVfx", death);
+            Save(e, Play);
+        }
+
+        // ===================================================================== breakable =====
+        static void BuildBreakable()
+        {
+            float h = PtwMeshes.BlockH;
+            var b = Node("Breakable_Crate");
+
+            // Everything that disappears on break lives under Intact. The crate mesh is centred
+            // (it is the dynamic prop's mesh), so Intact is lifted to stand it on the floor.
+            var intact = Node("Intact", b.transform);
+            intact.transform.localPosition = new Vector3(0f, h * 0.42f, 0f);
+            var visual = MeshNode("Visual", "Mesh_Crate", intact.transform, PtwArt.MWood, PtwArt.MWoodDark);
+            visual.transform.localScale = Vector3.one * 1.35f;      // 0.6 mesh -> ~0.8 of a cell
+            var box = AddBox(intact, Vector3.zero, new Vector3(0.82f, h * 0.82f, 0.82f));
+
+            var debris = Dust("DebrisVfx", b.transform, PtwArt.Get(PtwArt.MParticleSoft),
+                              PtwArt.Wood, 0.09f, 0.6f);
+
+            var br = b.AddComponent<Breakable>();
+            Wire(br, "intact", intact);
+            Wire(br, "blocker", box);
+            Wire(br, "debrisVfx", debris);
+            Save(b, Play);
         }
 
         // ========================================================================= water =====
@@ -293,6 +354,7 @@ namespace PullTheWorld.EditorTools
             var pp = plate.AddComponent<PressurePlate>();
             Wire(pp, "slab", slab.transform);
             Wire(pp, "inlayRenderer", ind.GetComponent<MeshRenderer>());
+            Wire(pp, "playerCanPress", false);         // rocks only - see PressurePlate
             Save(plate, Play);
 
             float h = PtwMeshes.BlockH;

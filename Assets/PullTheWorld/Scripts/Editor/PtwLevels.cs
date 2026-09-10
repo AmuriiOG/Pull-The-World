@@ -40,12 +40,15 @@ namespace PullTheWorld.EditorTools
     ///     w  pool - goes IN THE FLOOR ROW in place of a block: a half-height bed with water in
     ///        the top half, so the surface is level with the grass. Floats the ball, sinks rocks,
     ///        pours downhill when tilted and puts out fire it pours onto.
+    ///     e  enemy - rolls like a rock, crawls towards you, kills on touch. A fast heavy rock,
+    ///        spikes or fire kill it.
+    ///     B  breakable crate - blocks the way until a heavy rock hits it hard. The ball cannot.
     ///     T  tree   t  small tree   r  rock   u  bush   y  crystal
     /// </summary>
     public static class PtwLevels
     {
         public const string Dir = "Assets/PullTheWorld/Prefabs/Levels";
-        public const int Count = 20;
+        public const int Count = 23;
 
         public static void BuildAll()
         {
@@ -55,6 +58,7 @@ namespace PullTheWorld.EditorTools
             Level11(); Level12(); Level13(); Level14();
             Level15(); Level16(); Level17(); Level18();
             Level19(); Level20();
+            Level21(); Level22(); Level23();
             AssetDatabase.SaveAssets();
         }
 
@@ -517,6 +521,67 @@ namespace PullTheWorld.EditorTools
             b.Save();
         }
 
+        /// <summary>
+        /// The enemy arrives, and the rock is already the answer. It sits between you and the door;
+        /// the rock sits between you and it. Tip towards the door and the rock gets there first,
+        /// at speed, and bowls it over. Dawdle and it starts crawling towards you.
+        /// </summary>
+        static void Level21()
+        {
+            var b = new Builder(21, "Bowl It Over")
+            { Teach = TeachHint.RockIsATool, AngleLimit = 65f };
+            b.Map(
+                "# . P . b . e . . . D #",
+                "# g g g g g g g g g g #",
+                "# g g g g g g g g g g #",
+                "# g g g g g g g g g g #",
+                ". g g g g g g g g g g .",
+                ". . g g g g g g g g . .",
+                ". . . g g g g g g . . ."
+            );
+            b.Save();
+        }
+
+        /// <summary>
+        /// A crate blocks the way. Roll into it yourself and nothing happens - it needs the rock,
+        /// arriving from three cells uphill. The only puzzle is realising you are not heavy enough.
+        /// </summary>
+        static void Level22()
+        {
+            var b = new Builder(22, "Break Through")
+            { Teach = TeachHint.RockIsATool, AngleLimit = 70f };
+            b.Map(
+                "# . P . b . . B . . D #",
+                "# g g g g g g g g g g #",
+                "# g g g g g g g g g g #",
+                "# g g g g g g g g g g #",
+                ". g g g g g g g g g g .",
+                ". . g g g g g g g g . .",
+                ". . . g g g g g g . . ."
+            );
+            b.Save();
+        }
+
+        /// <summary>
+        /// One rock, everything in its path: it smashes the crate, keeps rolling, bowls the enemy,
+        /// and you follow it through to the gem and the door. A bowling-alley finale.
+        /// </summary>
+        static void Level23()
+        {
+            var b = new Builder(23, "Clear the Way")
+            { RequiredKeys = 1, AngleLimit = 75f };
+            b.Map(
+                "# . P . b . B . e . K D #",
+                "# g g g g g g g g g g g #",
+                "# g g g g g g g g g g g #",
+                "# g g g g g g g g g g g #",
+                ". g g g g g g g g g g g .",
+                ". . g g g g g g g g g . .",
+                ". . . g g g g g g g . . ."
+            );
+            b.Save();
+        }
+
         // ======================================================================= builder =====
         class Builder
         {
@@ -598,7 +663,7 @@ namespace PullTheWorld.EditorTools
                 // asserting at generation time rather than discovering in a capture: the first
                 // build put a tree one cell too high and it hung in mid-air, which costs five
                 // seconds to fix and a surprisingly long time to notice in a screenshot.
-                const string mustBeGrounded = "DfktTruyw";
+                const string mustBeGrounded = "DfktTruywB";
                 if (mustBeGrounded.IndexOf(c) >= 0 && !IsSolid(at(col, row + 1)))
                 {
                     Debug.LogWarning($"PTW: level {number} has '{c}' at col {col}, row {row} " +
@@ -670,6 +735,11 @@ namespace PullTheWorld.EditorTools
                     // in penetration, which PhysX resolves by launching them.
                     case 'b': Prop("Prop_Boulder", col, bottom + 0.4f); break;
                     case 'c': Prop("Prop_Crate", col, bottom + 0.4f); break;
+                    case 'e': Prop("Enemy", col, bottom + 0.4f); break;
+
+                    // Static: stands on the floor and is part of the level's compound collider
+                    // until a rock breaks it.
+                    case 'B': Prop("Breakable_Crate", col, bottom); break;
 
                     // --- hazards -------------------------------------------------------------
                     case 'f': Prop("Hazard_Fire", col, bottom); break;

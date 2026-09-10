@@ -29,28 +29,33 @@ namespace PullTheWorld
         [SerializeField] Renderer target;
         [SerializeField] float blendSpeed = 2.6f;
 
+        // All three are NIGHT skies now, differing in hue rather than in brightness. The daytime
+        // meadow read as flat and grey next to the reference sheet's night card (#0D151C ground),
+        // and a dark backdrop is what lets the lit island, the amber door and the gems carry the
+        // frame. The glow is the pool of light the backdrop shader puts behind the island; it does
+        // most of the work of making a dark sky read as atmosphere rather than as a black screen.
         [SerializeField] Palette[] palettes =
         {
             new Palette
             {
-                name = "Meadow",
-                top = new Color(0.776f, 0.827f, 0.882f),      // #C6D3E1
-                bottom = new Color(0.663f, 0.722f, 0.784f),   // #A9B8C8
-                glow = new Color(0.941f, 0.965f, 1.000f),     // #F0F6FF
+                name = "Dusk",
+                top = new Color(0.180f, 0.239f, 0.388f),      // #2E3D63
+                bottom = new Color(0.082f, 0.110f, 0.184f),   // #151C2F
+                glow = new Color(0.420f, 0.525f, 0.769f),     // #6B86C4
             },
             new Palette
             {
-                name = "Dusk",
-                top = new Color(0.851f, 0.769f, 0.753f),      // #D9C4C0
-                bottom = new Color(0.718f, 0.624f, 0.651f),   // #B79FA6
-                glow = new Color(1.000f, 0.890f, 0.769f),     // #FFE3C4
+                name = "Ember",
+                top = new Color(0.239f, 0.165f, 0.275f),      // #3D2A46
+                bottom = new Color(0.106f, 0.071f, 0.133f),   // #1B1222
+                glow = new Color(0.769f, 0.451f, 0.369f),     // #C4735E
             },
             new Palette
             {
                 name = "Night",
-                top = new Color(0.541f, 0.608f, 0.722f),      // #8A9BB8
-                bottom = new Color(0.420f, 0.478f, 0.588f),   // #6B7A96
-                glow = new Color(0.725f, 0.800f, 0.941f),     // #B9CCF0
+                top = new Color(0.071f, 0.118f, 0.200f),      // #121E33
+                bottom = new Color(0.031f, 0.051f, 0.090f),   // #080D17
+                glow = new Color(0.302f, 0.435f, 0.651f),     // #4D6FA6
             },
         };
 

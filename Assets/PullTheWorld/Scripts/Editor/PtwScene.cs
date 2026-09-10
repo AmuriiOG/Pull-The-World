@@ -29,8 +29,8 @@ namespace PullTheWorld.EditorTools
         public const string FontSemiPath = "Assets/PullTheWorld/Art/Fonts/Poppins-SemiBold SDF.asset";
 
         // Measured: a white-albedo surface in shadow sits at #697CA5, so that IS the ambient.
-        static readonly Color AmbientColor = PtwArt.Hex("#7D90AB");
-        static readonly Color KeyColor = PtwArt.Hex("#FFF6EA");
+        static readonly Color AmbientColor = PtwArt.Hex("#5E6E8C");
+        static readonly Color KeyColor = PtwArt.Hex("#DCE6FF");   // moonlight: the skies are night, so the key must be too
 
         // ==================================================================== entry point ====
         public static void Build()
@@ -165,7 +165,7 @@ namespace PullTheWorld.EditorTools
             var key = keyGo.AddComponent<Light>();
             key.type = LightType.Directional;
             key.color = KeyColor;
-            key.intensity = 1.4f;
+            key.intensity = 1.35f;
             key.shadows = LightShadows.Soft;
             key.shadowStrength = 0.78f;
             key.shadowBias = 0.04f;
@@ -181,7 +181,7 @@ namespace PullTheWorld.EditorTools
             fillGo.transform.rotation = Quaternion.Euler(20f, -130f, 0f);
             var fill = fillGo.AddComponent<Light>();
             fill.type = LightType.Directional;
-            fill.color = PtwArt.Hex("#9FB8D8");
+            fill.color = PtwArt.Hex("#8FA6D0");
             fill.intensity = 0.42f;
             fill.shadows = LightShadows.None;
             fillGo.AddComponent<UniversalAdditionalLightData>().usePipelineSettings = true;
@@ -218,7 +218,7 @@ namespace PullTheWorld.EditorTools
 
             var tone = profile.Add<Tonemapping>(true);
             tone.mode.overrideState = true;
-            tone.mode.value = TonemappingMode.Neutral;
+            tone.mode.value = TonemappingMode.ACES;   // punchier than Neutral, which flattened the grade
 
             var bloom = profile.Add<Bloom>(true);
             // Threshold well above 1.0 so ONLY emissives bloom, which is what the style bible asks
@@ -226,26 +226,34 @@ namespace PullTheWorld.EditorTools
             // catching brightly lit SURFACES; with the island tilted, the grass cap's top face
             // turns towards the key light (dot 0.88 against 0.74 upright) and was close to
             // clipping. The emissives all sit at 1.9-4.5 intensity, so they still bloom from here.
-            bloom.threshold.overrideState = true; bloom.threshold.value = 1.3f;
-            bloom.intensity.overrideState = true; bloom.intensity.value = 0.85f;
+            bloom.threshold.overrideState = true; bloom.threshold.value = 1.15f;
+            bloom.intensity.overrideState = true; bloom.intensity.value = 1.15f;
             bloom.scatter.overrideState = true; bloom.scatter.value = 0.62f;
             bloom.tint.overrideState = true; bloom.tint.value = Color.white;
             bloom.highQualityFiltering.overrideState = true;
             bloom.highQualityFiltering.value = false;   // mobile budget
 
             var color = profile.Add<ColorAdjustments>(true);
-            color.postExposure.overrideState = true; color.postExposure.value = 0.18f;
+            color.postExposure.overrideState = true; color.postExposure.value = 0.22f;
             // Restrained: the first pass ran contrast 9 / saturation 4 and crushed the backdrop
             // into a slate grey while pushing the grass to a candy green.
-            color.contrast.overrideState = true; color.contrast.value = 3f;
-            color.saturation.overrideState = true; color.saturation.value = 0f;
+            color.contrast.overrideState = true; color.contrast.value = 20f;
+            color.saturation.overrideState = true; color.saturation.value = 16f;
 
             var vig = profile.Add<Vignette>(true);
             // A tall portrait frame puts a lot of screen inside the vignette falloff, so this has
             // to stay very light or the whole backdrop goes dark.
-            vig.intensity.overrideState = true; vig.intensity.value = 0.07f;
-            vig.smoothness.overrideState = true; vig.smoothness.value = 0.75f;
-            vig.color.overrideState = true; vig.color.value = PtwArt.Hex("#2B3644");
+            vig.intensity.overrideState = true; vig.intensity.value = 0.28f;
+            vig.smoothness.overrideState = true; vig.smoothness.value = 0.6f;
+            vig.color.overrideState = true; vig.color.value = PtwArt.Hex("#05080E");
+
+            // Cool shadows, warm highlights. With a night sky this is what stops the frame reading
+            // as "grey blocks in the dark": shadow sides go blue, the lit grass and the ivory ball
+            // go warm, and the door's amber sits inside that scheme rather than on top of it.
+            var split = profile.Add<SplitToning>(true);
+            split.shadows.overrideState = true; split.shadows.value = PtwArt.Hex("#2C3F6E");
+            split.highlights.overrideState = true; split.highlights.value = PtwArt.Hex("#FFD6A3");
+            split.balance.overrideState = true; split.balance.value = -8f;
 
             EditorUtility.SetDirty(profile);
 
@@ -745,7 +753,7 @@ namespace PullTheWorld.EditorTools
 
             // ============================================================ main menu =========
             var menuPanel = Panel(canvasGo.transform, "MainMenuPanel", out var menuGroup);
-            Dim(menuPanel.transform, "Dim", new Color(0.05f, 0.08f, 0.12f, 0.74f));
+            Dim(menuPanel.transform, "Dim", new Color(0.05f, 0.08f, 0.12f, 0.5f));
 
             var title = Text(menuPanel.transform, "Title", "PULL\nTHE WORLD", bold, 118f,
                              new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
@@ -829,7 +837,8 @@ namespace PullTheWorld.EditorTools
             var cardImg = card.GetComponent<Image>();
             cardImg.sprite = MakePanelSprite();
             // Lifted from #1B2733: over the dimmed menu that read as a black hole, not a card.
-            cardImg.color = PtwArt.Hex("#27384B");
+            cardImg.color = PtwArt.Hex("#2A3C51");
+            Gloss(card, 0.80f, 0.55f, -10f);
 
             // A faint rim behind the card so its edge is defined against the dim rather than
             // dissolving into it.
@@ -908,6 +917,43 @@ namespace PullTheWorld.EditorTools
         }
 
         // ================================================================= ui helpers =======
+        /// <summary>
+        /// The "packaged" look, from Unity UI Extensions (OpenUPM, MIT): a vertical gradient so a
+        /// flat pill reads as a glossy button, a soft dark outline so it holds its edge on any
+        /// background, and a drop shadow for depth. Gradient runs in MULTIPLY mode (Vertex1 white,
+        /// Vertex2 darker) so the Image colour still carries the hue and the Button's press tint
+        /// still works. Fully qualified because the package's Gradient collides with
+        /// UnityEngine.Gradient, which the particle code in this file uses.
+        ///
+        /// None of this touches TMP text: TextMeshPro does not go through VertexHelper, so mesh
+        /// effects silently do nothing on it. Text legibility is the shadow material's job.
+        /// </summary>
+        static void Gloss(GameObject go, float bottom = 0.62f, float outlineAlpha = 0.45f,
+                          float shadowY = -6f)
+        {
+            var grad = go.AddComponent<UnityEngine.UI.Extensions.Gradient>();
+            grad.GradientDir = UnityEngine.UI.Extensions.GradientDir.Vertical;
+            grad.OverwriteAllColor = false;
+            grad.Vertex1 = Color.white;
+            grad.Vertex2 = new Color(bottom, bottom, Mathf.Min(1f, bottom + 0.04f), 1f);
+
+            // Built-in Outline, not the package's NicerOutline: in this Unity version NicerOutline
+            // compiles as an empty stub (its real body is behind an #else for older Unity) and
+            // has no members at all.
+            var outline = go.AddComponent<Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, outlineAlpha);
+            outline.effectDistance = new Vector2(2f, -2f);
+            outline.useGraphicAlpha = true;
+
+            if (Mathf.Abs(shadowY) > 0.01f)
+            {
+                var shadow = go.AddComponent<Shadow>();
+                shadow.effectColor = new Color(0f, 0f, 0f, 0.38f);
+                shadow.effectDistance = new Vector2(0f, shadowY);
+                shadow.useGraphicAlpha = true;
+            }
+        }
+
         static void Stretch(RectTransform rt)
         {
             rt.anchorMin = Vector2.zero;
@@ -952,7 +998,10 @@ namespace PullTheWorld.EditorTools
 
             var img = go.GetComponent<Image>();
             img.sprite = MakeDiscSprite();
-            img.color = new Color(1f, 1f, 1f, 0.16f);
+            // Brighter than the 0.16 it was: on a night sky a faint disc vanished. The outline
+            // from Gloss() is what actually defines it now.
+            img.color = new Color(1f, 1f, 1f, 0.24f);
+            Gloss(go, 0.7f, 0.5f, -4f);
 
             var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
             iconGo.transform.SetParent(go.transform, false);
@@ -986,6 +1035,7 @@ namespace PullTheWorld.EditorTools
             // not need 9-slicing.
             img.sprite = MakePillSprite();
             img.color = tint;
+            Gloss(go);
 
             var t = Text(go.transform, "Label", label, font, fontSize,
                          new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero,
@@ -1032,6 +1082,7 @@ namespace PullTheWorld.EditorTools
             var trImg = track.GetComponent<Image>();
             trImg.sprite = MakePillSprite();
             trImg.color = PtwArt.Hex("#2E3E4E");
+            Gloss(track, 0.72f, 0.45f, 0f);
 
             // ON is a green FILL over the whole track, not a knob that slides.
             //
@@ -1210,7 +1261,7 @@ namespace PullTheWorld.EditorTools
 
             var img = go.GetComponent<Image>();
             img.sprite = MakeScrimSprite("Tex_Scrim" + (top ? "Top" : "Bottom"), top);
-            img.color = new Color(0.055f, 0.085f, 0.125f, 0.44f);
+            img.color = new Color(0.055f, 0.085f, 0.125f, 0.24f);
             img.raycastTarget = false;
         }
 

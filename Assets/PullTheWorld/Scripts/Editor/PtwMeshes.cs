@@ -67,6 +67,7 @@ namespace PullTheWorld.EditorTools
             Save(PlayerBall(), "Mesh_PlayerBall");
             Save(PlayerFace(), "Mesh_PlayerFace");
             Save(Key(), "Mesh_Key");
+            Save(Enemy(), "Mesh_Enemy");
             Save(QuadXZ(), "Mesh_QuadXZ");
             Save(QuadXY(), "Mesh_QuadXY");
             Save(WaterTile(6, 1f), "Mesh_WaterTile");
@@ -466,6 +467,26 @@ namespace PullTheWorld.EditorTools
             mb.AddFlatQuad(0, new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, -0.5f, 0f),
                               new Vector3(0.5f, 0.5f, 0f), new Vector3(-0.5f, 0.5f, 0f), Vector3.back);
             return mb.ToMesh("QuadXY");
+        }
+
+        /// <summary>
+        /// The enemy: a faceted ball like the player, but lumpier and ringed with spikes in the
+        /// puzzle plane so its silhouette is hostile at a glance and unmistakably not a rock.
+        /// sub0 body, sub1 spikes. The glowing eyes are the PlayerFace mesh in a hot material.
+        /// </summary>
+        static Mesh Enemy()
+        {
+            var mb = new MeshBuilder();
+            mb.AddBlob(0, Vector3.zero, new Vector3(0.30f, 0.29f, 0.30f), 2, 0.07f, 23);
+            const int spikes = 7;
+            for (int i = 0; i < spikes; i++)
+            {
+                float a = (i + 0.5f) / spikes * Mathf.PI * 2f;
+                Vector3 dir = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
+                mb.AddCylinder(1, dir * 0.22f, 0.075f, 0f, 0.17f, 5, false, false,
+                               Quaternion.FromToRotation(Vector3.up, dir));
+            }
+            return mb.ToMesh("Enemy");
         }
 
         /// <summary>

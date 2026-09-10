@@ -75,7 +75,22 @@ namespace PullTheWorld
 
             var lm = LevelManager.Instance;
             var player = PlayerBody.Instance;
-            if (lm == null || !lm.IsPlaying || player == null || !player.IsAlive) return;
+            if (lm == null || !lm.IsPlaying) return;
+
+            // Hazards are indiscriminate: an enemy rolled into spikes or fire dies too, which is
+            // one of the three ways to deal with one.
+            var bodies = DynamicRegistry.Bodies;
+            for (int i = bodies.Count - 1; i >= 0; i--)
+            {
+                var rb = bodies[i];
+                if (!rb) continue;
+                var enemy = rb.GetComponent<Enemy>();
+                if (!enemy || !enemy.IsAlive) continue;
+                if (Vector3.Distance(rb.position, Zone.position) <= killRadius + 0.3f)
+                    enemy.Die(quiet: false);
+            }
+
+            if (player == null || !player.IsAlive) return;
 
             float d = Vector3.Distance(player.transform.position, Zone.position);
             if (d <= killRadius + player.Radius)

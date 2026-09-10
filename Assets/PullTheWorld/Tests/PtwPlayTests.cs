@@ -94,6 +94,25 @@ namespace PullTheWorld.Tests
             yield return Wait(0.35f);
         }
 
+        /// <summary>
+        /// Turn the level the way a finger does: a stream of small Drive() deltas at a plausible
+        /// speed. A single Drive() step is a snap no finger produces; a test about how a rock
+        /// behaves should turn the level the way a player would.
+        /// </summary>
+        IEnumerator DragTo(float angle, float degreesPerSecond = 110f, float timeout = 5f)
+        {
+            rotator.BeginDrive();
+            float t = 0f;
+            while (Mathf.Abs(rotator.AngleTarget - angle) > 0.01f && t < timeout)
+            {
+                float maxStep = degreesPerSecond * Time.deltaTime;
+                rotator.Drive(Mathf.Clamp(angle - rotator.AngleTarget, -maxStep, maxStep));
+                t += Time.deltaTime;
+                yield return null;
+            }
+            rotator.EndDrive(0f);
+        }
+
         IEnumerator WaitUntil(Func<bool> cond, float timeout, string what)
         {
             float t = 0f;
@@ -446,6 +465,159 @@ namespace PullTheWorld.Tests
 
             Assert.IsTrue(fire.Smothered, "Pouring the pool onto the fire did not put it out");
             Assert.Less(water.Fill, 0.95f, "The pool did not drain while pouring");
+        }
+
+        /// <summary>Plates are for rocks. The ball sitting on one must do nothing.</summary>
+        [UnityTest]
+        public IEnumerator PlayerCannotPressThePlate()
+        {
+            yield return LoadLevel(4);                      // level 5: Hold It Down
+            var plate = levels.Current.GetComponentInChildren<PressurePlate>();
+            Assert.IsNotNull(plate, "Level 5 has no plate");
+
+            player.Body.position = plate.transform.position + Vector3.up * 0.6f;
+            player.Body.linearVelocity = Vector3.zero;
+            yield return Wait(1.5f);
+
+            Assert.IsFalse(plate.Pressed, "The player pressed a plate - plates must need a rock");
+        }
+
+        [UnityTest]
+        public IEnumerator RockPressesThePlate()
+        {
+            yield return LoadLevel(4);
+            var plate = levels.Current.GetComponentInChildren<PressurePlate>();
+            var rock = FirstRock();
+            Assert.IsNotNull(rock, "Level 5 has no rock");
+
+            rock.position = plate.transform.position + Vector3.up * 0.6f;
+            rock.linearVelocity = Vector3.zero;
+            yield return Wait(1.5f);
+
+            Assert.IsTrue(plate.Pressed, "A rock resting on the plate did not press it");
+        }
+
+        [UnityTest]
+        public IEnumerator EnemyKillsOnContact()
+        {
+            yield return LoadLevel(20);                     // level 21: Bowl It Over
+            var enemy = levels.Current.GetComponentInChildren<Enemy>();
+            Assert.IsNotNull(enemy, "Level 21 has no enemy");
+
+            player.Body.position = enemy.transform.position + Vector3.up * 0.75f;
+            player.Body.linearVelocity = Vector3.zero;
+            yield return WaitUntil(() => !player.IsAlive, 2f, "the enemy to kill the player");
+
+            Assert.IsFalse(player.IsAlive, "Touching an enemy did not kill the player");
+        }
+
+        /// <summary>The intended solution to level 21: tip towards the door, the rock bowls it.</summary>
+        [UnityTest]
+        public IEnumerator RockCrushesTheEnemy()
+        {
+            yield return LoadLevel(20);
+            var enemy = levels.Current.GetComponentInChildren<Enemy>();
+            Assert.IsNotNull(enemy);
+            ParkPlayer();
+
+            yield return RotateTo(-50f, 3f);                // door side down
+            yield return WaitUntil(() => enemy == null || !enemy.IsAlive, 4f, "the rock to crush the enemy");
+
+            Assert.IsTrue(enemy == null || !enemy.IsAlive, "The rock did not kill the enemy");
+        }
+
+        [UnityTest]
+        public IEnumerator RockBreaksTheCrate()
+        {
+            yield return LoadLevel(21);                     // level 22: Break Through
+            var crate = levels.Current.GetComponentInChildren<Breakable>();
+            Assert.IsNotNull(crate, "Level 22 has no breakable");
+            var rock = FirstRock();
+            Assert.IsNotNull(rock, "Level 22 has no rock");
+            ParkPlayer();
+
+            // The drag is inlined (same finger-speed policy as DragTo) so the WHOLE run-up is
+            // sampled: a failure here should show where the rock went, not just that it didn't break.
+            var trail = new System.Text.StringBuilder();
+            float peak = 0f, t = 0f, nextSample = 0f;
+            bool released = false;
+            rotator.BeginDrive();
+            while (t < 5.5f && !crate.Broken)
+            {
+                if (!released)
+                {
+                    float maxStep = 110f * Time.deltaTime;
+                    rotator.Drive(Mathf.Clamp(-55f - rotator.AngleTarget, -maxStep, maxStep));
+                    if (Mathf.Abs(rotator.AngleTarget + 55f) < 0.01f) { rotator.EndDrive(0f); released = true; }
+                }
+                if (rock)
+                {
+                    peak = Mathf.Max(peak, rock.linearVelocity.magnitude);
+                    if (t >= nextSample)
+                    {
+                        nextSample += 0.1f;
+                        var lp = rotator.WorldRoot.InverseTransformPoint(rock.position);
+                        trail.Append($"[{t:F1}s a={rotator.Angle:F0} L=({lp.x:F2},{lp.y:F2}) v={rock.linearVelocity.magnitude:F1}] ");
+                    }
+                }
+                t += Time.deltaTime;
+                yield return null;
+            }
+            Debug.Log($"PTW_DIAG crate broken={crate.Broken} after {t:F2}s, rock peak speed {peak:F2} m/s, " +
+                      $"rock at {(rock ? rock.position : Vector3.zero)}, crate at {crate.transform.position}");
+            Debug.Log("PTW_DIAG trail " + trail);
+
+            Assert.IsTrue(crate.Broken, $"The rock did not break the crate (peak rock speed {peak:F2} m/s)");
+        }
+
+        /// <summary>Same tilt, no rock: the ball alone must NOT break it.</summary>
+        [UnityTest]
+        public IEnumerator PlayerCannotBreakTheCrate()
+        {
+            yield return LoadLevel(21);
+            var crate = levels.Current.GetComponentInChildren<Breakable>();
+            var rock = FirstRock();
+            if (rock) UnityEngine.Object.Destroy(rock.gameObject);
+            yield return null;
+
+            yield return DragTo(-55f);
+            yield return Wait(3f);
+
+            Assert.IsFalse(crate.Broken, "The ball broke a crate - only a heavy rock may");
+        }
+
+        /// <summary>
+        /// A rock that leaves the world comes back to its start cell. Without this a wild fling
+        /// would soft-lock every plate and crate level until the player thinks to restart.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator LostRockComesBack()
+        {
+            yield return LoadLevel(21);
+            var rock = FirstRock();
+            Assert.IsNotNull(rock, "Level 22 has no rock");
+            Vector3 home = rock.position;
+
+            rock.position = new Vector3(0f, -60f, 0f);      // well past the fall radius
+            yield return WaitUntil(() => rock.position.y > -20f, 2f, "the rock to respawn");
+
+            Assert.Less(Vector3.Distance(rock.position, home), 1.5f,
+                        "The lost rock did not come back to its start cell");
+        }
+
+        /// <summary>First boulder/crate in the level, excluding enemies (which also carry DynamicProp).</summary>
+        Rigidbody FirstRock()
+        {
+            foreach (var p in levels.Current.GetComponentsInChildren<DynamicProp>(true))
+                if (!p.GetComponent<Enemy>()) return p.GetComponent<Rigidbody>();
+            return null;
+        }
+
+        /// <summary>Freeze the player far away so a physics test is about the rule, not the race.</summary>
+        void ParkPlayer()
+        {
+            player.Freeze();
+            player.Body.position = new Vector3(0f, 12f, 0f);
         }
 
         // ====================================================================== captures =====

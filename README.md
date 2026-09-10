@@ -115,6 +115,17 @@ Also: **rotating the level does not change gravity, so a settled Rigidbody has n
 and will happily hang on a wall that is no longer under it. `WorldRotator` wakes everything in
 `DynamicRegistry` whenever the level is actually turning.
 
+And: **the level is a turntable, and PhysX will treat it as one unless told otherwise.** A rock
+resting on the floor picks up the floor's tangential velocity through the contact, so when a drag
+stops the level stops but the rock keeps going — straight up if it was on the rising side. In
+testing, a 110°/s drag hopped a rock 1.2 m and clean over a crate; low-friction rocks also lag the
+floor sliding under them and drift *uphill* mid-drag. `WorldRotator.CoRotate` therefore makes every
+body in `DynamicRegistry` ride the level explicitly each physics step: strip the velocity it was
+given last step, rotate its own motion by this step's turn, add the exact chord velocity that keeps
+it with the level. Turning the world now changes *only* gravity for everything on it — no sling, no
+lag, no centrifugal drift. The speed clamps in `PlayerBody` and `DynamicProp` clamp the body's own
+motion, not the ride, so a fast fling cannot make anything lag the floor.
+
 **`Scripts/Core/PlayerBody.cs`** — the character. A sphere collider under a ball mesh, locked to the
 XY plane (`FreezePositionZ | FreezeRotationX | FreezeRotationY`) so it can only ever roll about Z.
 
@@ -225,10 +236,49 @@ every level loads; they cannot tell you whether a puzzle is interesting.
 | 18 | The Last Turn | every piece, in an order that has to be worked out |
 | 19 | Wade Through | water, with no stakes: roll in, bob, roll out |
 | 20 | Pour It Out | water as a tool — tip the pool onto the fire |
+| 21 | Bowl It Over | the enemy; the rock between you and it is the answer |
+| 22 | Break Through | a crate only a fast heavy rock can smash |
+| 23 | Clear the Way | one rock through crate and enemy, then the gem, then the door |
 
-Levels are split into three chapters, each with its own sky (`SkyTheme`: meadow, dusk, night) so
-the set does not read as twenty copies of one screen. The palettes stay muted on purpose — the
-ivory player must remain the brightest non-emissive thing on screen in every chapter.
+## Enemies and breakables
+
+**Enemy** — a hostile rock. It obeys gravity exactly like a boulder, so tilting moves it, and it
+kills the player on contact. Two things make it an enemy rather than a moving hazard: it **chases**
+weakly (a small floor-wards acceleration, so you can't wait it out — downhill it comes fast, uphill
+it crawls, and a tilt always wins), and it can be **killed**: bowled over by a heavy prop arriving
+at speed, or rolled into spikes or fire.
+
+**Breakable crate** — blocks the way until something with mass ≥ 1.2 approaches it at ≥ 3 m/s. The
+player is mass 1.0, so the ball can lean on it forever; only a rock with real momentum breaks it.
+
+Detection differs between the two, and the reason is a PhysX detail worth knowing. An enemy is its
+own rigidbody, so rock-vs-enemy is a fresh actor pair and the rock's `OnCollisionEnter` fires.
+A crate is a child collider of the level's compound kinematic body — the same body the rolling rock
+is already touching through the floor — so the crate contact arrives as a *Stay* on the existing
+pair and `Enter` never comes. `Breakable` therefore detects the hit itself in `FixedUpdate`: it
+walks `DynamicRegistry`, takes each heavy body's approach speed along the line to the crate, and
+breaks when the surface gap will close this step. Same explicit-query pattern as `Hazard`,
+`PressurePlate` and `WaterVolume`.
+
+**A lost rock comes back.** A hard fling can hop a rock clean off the island (the rising side of
+the floor kicks it). `DynamicProp` notices when a prop passes the fall radius and puts it back at
+its start cell — in the level's *current* orientation, with a puff — so a plate or crate level can
+never be soft-locked. Enemies opt out (`respawnIfLost = false`); an enemy that falls off is dead.
+
+**Pressure plates now need a rock.** The player rolling onto a plate does nothing. With the player
+able to press, every plate level collapsed into "tilt towards the plate"; requiring a parked rock
+is what makes them two-move puzzles.
+
+Levels are split into three chapters, each with its own **night** sky (`SkyTheme`: dusk, ember,
+night — differing in hue, not brightness). The daytime backdrop read as flat and grey against the
+reference sheet's night card; a dark sky is what lets the lit island, the amber door and the gems
+carry the frame. The backdrop shader's pool of light behind the island does most of the work of
+making a dark sky read as atmosphere rather than as a black screen.
+
+The post stack is now a real grade: ACES tonemapping, contrast +20, saturation +16, split toning
+(cool `#2C3F6E` shadows, warm `#FFD6A3` highlights), a proper vignette, and bloom raised for the
+emissives. Ambient came down to `#5E6E8C` and the key light up to 1.55 so the island stays the
+brightest lit thing against the dark.
 
 ## Water
 
@@ -321,6 +371,26 @@ on a phone but cannot go to a store as-is. The Editor's bundled SDK/NDK/OpenJDK 
 else needs installing. Expect the first Android build to take several minutes: switching target
 re-imports every asset for the platform, then IL2CPP compiles the whole game to C++.
 
+## UI package
+
+The UI uses **Unity UI Extensions** (`com.unity.uiextensions` 2.3.2, MIT) from the OpenUPM
+registry — it's in `Packages/manifest.json` with a scoped registry, so it installs on project open
+with no Asset Store login. It is a set of effects on top of uGUI rather than a replacement for it:
+`PtwScene.Gloss()` puts a vertical `Gradient` (multiply mode, so hue and press-tint survive) plus
+uGUI's own `Outline` and `Shadow` on every button, the settings card and the toggle tracks. That is
+the difference between a flat pill and a button.
+
+Things worth knowing if you touch it:
+* The package's `NicerOutline` is an **empty stub** in this Unity version — its real body is behind
+  an `#else` for older Unity, so it compiles with no members. Use the built-in `Outline`.
+* `UnityEngine.UI.Extensions.Gradient` collides with `UnityEngine.Gradient` (used by the particle
+  code), so it is fully qualified rather than imported.
+* Mesh effects do nothing on TextMeshPro — TMP doesn't go through `VertexHelper`. Text legibility is
+  still the TMP shadow material's job.
+* The manifest must be **UTF-8 without BOM**. PowerShell's `Set-Content -Encoding UTF8` writes a
+  BOM and Unity's Package Manager then rejects the whole manifest as invalid JSON ("Non-whitespace
+  before {"), silently skipping the package.
+
 ## Juice
 
 None of this uses a tween library. The project already had an unconditionally stable spring
@@ -353,7 +423,7 @@ reports success. This cost half of the levels in one build — `DynamicProp` was
 
 ## Tests
 
-18 PlayMode tests. They assert the promises v2 makes, which are nearly the opposite of v1's:
+25 PlayMode tests. They assert the promises v2 makes, which are nearly the opposite of v1's:
 
 * the camera **never** moves — the one invariant inherited unchanged
 * gravity is constant and points down, before and after rotation
@@ -371,6 +441,9 @@ reports success. This cost half of the levels in one build — `DynamicProp` was
 * restart-all needs two taps, and the second really does wipe progress and go to level 1
 * water floats the player (it comes to rest near the surface, alive, not on the bed)
 * pouring a pool onto a fire puts it out, and drains the pool doing it
+* the player cannot press a plate; a rock can
+* an enemy kills on contact; the rock in level 21 bowls it over when you tilt toward the door
+* the rock in level 22 breaks the crate; the ball alone, same tilt, does not
 
 The suite snapshots your saved progress before the first test and restores it after the last.
 `PhysicsNeverExplodes` legitimately wins levels while sweeping them, and before that guard a test
@@ -404,7 +477,6 @@ v2 lives on `prototype/rotate-gravity-v2`. Nothing about v2 can damage v1.
 
 * **Level design needs a play pass.** See the section above — the layouts are deliberately safe and
   therefore thinner than they should be.
-* **No enemies and no breakables** yet. Both were in the brief; neither is in the build.
 * The **moving platform** is the least-tested mechanic. It is built quite differently from the gate
   on purpose: a gate only has to block, so it is a plain child collider of the compound body, but a
   platform has to *carry* the player, and a child collider of a compound kinematic body has no

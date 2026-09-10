@@ -55,10 +55,10 @@ namespace PullTheWorld.EditorTools
         // Stone was the one material both independent samples initially got wrong (averaging
         // across the bright and dark concept cards dragged it ~27 points too dark). Re-measured
         // on the LEVEL 1 card alone: lit #A6ABB6, mid #7C8087, shadow #494D52.
-        public static readonly Color Stone = Hex("#99A1AB");
-        public static readonly Color StoneMid = Hex("#868E98");
-        public static readonly Color StoneDark = Hex("#68717C");
-        public static readonly Color StoneLight = Hex("#B1B9C2");
+        public static readonly Color Stone = Hex("#8D97A8");
+        public static readonly Color StoneMid = Hex("#7A8496");
+        public static readonly Color StoneDark = Hex("#5E6879");
+        public static readonly Color StoneLight = Hex("#A4AEC0");
         public static readonly Color Dirt = Hex("#8A6B4A");
         public static readonly Color Wood = Hex("#B08052");
         public static readonly Color WoodDark = Hex("#7A5433");
@@ -111,6 +111,8 @@ namespace PullTheWorld.EditorTools
         public const string MPortalEnergy = "M_PortalEnergy";
         public const string MWater = "M_Water";
         public const string MWaterBody = "M_WaterBody";
+        public const string MEnemy = "M_Enemy";
+        public const string MEnemySpike = "M_EnemySpike";
         public const string MOcean = "M_Ocean";
         public const string MFarStone = "M_FarStone";
         public const string MFarGrass = "M_FarGrass";
@@ -156,8 +158,15 @@ namespace PullTheWorld.EditorTools
             // heavily desaturated, so it reads as far away rather than as level geometry the
             // player cannot reach. It still has to be VISIBLE though - it is the static reference
             // the moving world is judged against.
-            Lit(MFarStone, Hex("#7E8A9A"), 0.08f);
-            Lit(MFarGrass, Hex("#6E7E68"), 0.06f);
+            // Darkened for the night skies: at the old values the islets floated in the dark like
+            // lit models rather than distant scenery.
+            Lit(MFarStone, Hex("#4E5A6C"), 0.08f);
+            Lit(MFarGrass, Hex("#3F4D44"), 0.06f);
+
+            // Enemy: a bruised magenta that is in nobody else's palette, with near-black spikes.
+            // Hostile has to read in one glance against grey rock and green grass.
+            Lit(MEnemy, Hex("#8E3060"), 0.22f);
+            Lit(MEnemySpike, Hex("#3A1A2C"), 0.30f);
 
             // The key has to out-read every rock in the level from across the screen, so it gets a
             // real emissive rather than just a bright albedo. Kept below the door's amber so the
@@ -201,7 +210,7 @@ namespace PullTheWorld.EditorTools
             m.SetColor("_TopColor", BgTop);
             m.SetColor("_BottomColor", BgBottom);
             m.SetColor("_GlowColor", Hex("#F0F6FF"));
-            m.SetFloat("_GlowStrength", 0.46f);
+            m.SetFloat("_GlowStrength", 0.62f);
             m.SetVector("_GlowCenter", new Vector4(0f, 0.04f, 0f, 0f));
             m.SetFloat("_GlowRadius", 0.66f);
             m.SetFloat("_GlowAspect", 1.4f);
