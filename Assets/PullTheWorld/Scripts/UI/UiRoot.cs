@@ -59,6 +59,18 @@ namespace PullTheWorld
         [Tooltip("Seconds the armed 'tap again' state lasts before it quietly disarms.")]
         [SerializeField] float restartArmSeconds = 3.5f;
 
+        [Header("Chapter card")]
+        [Tooltip("Fades in over the first level of each chapter: 'CHAPTER II' and the sky's name.")]
+        [SerializeField] CanvasGroup chapterCard;
+        [SerializeField] TMP_Text chapterNumber;
+        [SerializeField] TMP_Text chapterName;
+        [SerializeField] float chapterCardSeconds = 2.4f;
+
+        [Header("Gem flight")]
+        [Tooltip("A gem icon that flies from where a gem was picked up to the HUD counter.")]
+        [SerializeField] Image flyIcon;
+        [SerializeField] float flySeconds = 0.45f;
+
         [Header("Screen flash")]
         [SerializeField] Image flashImage;
         [SerializeField] Color winFlash = new Color(1f, 0.95f, 0.75f, 0.45f);
@@ -79,8 +91,11 @@ namespace PullTheWorld
         Coroutine disarm;
         bool paused;
 
+        public static UiRoot Instance { get; private set; }
+
         void Awake()
         {
+            Instance = this;
             if (!levels) levels = LevelManager.Instance
                 ? LevelManager.Instance
                 : FindFirstObjectByType<LevelManager>();
@@ -121,6 +136,11 @@ namespace PullTheWorld
             SetPaused(false);
         }
 
+        void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+        }
+
         void Start()
         {
             PullSettingsIntoToggles();
@@ -137,6 +157,7 @@ namespace PullTheWorld
             bool menu = s == Screen.MainMenu;
             bool playing = s == Screen.Playing;
             bool complete = s == Screen.LevelComplete;
+            if (menu) shownChapter = -1;            // coming back from the menu re-introduces the chapter
 
             if (immediate)
             {
@@ -295,6 +316,94 @@ namespace PullTheWorld
             PunchOn(levelLabel, 0.6f);
             SetRotationInput(true);
             if (onboarding) onboarding.Begin(def);
+
+            // First level of a chapter (or first level after the menu): a title card.
+            int chapter = ChapterOf(levels ? levels.CurrentIndex : 0);
+            if (chapter != shownChapter)
+            {
+                shownChapter = chapter;
+                ShowChapterCard(chapter);
+            }
+        }
+
+        // ------------------------------------------------------------------ chapter card ----
+        int shownChapter = -1;
+        SkyTheme sky;
+        Coroutine cardRoutine;
+
+        int ChapterOf(int levelIndex)
+        {
+            if (!sky) sky = FindFirstObjectByType<SkyTheme>();
+            return sky && levels ? sky.ChapterFor(levelIndex, levels.LevelCount) : 0;
+        }
+
+        static string Roman(int n) => n switch
+        {
+            1 => "I", 2 => "II", 3 => "III", 4 => "IV", 5 => "V", 6 => "VI", _ => n.ToString(),
+        };
+
+        void ShowChapterCard(int chapter)
+        {
+            if (!chapterCard) return;
+            if (chapterNumber) chapterNumber.text = $"CHAPTER {Roman(chapter + 1)}";
+            if (chapterName) chapterName.text = sky ? sky.ChapterName(chapter).ToUpperInvariant() : "";
+            if (cardRoutine != null) StopCoroutine(cardRoutine);
+            cardRoutine = StartCoroutine(ChapterCardRoutine());
+        }
+
+        System.Collections.IEnumerator ChapterCardRoutine()
+        {
+            var rt = chapterCard.transform as RectTransform;
+            float t = 0f, total = Mathf.Max(0.8f, chapterCardSeconds);
+            const float fadeIn = 0.35f, fadeOut = 0.55f;
+            while (t < total)
+            {
+                t += Time.unscaledDeltaTime;
+                float a = Mathf.Min(Mathf.Clamp01(t / fadeIn), Mathf.Clamp01((total - t) / fadeOut));
+                chapterCard.alpha = Mathf.SmoothStep(0f, 1f, a);
+                if (rt) rt.localScale = Vector3.one * Mathf.Lerp(1.06f, 1f, Mathf.Clamp01(t / (fadeIn * 1.6f)));
+                yield return null;
+            }
+            chapterCard.alpha = 0f;
+            cardRoutine = null;
+        }
+
+        // -------------------------------------------------------------------- gem flight ----
+        /// <summary>A gem icon flies from a world point to the HUD counter, which punches when it lands.</summary>
+        public void FlyKey(Vector3 worldPosition)
+        {
+            if (!flyIcon || !keyGroup) return;
+            StartCoroutine(FlyRoutine(worldPosition));
+        }
+
+        System.Collections.IEnumerator FlyRoutine(Vector3 worldPosition)
+        {
+            var canvas = GetComponentInParent<Canvas>();
+            var canvasRt = canvas ? canvas.transform as RectTransform : null;
+            var cam = canvas ? canvas.worldCamera : null;
+            if (!canvasRt || !Camera.main) yield break;
+
+            Vector2 startScreen = Camera.main.WorldToScreenPoint(worldPosition);
+            Vector2 endScreen = RectTransformUtility.WorldToScreenPoint(cam, keyGroup.transform.position);
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRt, startScreen, cam, out var from);
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRt, endScreen, cam, out var to);
+
+            var rt = flyIcon.rectTransform;
+            flyIcon.gameObject.SetActive(true);
+            float t = 0f, total = Mathf.Max(0.1f, flySeconds);
+            while (t < total)
+            {
+                t += Time.deltaTime;
+                float k = Mathf.Clamp01(t / total);
+                float e = k * k * (3f - 2f * k);                         // ease in-out
+                Vector2 p = Vector2.Lerp(from, to, e);
+                p.y += Mathf.Sin(k * Mathf.PI) * 90f;                    // a little arc
+                rt.anchoredPosition = p;
+                rt.localScale = Vector3.one * Mathf.Lerp(1.25f, 0.7f, e);
+                yield return null;
+            }
+            flyIcon.gameObject.SetActive(false);
+            PunchOn(keyGroup.transform, 1.1f);
         }
 
         void HandleKeysChanged(int collected, int required)

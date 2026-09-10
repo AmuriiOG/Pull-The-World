@@ -78,6 +78,21 @@ namespace PullTheWorld
         [Header("Look")]
         [SerializeField] Color eyeColor = new Color(1f, 0.20f, 0.12f);
         [SerializeField] Color auraColor = new Color(1f, 0.10f, 0.18f);
+        [Tooltip("Body scale relative to the collider. A little oversize so it carries on a phone.")]
+        [SerializeField] float visualScale = 1.12f;
+
+        // ---- screen-wide threat, read by DangerVignette -----------------------------------
+        static float threat;
+        static int threatFrame;
+
+        /// <summary>0..1: how closely the most dangerous alert enemy is hunting the player. Zero when none is.</summary>
+        public static float CurrentThreat => threatFrame >= Time.frameCount - 1 ? threat : 0f;
+
+        static void ReportThreat(float v)
+        {
+            if (threatFrame != Time.frameCount) { threat = 0f; threatFrame = Time.frameCount; }
+            threat = Mathf.Max(threat, v);
+        }
 
         static readonly int EmissionColor = Shader.PropertyToID("_EmissionColor");
         static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
@@ -187,7 +202,7 @@ namespace PullTheWorld
             float s = breathe * (windup > 0f ? 0.84f : 1f);
             if (visual)
             {
-                visual.localScale = new Vector3(1f / Mathf.Sqrt(s), s, 1f / Mathf.Sqrt(s));
+                visual.localScale = new Vector3(1f / Mathf.Sqrt(s), s, 1f / Mathf.Sqrt(s)) * visualScale;
                 // Upright, leaning towards you when hunting. The body rolls; the face does not.
                 float lean = alert ? -Mathf.Sign(toPlayer.x) * 9f : 0f;
                 visual.rotation = Quaternion.Euler(0f, 0f, lean);
@@ -229,6 +244,7 @@ namespace PullTheWorld
 
             if (alert)
             {
+                if (player && player.IsAlive) ReportThreat(Mathf.Clamp01(1.15f - toPlayer.magnitude / alertRange));
                 growlTimer -= dt;
                 if (growlTimer <= 0f)
                 {

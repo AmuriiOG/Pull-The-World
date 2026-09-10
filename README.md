@@ -439,6 +439,26 @@ Things worth knowing if you touch it:
 
 ## Juice
 
+The second juice pass (all visual/audio, none of it touches the ball's body):
+
+* **Fireflies** drift through the sky, tinted to the chapter's glow by `SkyTheme`.
+* **The ball blinks** and its eyes go wide while airborne (`BallFace`), and it leaves a soft streak
+  above 4.5 m/s (`BallTrail`, on a non-rolling child, cleared on any teleport so a restart never
+  draws a line from the death spot to spawn).
+* **Danger vignette** (`DangerVignette`): while an enemy is hunting you the screen edges darken
+  and redden with a slow heartbeat, driven by `Enemy.CurrentThreat`. Works on the Volume's runtime
+  profile copy so it never dirties the asset.
+* **Camera kick** (`PlaneCameraRig.Kick`): a 7 % zoom-out that springs back on level load — the
+  island arrives — and a 4 % lean-in on a win.
+* **Chapter cards**: "CHAPTER II · EMBER" fades in over the first level of each chapter, and again
+  when you come back from the menu.
+* **Gem flight**: a picked-up gem flies in an arc from where it was to the HUD counter, which
+  punches when it lands.
+* **Menu sway**: the preview island breathes ±3.5° behind the title. Off the instant a level binds.
+* **Hit-stop**: 90 ms of 12 % slow motion on the frame of an on-screen death. Not on falls, which
+  restart in a quarter of a second.
+* The enemy is 12 % bigger so it carries on a phone.
+
 None of this uses a tween library. The project already had an unconditionally stable spring
 integrator (`Spring.cs`), and every bit of motion below is a spring:
 

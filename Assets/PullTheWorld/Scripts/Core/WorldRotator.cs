@@ -175,6 +175,15 @@ namespace PullTheWorld
         [Tooltip("Degrees the level starts tilted before springing to its start angle on load.")]
         [SerializeField] float introKick = 4f;
 
+        [Header("Menu")]
+        [Tooltip("The island breathes slowly behind the main menu. Off the moment a level binds.")]
+        [SerializeField] float swayDegrees = 3.5f;
+        [SerializeField] float swaySpeed = 0.75f;
+        bool idleSway;
+
+        /// <summary>Menu-only idle motion. LevelManager turns it on for the menu and off on load.</summary>
+        public bool IdleSway { get => idleSway; set => idleSway = value; }
+
         /// <summary>Teleport with no spring settle. Used on level load and restart.</summary>
         public void ApplyImmediate()
         {
@@ -247,6 +256,11 @@ namespace PullTheWorld
                 // Hitting a limit should kill the fling rather than grind against it.
                 if (angleLimit > 0f && Mathf.Abs(angleTarget) >= angleLimit - 0.001f) flingVel = 0f;
             }
+
+            // Menu only: the island breathes. Never true while a level is bound, so it cannot
+            // touch play.
+            if (idleSway && !driving)
+                angleTarget = ClampAngle(Mathf.Sin(Time.time * swaySpeed) * swayDegrees);
 
             float before = angle;
             Spring.Step(ref angle, ref angleVel, angleTarget, frequency, damping, dt);

@@ -91,6 +91,7 @@ namespace PullTheWorld
 
             PtwAudio.Play(PtwSfx.PlateOn, 1f, 1.35f);   // same chime, pitched up
             Haptics.Play(HapticKind.Pickup);
+            if (UiRoot.Instance) UiRoot.Instance.FlyKey(transform.position);   // gem flies to the counter
             LevelManager.Instance.CollectKey();
         }
 

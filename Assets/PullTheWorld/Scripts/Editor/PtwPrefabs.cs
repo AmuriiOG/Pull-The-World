@@ -70,6 +70,7 @@ namespace PullTheWorld.EditorTools
             // Rolling part - the spike ring is a sibling of Visual, so it turns with the rigidbody:
             // a creature gliding on a saw.
             var spikes = MeshNode("Spikes", "Mesh_EnemySpikes", e.transform, PtwArt.MEnemySpike);
+            spikes.transform.localScale = Vector3.one * 1.12f;    // matches Enemy.visualScale
 
             var lightGo = Node("EyeLight", visual.transform);
             lightGo.transform.localPosition = new Vector3(0f, 0.08f, -0.42f);
@@ -575,6 +576,33 @@ namespace PullTheWorld.EditorTools
 
             var pb = rig.AddComponent<PlayerBody>();
             Wire(pb, "visual", visual.transform);
+
+            // Charm and speed, both VISUAL ONLY: a blink and wide eyes in the air, and a soft
+            // streak once the ball is really moving. Neither touches the body or its settings.
+            var faceAnim = rig.AddComponent<BallFace>();
+            Wire(faceAnim, "player", pb);
+            Wire(faceAnim, "face", visual.transform.Find("Face"));
+
+            var trailGo = Node("Trail", rig.transform);           // sibling of Visual: does not roll
+            var tr = trailGo.AddComponent<TrailRenderer>();
+            tr.time = 0.22f;
+            tr.minVertexDistance = 0.04f;
+            tr.widthCurve = AnimationCurve.Linear(0f, 0.30f, 1f, 0.02f);
+            tr.numCapVertices = 4;
+            tr.numCornerVertices = 4;
+            tr.alignment = LineAlignment.View;
+            tr.textureMode = LineTextureMode.Stretch;
+            tr.sharedMaterial = PtwArt.Get(PtwArt.MTrail);
+            tr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            tr.receiveShadows = false;
+            tr.emitting = false;
+            var tg = new Gradient();
+            tg.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(new Color(0.75f, 0.85f, 1f), 1f) },
+                       new[] { new GradientAlphaKey(0.55f, 0f), new GradientAlphaKey(0f, 1f) });
+            tr.colorGradient = tg;
+            var bt = trailGo.AddComponent<BallTrail>();
+            Wire(bt, "player", pb);
+
             Save(rig, Play);
         }
 

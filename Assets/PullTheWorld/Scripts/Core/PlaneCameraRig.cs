@@ -59,10 +59,25 @@ namespace PullTheWorld
         void OnEnable() { cam = GetComponent<Camera>(); Apply(); }
         void OnValidate() { cam = GetComponent<Camera>(); Apply(); }
 
+        float zoom = 1f, zoomVel;
+
+        /// <summary>
+        /// A momentary zoom that springs back to 1 over about half a second. Above 1 on level load
+        /// (the island arrives), below 1 on a win (lean in). Visual only; framing math is unchanged.
+        /// </summary>
+        public void Kick(float scale)
+        {
+            zoom = Mathf.Clamp(scale, 0.7f, 1.4f);
+            zoomVel = 0f;
+        }
+
         void Update()
         {
-            // Only recomputes on a real resolution change, so this is free at runtime.
-            if (!Mathf.Approximately(lastAspect, CurrentAspect())) Apply();
+            bool settling = Mathf.Abs(zoom - 1f) > 0.0005f || Mathf.Abs(zoomVel) > 0.0005f;
+            if (settling) Spring.Step(ref zoom, ref zoomVel, 1f, 2.4f, 0.85f, Time.unscaledDeltaTime);
+
+            // Otherwise only recomputes on a real resolution change, so this is free at runtime.
+            if (settling || !Mathf.Approximately(lastAspect, CurrentAspect())) Apply();
         }
 
         float CurrentAspect()
@@ -104,7 +119,7 @@ namespace PullTheWorld
             // Satisfy whichever minimum is the binding constraint on this device.
             float sizeForWidth = minViewWidth / (2f * Mathf.Max(0.01f, aspect));
             float sizeForHeight = minViewHeight * 0.5f;
-            float orthoSize = Mathf.Max(sizeForWidth, sizeForHeight);
+            float orthoSize = Mathf.Max(sizeForWidth, sizeForHeight) * zoom;
             cam.orthographicSize = orthoSize;
 
             // Yaw stays 0. Roll stays 0. Only pitch.

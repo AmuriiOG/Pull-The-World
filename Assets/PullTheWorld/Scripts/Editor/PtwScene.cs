@@ -44,6 +44,7 @@ namespace PullTheWorld.EditorTools
             systems.AddComponent<GameDirector>();
             systems.AddComponent<PtwAudio>();
             systems.AddComponent<PtwMusic>();
+            systems.AddComponent<DangerVignette>();        // finds the Volume itself
 
             Camera cam = BuildCamera(out PlaneCameraRig camRig);
             BuildLighting();
@@ -149,7 +150,67 @@ namespace PullTheWorld.EditorTools
             var sky = bg.AddComponent<SkyTheme>();
             PtwPrefabs.Wire(sky, "target", bgr);
 
+            // Fireflies: a few slow motes drifting in the sky, tinted per chapter by SkyTheme.
+            // Parented to the camera like the backdrop so they are always in frame; simulated in
+            // world space so a reframe does not drag them.
+            PtwPrefabs.Wire(sky, "fireflies", MakeFireflies(go.transform));
+
             return cam;
+        }
+
+        static ParticleSystem MakeFireflies(Transform cameraTransform)
+        {
+            var go = new GameObject("Fireflies");
+            go.transform.SetParent(cameraTransform, false);
+            go.transform.localPosition = new Vector3(0f, 2f, 30f);      // about the island's plane
+
+            var ps = go.AddComponent<ParticleSystem>();
+            var main = ps.main;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.playOnAwake = true;
+            main.loop = true;
+            main.prewarm = true;
+            main.maxParticles = 40;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(6f, 11f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.08f, 0.22f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.07f, 0.17f);
+            main.startColor = new Color(0.8f, 0.85f, 1f, 1f);
+            main.gravityModifier = -0.004f;                             // drift up, barely
+
+            var em = ps.emission; em.enabled = true; em.rateOverTime = 4.5f;
+            var sh = ps.shape;
+            sh.enabled = true;
+            sh.shapeType = ParticleSystemShapeType.Box;
+            sh.scale = new Vector3(30f, 48f, 8f);
+
+            var noise = ps.noise;
+            noise.enabled = true;
+            noise.strength = 0.35f;
+            noise.frequency = 0.25f;
+            noise.scrollSpeed = 0.15f;
+            noise.damping = true;
+
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            var g = new Gradient();
+            g.SetKeys(
+                new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(0.9f, 0.25f),
+                        new GradientAlphaKey(0.9f, 0.7f), new GradientAlphaKey(0f, 1f) });
+            col.color = new ParticleSystem.MinMaxGradient(g);
+
+            var sz = ps.sizeOverLifetime;                               // twinkle
+            sz.enabled = true;
+            sz.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+                new Keyframe(0f, 0.4f), new Keyframe(0.3f, 1f), new Keyframe(0.55f, 0.5f),
+                new Keyframe(0.8f, 1f), new Keyframe(1f, 0.3f)));
+
+            var rend = go.GetComponent<ParticleSystemRenderer>();
+            rend.sharedMaterial = PtwArt.Get(PtwArt.MParticleAdd);
+            rend.renderMode = ParticleSystemRenderMode.Billboard;
+            rend.shadowCastingMode = ShadowCastingMode.Off;
+            rend.receiveShadows = false;
+            return ps;
         }
 
         // ====================================================================== lighting =====
@@ -882,8 +943,45 @@ namespace PullTheWorld.EditorTools
             flash.color = Color.clear;
             flash.raycastTarget = false;
 
+            // ============================================================ chapter card =======
+            // Two lines over the sky, above the island, faded in by UiRoot on the first level of
+            // each chapter. Sits above every panel and never takes input.
+            var cardGo = new GameObject("ChapterCard", typeof(RectTransform), typeof(CanvasGroup));
+            cardGo.transform.SetParent(canvasGo.transform, false);
+            Stretch(cardGo.GetComponent<RectTransform>());
+            var cardGroup = cardGo.GetComponent<CanvasGroup>();
+            cardGroup.alpha = 0f;
+            cardGroup.blocksRaycasts = false;
+            cardGroup.interactable = false;
+            var chapterNumber = Text(cardGo.transform, "ChapterNumber", "CHAPTER I", bold, 64f,
+                                     new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 580f),
+                                     new Vector2(900f, 90f), TextAlignmentOptions.Center, Color.white, shadowBold);
+            chapterNumber.characterSpacing = 10f;
+            var chapterName = Text(cardGo.transform, "ChapterName", "DUSK", semi, 40f,
+                                   new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 516f),
+                                   new Vector2(900f, 60f), TextAlignmentOptions.Center,
+                                   new Color(1f, 1f, 1f, 0.75f), shadowSemi);
+            chapterName.characterSpacing = 14f;
+
+            // The gem that flies from a pickup to the counter. Hidden until UiRoot animates it.
+            var flyGo = new GameObject("FlyingGem", typeof(RectTransform), typeof(Image));
+            flyGo.transform.SetParent(canvasGo.transform, false);
+            var flyRt = flyGo.GetComponent<RectTransform>();
+            flyRt.anchorMin = flyRt.anchorMax = new Vector2(0.5f, 0.5f);
+            flyRt.pivot = new Vector2(0.5f, 0.5f);
+            flyRt.sizeDelta = new Vector2(56f, 56f);
+            var flyImg = flyGo.GetComponent<Image>();
+            flyImg.sprite = MakeGemSprite();
+            flyImg.color = PtwArt.Hex("#FFD96B");
+            flyImg.raycastTarget = false;
+            flyGo.SetActive(false);
+
             // ================================================================== wire =========
             var root = canvasGo.AddComponent<UiRoot>();
+            PtwPrefabs.Wire(root, "chapterCard", cardGroup);
+            PtwPrefabs.Wire(root, "chapterNumber", chapterNumber);
+            PtwPrefabs.Wire(root, "chapterName", chapterName);
+            PtwPrefabs.Wire(root, "flyIcon", flyImg);
             PtwPrefabs.Wire(root, "mainMenu", menuGroup);
             PtwPrefabs.Wire(root, "hud", hudGroup);
             PtwPrefabs.Wire(root, "levelComplete", doneGroup);

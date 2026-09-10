@@ -44,6 +44,9 @@ namespace PullTheWorld
         [Tooltip("Restart delay when the ball fell out of the world instead. There is nothing on " +
                  "screen to look at, so the pause that lets a death pop read is just a wait.")]
         [SerializeField] float fallRestartDelay = 0.2f;
+        [Tooltip("Realtime seconds of slow motion on the frame of an on-screen death. Zero disables.")]
+        [SerializeField] float hitStopSeconds = 0.09f;
+        [SerializeField, Range(0.02f, 1f)] float hitStopScale = 0.12f;
         [Tooltip("Off means the level-complete panel waits for a tap instead of auto-advancing.")]
         [SerializeField] bool autoAdvance;
 
@@ -95,6 +98,7 @@ namespace PullTheWorld
         void Start()
         {
             SetState(LevelState.Menu);
+            if (rotator) rotator.IdleSway = true;
             if (cameraRig) cameraRig.FrameExtents(menuViewExtents);
             // The scene opens on the menu; UiRoot decides when to actually start a level.
             //
@@ -143,10 +147,18 @@ namespace PullTheWorld
 
             // Order matters - see the class comment.
             if (rotator)
+            {
+                rotator.IdleSway = false;
                 rotator.BindLevel(current.startAngle, current.allowRotation, current.angleLimit);
+            }
 
-            // Framed before the player spawns so the first frame is already composed.
-            if (cameraRig) cameraRig.FrameExtents(current.viewExtents);
+            // Framed before the player spawns so the first frame is already composed. The kick
+            // is a small zoom that settles over the first half-second: the island arrives.
+            if (cameraRig)
+            {
+                cameraRig.FrameExtents(current.viewExtents);
+                cameraRig.Kick(1.07f);
+            }
             if (sky) sky.Apply(sky.ChapterFor(index, LevelCount));
 
             keysRequired = Mathf.Max(0, current.requiredKeys);
@@ -173,7 +185,7 @@ namespace PullTheWorld
             if (current) { Destroy(current.gameObject); current = null; }
             DynamicRegistry.Prune();
             if (player) player.gameObject.SetActive(false);
-            if (rotator) rotator.CancelDrive();
+            if (rotator) { rotator.CancelDrive(); rotator.IdleSway = true; }
             if (cameraRig) cameraRig.FrameExtents(menuViewExtents);
             if (sky) sky.Apply(0);
             SetState(LevelState.Menu);
@@ -206,6 +218,7 @@ namespace PullTheWorld
             GameProgress.ReportCleared(index);
             OnLevelWon?.Invoke(current);
 
+            if (cameraRig) cameraRig.Kick(0.96f);        // lean in as the ball is drawn into the door
             pending = StartCoroutine(WinRoutine());
         }
 
@@ -235,7 +248,17 @@ namespace PullTheWorld
 
         IEnumerator FailRoutine()
         {
-            yield return new WaitForSeconds(player && player.Fell ? fallRestartDelay : failRestartDelay);
+            bool fell = player && player.Fell;
+            if (!fell && hitStopSeconds > 0f)
+            {
+                // A blink of slow motion on the frame of death - the classic hit-stop. Realtime, so
+                // it is the same length whatever the time scale is doing. Not for falls: there is
+                // nothing on screen to freeze.
+                Time.timeScale = hitStopScale;
+                yield return new WaitForSecondsRealtime(hitStopSeconds);
+                if (Mathf.Approximately(Time.timeScale, hitStopScale)) Time.timeScale = 1f;
+            }
+            yield return new WaitForSeconds(fell ? fallRestartDelay : failRestartDelay);
             pending = null;
             Restart();
         }

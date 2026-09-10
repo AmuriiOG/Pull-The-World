@@ -27,6 +27,8 @@ namespace PullTheWorld
         }
 
         [SerializeField] Renderer target;
+        [Tooltip("Optional drifting motes over the sky - fireflies - tinted to the chapter's glow.")]
+        [SerializeField] ParticleSystem fireflies;
         [SerializeField] float blendSpeed = 2.6f;
 
         // All three are NIGHT skies now, differing in hue rather than in brightness. The daytime
@@ -89,6 +91,12 @@ namespace PullTheWorld
             if (!initialised) { current = want; Push(); initialised = true; }
         }
 
+        /// <summary>The palette's name, used for the chapter title card.</summary>
+        public string ChapterName(int chapter) =>
+            palettes != null && palettes.Length > 0
+                ? palettes[Mathf.Clamp(chapter, 0, palettes.Length - 1)].name
+                : "";
+
         /// <summary>Which chapter a level index falls in, spreading the palettes evenly.</summary>
         public int ChapterFor(int levelIndex, int levelCount)
         {
@@ -112,6 +120,13 @@ namespace PullTheWorld
             mat.SetColor(TopId, current.top);
             mat.SetColor(BottomId, current.bottom);
             mat.SetColor(GlowId, current.glow);
+            if (fireflies)
+            {
+                var main = fireflies.main;
+                Color c = current.glow * 1.7f;
+                c.a = 1f;
+                main.startColor = c;
+            }
         }
 
         void OnDestroy()

@@ -116,6 +116,7 @@ namespace PullTheWorld.EditorTools
         public const string MEnemyTeeth = "M_EnemyTeeth";
         public const string MGlowEvil = "M_GlowEvil";
         public const string MEnemyAura = "M_EnemyAura";
+        public const string MTrail = "M_Trail";
         public const string MOcean = "M_Ocean";
         public const string MFarStone = "M_FarStone";
         public const string MFarGrass = "M_FarGrass";
@@ -196,6 +197,7 @@ namespace PullTheWorld.EditorTools
             UnlitTextured(MAnchorRing, ringTex, Cyan * 1.5f, additive: true);
             UnlitTextured(MPortalGlow, glowTex, Warm * 1.4f, additive: true);
             UnlitTextured(MEnemyAura, glowTex, new Color(1f, 0.10f, 0.18f, 0.45f), additive: true);
+            UnlitTextured(MTrail, glowTex, new Color(1f, 1f, 1f, 0.6f), additive: true);
             MultiplyTextured(MBlobShadow, shadowTex);
             UnlitTextured(MParticleAdd, blobTex, Color.white, additive: true);
             UnlitTextured(MParticleSoft, blobTex, Color.white, additive: false);

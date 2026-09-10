@@ -748,6 +748,24 @@ namespace PullTheWorld.Tests
         /// explicitly also pins an exact 1080x1920 portrait frame regardless of the host window,
         /// which is what makes the shots comparable to each other and to the reference sheet.
         /// </summary>
+        /// <summary>
+        /// Overwrite a capture, retrying briefly if another process (an IDE indexing the folder, a
+        /// previewer) has it memory-mapped - Win32 error 1224. A locked screenshot must never fail
+        /// the suite; if it stays locked the shot goes to a sidecar name instead.
+        /// </summary>
+        static void WritePng(string path, byte[] bytes)
+        {
+            for (int attempt = 0; attempt < 6; attempt++)
+            {
+                try { File.WriteAllBytes(path, bytes); return; }
+                catch (IOException) { System.Threading.Thread.Sleep(150); }
+            }
+            string alt = Path.Combine(Path.GetDirectoryName(path) ?? "",
+                                      Path.GetFileNameWithoutExtension(path) + ".new.png");
+            File.WriteAllBytes(alt, bytes);
+            Debug.LogWarning($"PTW_CAPTURE_LOCKED {Path.GetFileName(path)} -> wrote {Path.GetFileName(alt)}");
+        }
+
         IEnumerator Grab(string path)
         {
             yield return null;   // let one full frame of animation/VFX advance
@@ -773,7 +791,7 @@ namespace PullTheWorld.Tests
                 tex.ReadPixels(new Rect(0f, 0f, ShotWidth, ShotHeight), 0, 0);
                 tex.Apply(false);
 
-                File.WriteAllBytes(path, tex.EncodeToPNG());
+                WritePng(path, tex.EncodeToPNG());
                 Debug.Log($"PTW_CAPTURE {Path.GetFileName(path)} {ShotWidth}x{ShotHeight}");
             }
             finally
