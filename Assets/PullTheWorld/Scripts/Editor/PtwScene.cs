@@ -463,7 +463,12 @@ namespace PullTheWorld.EditorTools
         static void BuildBackdropScenery()
         {
             var layer = new GameObject("StaticBackdrop");
-            layer.transform.position = new Vector3(0f, -4.5f, 18f);
+            // The camera is pitched 20 degrees, so anything far along +Z projects UPWARD on screen
+            // (screen height ~ 0.94*y + 0.34*z). At y = -4.5 the nearest islets landed at grass
+            // level and, on the thin two-row levels, poked out from behind the floor looking like a
+            // stray dark slab with a tree on it. Four metres lower keeps every piece below even the
+            // thinnest island; the tall ones still hide the rest behind their blocks.
+            layer.transform.position = new Vector3(0f, -8.5f, 18f);
 
             var grass = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Blocks + "/Block_Grass.prefab");
             var stone = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Blocks + "/Block_Stone.prefab");
