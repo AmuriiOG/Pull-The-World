@@ -50,12 +50,43 @@ namespace PullTheWorld
         {
             if (player != null) player.OnImpact += HandleImpact;
             if (rotator != null) rotator.OnRotationTick += HandleTick;
+            var lm = LevelManager.Instance ? LevelManager.Instance : FindFirstObjectByType<LevelManager>();
+            if (lm != null)
+            {
+                lm.OnLevelWon += HandleWon;
+                lm.OnLevelFailed += HandleFailed;
+                levelsHooked = lm;
+            }
         }
 
         void OnDisable()
         {
             if (player != null) player.OnImpact -= HandleImpact;
             if (rotator != null) rotator.OnRotationTick -= HandleTick;
+            if (levelsHooked != null)
+            {
+                levelsHooked.OnLevelWon -= HandleWon;
+                levelsHooked.OnLevelFailed -= HandleFailed;
+                levelsHooked = null;
+            }
+        }
+
+        LevelManager levelsHooked;
+
+        /// <summary>
+        /// The two moments that most need to LAND. A win or a death that just stops the ball reads
+        /// as a bug; a burst at the ball plus a proper shake reads as an event.
+        /// </summary>
+        void HandleWon(LevelDefinition _)
+        {
+            if (dust && player) { dust.transform.position = player.transform.position; dust.Emit(22); }
+            if (rotator) rotator.AddShake(0.35f);
+        }
+
+        void HandleFailed(LevelDefinition _)
+        {
+            if (dust && player) { dust.transform.position = player.transform.position; dust.Emit(28); }
+            if (rotator) rotator.AddShake(0.7f);
         }
 
         void HandleImpact(float strength, Vector3 point)

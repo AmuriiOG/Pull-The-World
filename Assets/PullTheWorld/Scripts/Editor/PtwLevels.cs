@@ -42,13 +42,15 @@ namespace PullTheWorld.EditorTools
     public static class PtwLevels
     {
         public const string Dir = "Assets/PullTheWorld/Prefabs/Levels";
-        public const int Count = 10;
+        public const int Count = 18;
 
         public static void BuildAll()
         {
             PtwPaths.EnsureFolder(Dir);
             Level01(); Level02(); Level03(); Level04(); Level05();
             Level06(); Level07(); Level08(); Level09(); Level10();
+            Level11(); Level12(); Level13(); Level14();
+            Level15(); Level16(); Level17(); Level18();
             AssetDatabase.SaveAssets();
         }
 
@@ -303,6 +305,173 @@ namespace PullTheWorld.EditorTools
             b.Save();
         }
 
+
+        /// <summary>
+        /// Two gems, on opposite sides, with the door between them. The first level that cannot be
+        /// solved by picking a direction and committing - you have to go left, come back, and the
+        /// door you passed on the way is only live once you hold both.
+        /// </summary>
+        static void Level11()
+        {
+            var b = new Builder(11, "Both Gems")
+            { RequiredKeys = 2, AngleLimit = 70f };
+            b.Map(
+                "# . K P . . D . . K . #",
+                "# g g g g g g g g g g #",
+                "# g g g g g g g g g g #",
+                "# g g g g g g g g g g #",
+                ". g g g g g g g g g g .",
+                ". . g g g g g g g g . .",
+                ". . . g g g g g g . . ."
+            );
+            b.Save();
+        }
+
+        /// <summary>
+        /// Fire at both ends and the door in the middle. Nothing here is hard to reach; the whole
+        /// level is about NOT overshooting, which is the first time the angle has to be judged
+        /// rather than just chosen.
+        /// </summary>
+        static void Level12()
+        {
+            var b = new Builder(12, "Careful Now") { AngleLimit = 60f };
+            b.Map(
+                "# f . . P . . D . . . f #",
+                "# g g g g g g g g g g g #",
+                "# g g g g g g g g g g g #",
+                "# g g g g g g g g g g g #",
+                ". g g g g g g g g g g g .",
+                ". . g g g g g g g g g . .",
+                ". . . g g g g g g g . . ."
+            );
+            b.Save();
+        }
+
+        /// <summary>
+        /// Two rocks and one plate. Only one of them can be in the corner, and the other ends up in
+        /// the way - so this is the first level where the props interfere with each other rather
+        /// than just with you.
+        /// </summary>
+        static void Level13()
+        {
+            var b = new Builder(13, "Rock Traffic") { AngleLimit = 70f };
+            b.Map(
+                "# . P . b . b . X . D #",
+                "# p g g g g g g g g g #",
+                "# d g g g g g g g g g #",
+                "# g g g g g g g g g g #",
+                ". g g g g g g g g g g .",
+                ". . g g g g g g g g . .",
+                ". . . g g g g g g . . ."
+            );
+            b.Save();
+        }
+
+        /// <summary>
+        /// Gem, door, and a spiked notch immediately past the door. The gem is on the way, so the
+        /// only real question is whether you can stop.
+        /// </summary>
+        static void Level14()
+        {
+            var b = new Builder(14, "Stop at the Door")
+            { RequiredKeys = 1, AngleLimit = 70f };
+            b.Map(
+                "# . P . . . . . K D . #",
+                "# g g g g g g g g g k #",
+                "# g g g g g g g g g s #",
+                "# g g g g g g g g g g #",
+                ". g g g g g g g g g g .",
+                ". . g g g g g g g g . .",
+                ". . . g g g g g g . . ."
+            );
+            b.Save();
+        }
+
+        /// <summary>
+        /// Everything from the first half at once, in three deliberate moves: left to park the rock
+        /// and pick up the near gem, right for the far gem through the opened gate, and the door is
+        /// on the way back.
+        /// </summary>
+        static void Level15()
+        {
+            var b = new Builder(15, "Three Moves")
+            { RequiredKeys = 2, AngleLimit = 75f };
+            b.Map(
+                "# . K P . b . X . K D #",
+                "# p g g g g g g g g g #",
+                "# d g g g g g g g g g #",
+                "# g g g g g g g g g g #",
+                ". g g g g g g g g g g .",
+                ". . g g g g g g g g . .",
+                ". . . g g g g g g . . ."
+            );
+            b.Save();
+        }
+
+        /// <summary>
+        /// The ferry again, now carrying you to a gem rather than just across. The deck sits level
+        /// with both ledges, so boarding is a roll rather than a climb.
+        /// </summary>
+        static void Level16()
+        {
+            var b = new Builder(16, "Ferry to the Gem")
+            { RequiredKeys = 1, AngleLimit = 45f };
+            b.Map(
+                "# . P . . . . . K D . #",
+                "# g g g M . . . g g g #",
+                "# g g g . . . . g g g #",
+                "# g g g k k k k g g g #",
+                "# g g g s s s s g g g #",
+                ". g g g g g g g g g g .",
+                ". . g g g g g g g g . ."
+            );
+            b.Save();
+        }
+
+        /// <summary>
+        /// Two fires, one rock. The rock puts out both on a single pass, which is the point - it
+        /// teaches that a smothered fire stays smothered before level 18 relies on it.
+        /// </summary>
+        static void Level17()
+        {
+            var b = new Builder(17, "One Rock, Two Fires")
+            { RequiredKeys = 1, AngleLimit = 70f };
+            b.Map(
+                "# . P . b . f . f K D #",
+                "# g g g g g g g g g g #",
+                "# g g g g g g g g g g #",
+                "# g g g g g g g g g g #",
+                ". g g g g g g g g g g .",
+                ". . g g g g g g g g . .",
+                ". . . g g g g g g . . ."
+            );
+            b.Save();
+        }
+
+        /// <summary>
+        /// The finale. Every piece, in a fixed order that has to be worked out:
+        ///
+        ///   right - the rock runs ahead and puts the fire out; you follow and stop at the gate
+        ///   left  - the rock parks in the corner on the plate, the gate opens behind you, and you
+        ///           collect the near gem on the way
+        ///   right - through the open gate, the far gem, then the door
+        /// </summary>
+        static void Level18()
+        {
+            var b = new Builder(18, "The Last Turn")
+            { RequiredKeys = 2, AngleLimit = 85f };
+            b.Map(
+                "# . K P . b . f . X K D #",
+                "# p g g g g g g g g g g #",
+                "# d g g g g g g g g g g #",
+                "# g g g g g g g g g g g #",
+                ". g g g g g g g g g g g .",
+                ". . g g g g g g g g g . .",
+                ". . . g g g g g g g . . ."
+            );
+            b.Save();
+        }
+
         // ======================================================================= builder =====
         class Builder
         {
@@ -434,7 +603,10 @@ namespace PullTheWorld.EditorTools
                     }
 
                     // --- moving platform -----------------------------------------------------
-                    case 'M': Prop("Platform_Moving", col, centre); break;
+                    // Mounted at the TOP of its own row, not the centre, so the platform deck is
+                    // level with the ledges either side of the pit it crosses. At cell centre it
+                    // sat half a block low and the ball had to climb onto it.
+                    case 'M': Prop("Platform_Moving", col, top); break;
 
                     // --- dynamic props -------------------------------------------------------
                     // Dropped a little above the floor so they settle on load instead of starting

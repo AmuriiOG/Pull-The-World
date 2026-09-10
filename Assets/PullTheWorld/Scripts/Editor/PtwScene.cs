@@ -29,7 +29,7 @@ namespace PullTheWorld.EditorTools
         public const string FontSemiPath = "Assets/PullTheWorld/Art/Fonts/Poppins-SemiBold SDF.asset";
 
         // Measured: a white-albedo surface in shadow sits at #697CA5, so that IS the ambient.
-        static readonly Color AmbientColor = PtwArt.Hex("#9FB2CE");
+        static readonly Color AmbientColor = PtwArt.Hex("#7D90AB");
         static readonly Color KeyColor = PtwArt.Hex("#FFF6EA");
 
         // ==================================================================== entry point ====
@@ -81,6 +81,7 @@ namespace PullTheWorld.EditorTools
             PtwPrefabs.Wire(levels, "player", player.GetComponent<PlayerBody>());
             PtwPrefabs.Wire(levels, "levelParent", worldRoot.transform);
             PtwPrefabs.Wire(levels, "cameraRig", camRig);
+            PtwPrefabs.Wire(levels, "sky", cam.GetComponentInChildren<SkyTheme>());
             levels.EditorSetLevels(PtwLevels.LoadAll());
 
             BuildBackdropScenery();
@@ -143,6 +144,10 @@ namespace PullTheWorld.EditorTools
             var fill = bg.AddComponent<ScreenFillQuad>();
             PtwPrefabs.Wire(fill, "targetCamera", cam);
 
+            // Per-chapter sky colour lives on the same quad; LevelManager drives it.
+            var sky = bg.AddComponent<SkyTheme>();
+            PtwPrefabs.Wire(sky, "target", bgr);
+
             return cam;
         }
 
@@ -167,6 +172,19 @@ namespace PullTheWorld.EditorTools
             key.shadowNormalBias = 0.28f;
             var keyData = keyGo.AddComponent<UniversalAdditionalLightData>();
             keyData.usePipelineSettings = true;
+
+            // Cool fill from the opposite side, no shadows. The key leaves every right-hand face
+            // at one flat ambient value, so a tilted island read as a grey slab with a lit top. A
+            // weak second directional puts a gradient back on those faces at zero shadow cost.
+            // Cool rather than warm so the key stays unambiguously the sun.
+            var fillGo = new GameObject("FillLight");
+            fillGo.transform.rotation = Quaternion.Euler(20f, -130f, 0f);
+            var fill = fillGo.AddComponent<Light>();
+            fill.type = LightType.Directional;
+            fill.color = PtwArt.Hex("#9FB8D8");
+            fill.intensity = 0.42f;
+            fill.shadows = LightShadows.None;
+            fillGo.AddComponent<UniversalAdditionalLightData>().usePipelineSettings = true;
 
             // Flat cool ambient. This is a measured value, not a taste call: a white surface in
             // shadow on the reference sits exactly here.
@@ -625,6 +643,15 @@ namespace PullTheWorld.EditorTools
                                   Color.white, shadowBold);
             levelLabel.characterSpacing = 6f;
 
+            // The level's name under its number. Levels have had titles since v1 and nothing
+            // showed them; a name is a cheap way to make each one feel authored rather than
+            // generated, which they all are.
+            var levelTitle = Text(hudPanel.transform, "LevelTitle", "TIP IT OVER", semi, 28f,
+                                  new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(50f, -112f),
+                                  new Vector2(560f, 40f), TextAlignmentOptions.TopLeft,
+                                  new Color(1f, 1f, 1f, 0.66f), shadowSemi);
+            levelTitle.characterSpacing = 9f;
+
             var restartBtn = RoundButton(hudPanel.transform, "RestartButton", new Vector2(1f, 1f),
                                          new Vector2(-44f, -52f), 96f, MakeRestartSprite());
             var pauseBtn = RoundButton(hudPanel.transform, "PauseButton", new Vector2(1f, 1f),
@@ -758,6 +785,12 @@ namespace PullTheWorld.EditorTools
             doneTitle.characterSpacing = 4f;
             doneTitle.enableWordWrapping = true;
 
+            var doneSub = Text(donePanel.transform, "CompleteSubtitle", "LEVEL 1 OF 18", semi, 38f,
+                               new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                               new Vector2(0f, 350f), new Vector2(800f, 60f),
+                               TextAlignmentOptions.Center, new Color(1f, 1f, 1f, 0.78f), shadowSemi);
+            doneSub.characterSpacing = 8f;
+
             var continueBtn = PillButton(donePanel.transform, "ContinueButton", "CONTINUE",
                                          bold, 54f, new Vector2(0f, -430f), new Vector2(620f, 150f),
                                          PtwArt.Hex("#5AC26A"), shadowBold);
@@ -769,31 +802,54 @@ namespace PullTheWorld.EditorTools
 
             // ============================================================== settings =========
             var setPanel = Panel(canvasGo.transform, "SettingsPanel", out var setGroup);
-            Dim(setPanel.transform, "Dim", new Color(0.04f, 0.07f, 0.10f, 0.42f));
+            Dim(setPanel.transform, "Dim", new Color(0.04f, 0.07f, 0.10f, 0.6f));
 
             var card = new GameObject("Card", typeof(RectTransform), typeof(Image));
             card.transform.SetParent(setPanel.transform, false);
             var cardRt = card.GetComponent<RectTransform>();
             cardRt.anchorMin = cardRt.anchorMax = new Vector2(0.5f, 0.5f);
             cardRt.pivot = new Vector2(0.5f, 0.5f);
-            cardRt.anchoredPosition = Vector2.zero;
-            cardRt.sizeDelta = new Vector2(840f, 900f);
+            // Dropped 90px so the card's top edge clears the "THE WORLD" title behind it on the
+            // menu; centred, the rim sliced straight through the letters.
+            cardRt.anchoredPosition = new Vector2(0f, -90f);
+            cardRt.sizeDelta = new Vector2(880f, 1080f);
             var cardImg = card.GetComponent<Image>();
             cardImg.sprite = MakePanelSprite();
-            cardImg.color = PtwArt.Hex("#1B2733");
+            // Lifted from #1B2733: over the dimmed menu that read as a black hole, not a card.
+            cardImg.color = PtwArt.Hex("#27384B");
+
+            // A faint rim behind the card so its edge is defined against the dim rather than
+            // dissolving into it.
+            var rim = new GameObject("Rim", typeof(RectTransform), typeof(Image));
+            rim.transform.SetParent(card.transform, false);
+            var rimRt = rim.GetComponent<RectTransform>();
+            Stretch(rimRt);
+            rimRt.offsetMin = new Vector2(-6f, -6f);
+            rimRt.offsetMax = new Vector2(6f, 6f);
+            var rimImg = rim.GetComponent<Image>();
+            rimImg.sprite = MakePanelSprite();
+            rimImg.color = new Color(1f, 1f, 1f, 0.07f);
+            rimImg.raycastTarget = false;
+            rim.transform.SetAsFirstSibling();
 
             Text(card.transform, "SettingsTitle", "SETTINGS", bold, 60f,
-                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 330f),
+                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 430f),
                  new Vector2(700f, 90f), TextAlignmentOptions.Center, Color.white, shadowBold)
                 .characterSpacing = 8f;
 
-            var soundToggle = ToggleRow(card.transform, "SoundToggle", "SOUND", semi, 150f, shadowSemi);
-            var musicToggle = ToggleRow(card.transform, "MusicToggle", "MUSIC", semi, 20f, shadowSemi);
-            var hapticsToggle = ToggleRow(card.transform, "HapticsToggle", "HAPTICS", semi, -110f, shadowSemi);
+            var soundToggle = ToggleRow(card.transform, "SoundToggle", "SOUND", semi, 250f, shadowSemi);
+            var musicToggle = ToggleRow(card.transform, "MusicToggle", "MUSIC", semi, 120f, shadowSemi);
+            var hapticsToggle = ToggleRow(card.transform, "HapticsToggle", "HAPTICS", semi, -10f, shadowSemi);
+
+            // Destructive, so it is coloured like one and sits apart from the toggles. UiRoot makes
+            // it a two-tap confirm; the label text is swapped to say so.
+            var restartAllBtn = PillButton(card.transform, "RestartAllButton", "RESTART ALL LEVELS",
+                                           bold, 36f, new Vector2(0f, -190f), new Vector2(660f, 118f),
+                                           PtwArt.Hex("#9B4343"), shadowBold);
 
             var closeBtn = PillButton(card.transform, "CloseButton", "CLOSE", bold, 48f,
-                                      new Vector2(0f, -320f), new Vector2(520f, 132f),
-                                      PtwArt.Hex("#38495B"), shadowBold);
+                                      new Vector2(0f, -400f), new Vector2(520f, 132f),
+                                      PtwArt.Hex("#55708E"), shadowBold);
 
             // ================================================================= flash =========
             var flashGo = new GameObject("Flash", typeof(RectTransform), typeof(Image));
@@ -817,14 +873,18 @@ namespace PullTheWorld.EditorTools
             PtwPrefabs.Wire(root, "restartButton", restartBtn);
             PtwPrefabs.Wire(root, "pauseButton", pauseBtn);
             PtwPrefabs.Wire(root, "levelLabel", levelLabel);
+            PtwPrefabs.Wire(root, "levelTitle", levelTitle);
             PtwPrefabs.Wire(root, "keyLabel", keyLabel);
             PtwPrefabs.Wire(root, "keyGroup", keyGroup);
 
             PtwPrefabs.Wire(root, "continueButton", continueBtn);
             PtwPrefabs.Wire(root, "completeTitle", doneTitle);
+            PtwPrefabs.Wire(root, "completeSubtitle", doneSub);
             PtwPrefabs.Wire(root, "celebrationVfx", celebration);
 
             PtwPrefabs.Wire(root, "closeSettingsButton", closeBtn);
+            PtwPrefabs.Wire(root, "restartAllButton", restartAllBtn);
+            PtwPrefabs.Wire(root, "restartAllLabel", restartAllBtn.GetComponentInChildren<TMP_Text>());
             PtwPrefabs.Wire(root, "soundToggle", soundToggle);
             PtwPrefabs.Wire(root, "musicToggle", musicToggle);
             PtwPrefabs.Wire(root, "hapticsToggle", hapticsToggle);

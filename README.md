@@ -88,7 +88,7 @@ Assets/PullTheWorld/
                LevelManager, LevelDefinition, GameDirector, GameProgress,
                DynamicRegistry, DynamicProp, Spring
     Gameplay/  ExitPortal, Hazard, Collectible, PressurePlate, Gate, MovingPlatform
-    Feel/      PtwAudio, Haptics, ImpactFeedback, ScreenFillQuad
+    Feel/      PtwAudio, Haptics, ImpactFeedback, ScreenFillQuad, SkyTheme
     UI/        UiRoot, UiPanel, OnboardingHint
     Editor/    Ptw* generators (art, meshes, prefabs, levels, scene, build)
   Art/         generated meshes, materials, textures, physics materials, Poppins (OFL)
@@ -214,6 +214,18 @@ every level loads; they cannot tell you whether a puzzle is interesting.
 | 8 | Catch the Ferry | timing, on a moving platform |
 | 9 | Don't Overshoot | plate and gate, with a spiked notch past the door |
 | 10 | All Together | a three-move combination of all of it |
+| 11 | Both Gems | two keys on opposite sides; the door between them is only live once you hold both |
+| 12 | Careful Now | fire at both ends, door in the middle — judging the angle, not just choosing it |
+| 13 | Rock Traffic | two rocks, one plate; the props interfere with each other |
+| 14 | Stop at the Door | gem, door, spiked notch just past it |
+| 15 | Three Moves | plate, gate and two gems in a fixed order |
+| 16 | Ferry to the Gem | the moving platform, now delivering you to a key |
+| 17 | One Rock, Two Fires | a single rock smothers both on one pass |
+| 18 | The Last Turn | every piece, in an order that has to be worked out |
+
+Levels 1–6, 7–12 and 13–18 each get their own sky (`SkyTheme`: meadow, dusk, night) so the set
+does not read as eighteen copies of one screen. The palettes stay muted on purpose — the ivory
+player must remain the brightest non-emissive thing on screen in every chapter.
 
 ---
 
@@ -226,6 +238,15 @@ the transitions match. `UiRoot` owns the whole flow: menu → level → complete
 
 Settings (sound, music, haptics) persist in `PlayerPrefs` via `GameProgress`, which is also the
 single gate the audio and haptics layers check — rather than 30 call sites each testing a flag.
+
+Opening settings during play **really pauses** (`Time.timeScale = 0`). The first build only
+disabled rotation input, so the ball kept rolling — and dying — behind the overlay. Panels animate
+on unscaled time so they still work while paused.
+
+**Restart all levels** lives in settings and wipes saved progress, so it is a **two-tap confirm**:
+the first tap arms it and relabels the button *TAP AGAIN TO CONFIRM*, the second does it, and it
+disarms itself after a few seconds. Mid-game it also drops you straight onto level 1; from the menu
+it just resets, so the next PLAY starts over.
 
 Onboarding is **wordless**. There is no tutorial text anywhere. Two devices only:
 
@@ -281,7 +302,7 @@ reports success. This cost half of the levels in one build — `DynamicProp` was
 
 ## Tests
 
-13 PlayMode tests. They assert the promises v2 makes, which are nearly the opposite of v1's:
+16 PlayMode tests. They assert the promises v2 makes, which are nearly the opposite of v1's:
 
 * the camera **never** moves — the one invariant inherited unchanged
 * gravity is constant and points down, before and after rotation
@@ -293,6 +314,10 @@ reports success. This cost half of the levels in one build — `DynamicProp` was
 * nothing goes non-finite or absurdly fast when every level is spun hard both ways
 * falling out of the world fails the level
 * every level has a spawn and an exit
+* a moving platform does **not** outlive its level (it detaches from the hierarchy on purpose,
+  which is exactly how it leaked one per level load in the first build)
+* opening settings during play stops the clock, and closing them starts it again
+* restart-all needs two taps, and the second really does wipe progress and go to level 1
 
 They also write real 1080×1920 PNGs to `/Captures` — every level, two tilted shots, and the three
 UI screens (`ui_01_main_menu`, `ui_02_settings`, `ui_03_level_complete`). The UI ones are in the

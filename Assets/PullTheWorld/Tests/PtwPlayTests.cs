@@ -309,6 +309,91 @@ namespace PullTheWorld.Tests
                           "Player fell out of the world and the level did not fail");
         }
 
+        /// <summary>
+        /// Regression for a leak: MovingPlatform detaches from the level hierarchy in Awake (it has
+        /// to, to carry the player), which means destroying the level did not destroy it. One
+        /// platform per level load survived forever. It must now go when its owning level goes.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator PlatformsDoNotLeakAcrossLevels()
+        {
+            yield return LoadLevel(7);                      // level 8: has a ferry
+            Assert.AreEqual(1, MovingPlatform.Active.Count, "Level 8 should have exactly one platform");
+
+            yield return LoadLevel(0);                      // level 1: has none
+            yield return null;
+            yield return null;
+            Assert.AreEqual(0, MovingPlatform.Active.Count,
+                            "A platform survived its level being unloaded");
+        }
+
+        /// <summary>
+        /// Opening settings during play has to STOP THE CLOCK, not just the input - otherwise the
+        /// ball keeps rolling into hazards behind the overlay. Frame yields only in here: Wait()
+        /// is scaled time and would spin forever while paused.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator SettingsActuallyPausesTheGame()
+        {
+            yield return LoadLevel(0);
+
+            var pause = FindButton("PauseButton");
+            Assert.IsNotNull(pause, "HUD has no PauseButton");
+            pause.onClick.Invoke();
+            yield return null;
+            yield return null;
+            Assert.AreEqual(0f, Time.timeScale, 0.0001f, "Settings opened during play did not pause");
+
+            var close = FindButton("CloseButton");
+            Assert.IsNotNull(close, "Settings has no CloseButton");
+            close.onClick.Invoke();
+            yield return null;
+            yield return null;
+            Assert.AreEqual(1f, Time.timeScale, 0.0001f, "Closing settings did not resume");
+        }
+
+        /// <summary>The two-tap restart: first tap arms, second wipes progress and goes to level 1.</summary>
+        [UnityTest]
+        public IEnumerator RestartAllNeedsTwoTapsAndGoesToLevelOne()
+        {
+            // This test writes REAL PlayerPrefs on the machine running it. Save the developer's
+            // progress and put it back afterwards, or every test run resets their game.
+            int savedProgress = GameProgress.UnlockedIndex;
+            try
+            {
+                yield return RestartAllBody();
+            }
+            finally
+            {
+                GameProgress.UnlockedIndex = savedProgress;
+            }
+        }
+
+        IEnumerator RestartAllBody()
+        {
+            yield return LoadLevel(4);                      // be on level 5 with some progress
+            GameProgress.ReportCleared(3);
+            Assert.GreaterOrEqual(GameProgress.UnlockedIndex, 4);
+
+            FindButton("PauseButton").onClick.Invoke();
+            yield return null;
+
+            var restartAll = FindButton("RestartAllButton");
+            Assert.IsNotNull(restartAll, "Settings has no RestartAllButton");
+
+            restartAll.onClick.Invoke();                    // arm
+            yield return null;
+            Assert.GreaterOrEqual(GameProgress.UnlockedIndex, 4, "A single tap must not wipe progress");
+            Assert.AreEqual(4, levels.CurrentIndex, "A single tap must not change level");
+
+            restartAll.onClick.Invoke();                    // confirm
+            yield return null;
+            yield return null;
+            Assert.AreEqual(0, GameProgress.UnlockedIndex, "Progress was not reset");
+            Assert.AreEqual(0, levels.CurrentIndex, "Did not return to level 1");
+            Assert.AreEqual(1f, Time.timeScale, 0.0001f, "Restart-all left the game paused");
+        }
+
         // ====================================================================== captures =====
         [UnityTest]
         public IEnumerator CaptureAllLevels()

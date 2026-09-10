@@ -327,17 +327,20 @@ namespace PullTheWorld.EditorTools
             rb.isKinematic = true;
             rb.useGravity = false;
 
-            AddBox(plat, new Vector3(0f, -h * 0.25f, 0f), new Vector3(2f, h * 0.5f, 0.9f));
+            // 1.4 wide, not 2. The deck has to fit inside a four-cell pit at BOTH ends of its
+            // 2.5-unit travel without clipping into the ledge it is delivering the ball to; at
+            // 2 units wide it overlapped the far ledge by half a block.
+            AddBox(plat, new Vector3(0f, -h * 0.25f, 0f), new Vector3(1.4f, h * 0.5f, 0.9f));
 
             var visual = MeshNode("Visual", "Mesh_BlockStone", plat.transform,
                                   PtwArt.MStoneDark);
-            visual.transform.localScale = new Vector3(2f, 0.5f, 0.9f);
+            visual.transform.localScale = new Vector3(1.4f, 0.5f, 0.9f);
 
             // A stripe of cyan on the top face so a moving surface is instantly distinguishable
             // from the static terrain it slides past.
             var stripe = MeshNode("Stripe", "Mesh_QuadXZ", plat.transform, PtwArt.MGlowCyan);
             stripe.transform.localPosition = new Vector3(0f, 0.012f, 0f);
-            stripe.transform.localScale = new Vector3(1.9f, 1f, 0.28f);
+            stripe.transform.localScale = new Vector3(1.3f, 1f, 0.28f);
             stripe.GetComponent<MeshRenderer>().shadowCastingMode =
                 UnityEngine.Rendering.ShadowCastingMode.Off;
 
@@ -445,7 +448,11 @@ namespace PullTheWorld.EditorTools
                                                      float staticFriction, float bounce)
         {
             PtwPaths.EnsureFolder(PtwArt.ArtRoot + "/Physics");
-            string path = $"{PtwArt.ArtRoot}/Physics/{id}.physicsMaterial";
+            // ".asset", not ".physicsMaterial". CreateAsset on the latter logs an Error every
+            // build ("consider ... change the file type to *.asset") and Unity says it will become
+            // an exception. Three red lines in the console on every rebuild is not release quality,
+            // and the prefabs are regenerated against whatever this returns, so the rename is free.
+            string path = $"{PtwArt.ArtRoot}/Physics/{id}.asset";
 
             // Values are set BEFORE CreateAsset so they are part of the first serialization.
             // Setting them afterwards and relying on SetDirty silently left the asset at the 0.6

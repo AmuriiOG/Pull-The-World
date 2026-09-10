@@ -27,6 +27,13 @@ namespace PullTheWorld
     /// gravity pulls it straight down the screen, and the level turns around it. Parenting it would
     /// re-create the v1 confusion, where the player and the world move together and neither reads
     /// as the thing in motion.
+    ///
+    /// Endings
+    /// -------
+    /// A win and a death both used to just stop the ball, and both read as the game hanging.
+    /// Now a win draws the ball into the doorway and shrinks it away, and a death pops it. Both are
+    /// short, both run on the visual only, and both switch the body kinematic first so physics
+    /// cannot argue with the animation.
     /// </summary>
     [DefaultExecutionOrder(20)]
     [RequireComponent(typeof(Rigidbody))]
@@ -34,6 +41,8 @@ namespace PullTheWorld
     public class PlayerBody : MonoBehaviour
     {
         public static PlayerBody Instance { get; private set; }
+
+        enum Pose { Live, Celebrating, Dying, Gone }
 
         [Header("References")]
         [Tooltip("Visual only. Squash and stretch happen here so the collider stays a clean sphere.")]
@@ -59,6 +68,13 @@ namespace PullTheWorld
                  "fires a squash and a haptic every frame.")]
         [SerializeField] float minImpactSpeed = 1.6f;
 
+        [Header("Endings")]
+        [Tooltip("Seconds the ball takes to be drawn into the door and vanish on a win.")]
+        [SerializeField] float celebrateSeconds = 0.55f;
+        [Tooltip("Seconds for the death pop: a quick swell, then gone.")]
+        [SerializeField] float dieSeconds = 0.32f;
+        [SerializeField] float dieSwell = 1.35f;
+
         [Header("Death")]
         [Tooltip("Distance from the level centre past which the player counts as having fallen off. " +
                  "Generous enough to allow a real fall to be seen before the level resets.")]
@@ -73,10 +89,13 @@ namespace PullTheWorld
         Rigidbody body;
         SphereCollider sphere;
         Vector3 visualBaseScale;
-        float squash, squashVel;
+        float squash;
         bool alive = true;
-        bool frozen;
         float aliveTime;
+
+        Pose pose = Pose.Live;
+        float poseT;
+        Vector3 poseStart, poseTarget;
 
         /// <summary>Impact strength 0..1. Dust, haptics and audio all hang off this.</summary>
         public event Action<float, Vector3> OnImpact;
@@ -88,6 +107,8 @@ namespace PullTheWorld
         public bool IsGrounded { get; private set; }
         /// <summary>Speed along the plane, used by audio and dust.</summary>
         public float Speed => body ? body.linearVelocity.magnitude : 0f;
+        /// <summary>True while a win or death animation owns the body.</summary>
+        public bool IsAnimatingEnding => pose != Pose.Live;
 
         void Awake()
         {
@@ -123,9 +144,10 @@ namespace PullTheWorld
         public void Spawn(Vector3 worldPosition)
         {
             alive = true;
-            frozen = false;
             aliveTime = 0f;
-            squash = squashVel = 0f;
+            squash = 0f;
+            pose = Pose.Live;
+            poseT = 0f;
 
             body.isKinematic = false;
             transform.position = worldPosition;
@@ -136,6 +158,7 @@ namespace PullTheWorld
 
             if (visual)
             {
+                visual.gameObject.SetActive(true);
                 visual.localScale = visualBaseScale;
                 visual.localRotation = Quaternion.identity;
             }
@@ -143,17 +166,29 @@ namespace PullTheWorld
         }
 
         /// <summary>
-        /// Stop simulating but stay visible. Used for the win pose, so the player does not roll
-        /// back out of the door while the celebration plays.
+        /// Stop simulating but stay visible. Kept for anything that wants a plain freeze; the win
+        /// path uses <see cref="Celebrate"/> instead.
         /// </summary>
         public void Freeze()
         {
-            frozen = true;
             body.linearVelocity = Vector3.zero;
             body.angularVelocity = Vector3.zero;
             body.isKinematic = true;
         }
 
+        /// <summary>Win: the ball is drawn into the doorway and shrinks away.</summary>
+        public void Celebrate(Vector3 towards)
+        {
+            if (pose != Pose.Live) return;
+            Freeze();
+            pose = Pose.Celebrating;
+            poseT = 0f;
+            poseStart = transform.position;
+            // Stay in the puzzle plane; the door mouth is authored at z = 0 anyway.
+            poseTarget = new Vector3(towards.x, towards.y, transform.position.z);
+        }
+
+        /// <summary>Kill without a visual - the rules layer. Fires OnDied once.</summary>
         public void Kill()
         {
             if (!alive) return;
@@ -161,10 +196,20 @@ namespace PullTheWorld
             OnDied?.Invoke();
         }
 
+        /// <summary>Death: a quick swell and pop. Safe to call after Kill or instead of it.</summary>
+        public void Die()
+        {
+            if (pose != Pose.Live) return;
+            if (alive) Kill();
+            Freeze();
+            pose = Pose.Dying;
+            poseT = 0f;
+        }
+
         // -------------------------------------------------------------------------- stepping --
         void FixedUpdate()
         {
-            if (frozen) return;
+            if (pose != Pose.Live) return;
             aliveTime += Time.fixedDeltaTime;
 
             // Clamp speed rather than lowering gravity: gravity has to stay heavy so the response
@@ -194,7 +239,46 @@ namespace PullTheWorld
         {
             float dt = Time.deltaTime;
             squash = Mathf.Lerp(squash, 0f, 1f - Mathf.Exp(-squashRecover * dt));
-            ApplyVisual();
+
+            switch (pose)
+            {
+                case Pose.Celebrating: StepCelebrate(dt); break;
+                case Pose.Dying: StepDie(dt); break;
+                case Pose.Gone: break;
+                default: ApplyVisual(); break;
+            }
+        }
+
+        void StepCelebrate(float dt)
+        {
+            poseT += dt / Mathf.Max(0.05f, celebrateSeconds);
+            float u = Mathf.Clamp01(poseT);
+            float e = 1f - (1f - u) * (1f - u);              // ease-out: fast start, gentle arrive
+
+            transform.position = Vector3.Lerp(poseStart, poseTarget, e);
+            if (visual)
+            {
+                // A little extra spin on the way in reads as being pulled through.
+                visual.Rotate(0f, 0f, 540f * dt, Space.Self);
+                visual.localScale = visualBaseScale * (1f - e);
+            }
+            if (u >= 1f) Vanish();
+        }
+
+        void StepDie(float dt)
+        {
+            poseT += dt / Mathf.Max(0.05f, dieSeconds);
+            float u = Mathf.Clamp01(poseT);
+            // Swell up quickly, then collapse to nothing: sin gives the swell, (1-u) the collapse.
+            float s = (1f + (dieSwell - 1f) * Mathf.Sin(u * Mathf.PI)) * (1f - u * u);
+            if (visual) visual.localScale = visualBaseScale * Mathf.Max(0f, s);
+            if (u >= 1f) Vanish();
+        }
+
+        void Vanish()
+        {
+            pose = Pose.Gone;
+            if (visual) visual.gameObject.SetActive(false);
         }
 
         /// <summary>
@@ -230,7 +314,7 @@ namespace PullTheWorld
 
         void OnCollisionEnter(Collision c)
         {
-            if (!alive || frozen) return;
+            if (!alive || pose != Pose.Live) return;
 
             float speed = c.relativeVelocity.magnitude;
             if (speed < minImpactSpeed) return;

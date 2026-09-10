@@ -31,8 +31,9 @@ namespace PullTheWorld
 
         [Header("Track")]
         [Tooltip("Travel in LEVEL-LOCAL space, from the authored position. The platform ends up " +
-                 "oscillating between here and here plus this.")]
-        [SerializeField] Vector3 localTravel = new Vector3(3f, 0f, 0f);
+                 "oscillating between here and here plus this. 2.5 is tuned with the 1.4-wide " +
+                 "deck to fit a four-cell pit exactly.")]
+        [SerializeField] Vector3 localTravel = new Vector3(2.5f, 0f, 0f);
         [Tooltip("Seconds for one full there-and-back cycle.")]
         [SerializeField] float period = 3.4f;
         [Tooltip("Shifts where in the cycle this platform starts, 0..1. Use it to stagger a pair.")]
@@ -48,6 +49,7 @@ namespace PullTheWorld
 
         Rigidbody body;
         Transform levelRoot;
+        LevelDefinition owner;
         Vector3 localHome;
         Quaternion localHomeRot;
         float t;
@@ -59,6 +61,12 @@ namespace PullTheWorld
             body.useGravity = false;
             body.interpolation = RigidbodyInterpolation.Interpolate;
             body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+
+            // Remember which level this belongs to BEFORE detaching from it. Detaching is what
+            // makes the platform carry the player properly (see the class comment), but it also
+            // means destroying the level no longer destroys the platform - the first build leaked
+            // one platform per level load, forever, each still happily shuttling in the void.
+            owner = GetComponentInParent<LevelDefinition>();
 
             var rotator = WorldRotator.Instance;
             levelRoot = rotator ? rotator.WorldRoot : transform.parent;
@@ -87,6 +95,8 @@ namespace PullTheWorld
 
         void FixedUpdate()
         {
+            // The level that authored us is gone: go with it.
+            if (!owner) { Destroy(gameObject); return; }
             if (!levelRoot) return;
 
             float dt = Time.fixedDeltaTime;

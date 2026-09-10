@@ -280,7 +280,7 @@ SphereCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4756351110453822372}
-  m_Material: {fileID: 13400000, guid: ee73821153dd88e46b641e7bedfd3621, type: 2}
+  m_Material: {fileID: 13400000, guid: 27456c5265fe665469d28429f6e7b73c, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -316,6 +316,9 @@ MonoBehaviour:
   maxSquash: 0.34
   squashRecover: 11
   minImpactSpeed: 1.6
+  celebrateSeconds: 0.55
+  dieSeconds: 0.32
+  dieSwell: 1.35
   fallRadius: 26
   groundProbe: 0.12
   groundMask:

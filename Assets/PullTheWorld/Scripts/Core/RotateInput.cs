@@ -259,13 +259,23 @@ namespace PullTheWorld
             velEstimate = 0f;
         }
 
+        // Reused across calls. This runs on every touch-begin, and on mobile a fresh List and
+        // PointerEventData per frame is exactly the sort of steady garbage that shows up as a
+        // hitch every few seconds once the GC catches up.
+        static readonly System.Collections.Generic.List<RaycastResult> uiHits =
+            new System.Collections.Generic.List<RaycastResult>(8);
+        static PointerEventData uiPointer;
+
         static bool OverUI(Vector2 screenPos)
         {
-            if (EventSystem.current == null) return false;
-            var data = new PointerEventData(EventSystem.current) { position = screenPos };
-            var hits = new System.Collections.Generic.List<RaycastResult>();
-            EventSystem.current.RaycastAll(data, hits);
-            return hits.Count > 0;
+            var es = EventSystem.current;
+            if (es == null) return false;
+            if (uiPointer == null) uiPointer = new PointerEventData(es);
+            uiPointer.Reset();
+            uiPointer.position = screenPos;
+            uiHits.Clear();
+            es.RaycastAll(uiPointer, uiHits);
+            return uiHits.Count > 0;
         }
     }
 }

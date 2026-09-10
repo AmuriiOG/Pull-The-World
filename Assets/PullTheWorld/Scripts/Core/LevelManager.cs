@@ -33,6 +33,8 @@ namespace PullTheWorld
                  "the preview island is scenery behind the title here, not the subject, and at " +
                  "gameplay framing it fills the screen and collides with every menu widget.")]
         [SerializeField] Vector2 menuViewExtents = new Vector2(26f, 26f);
+        [Tooltip("Recolours the backdrop per chapter so the eighteen levels do not share one sky.")]
+        [SerializeField] SkyTheme sky;
 
         [Header("Timing")]
         [Tooltip("How long the celebration runs before the level-complete panel appears.")]
@@ -71,6 +73,7 @@ namespace PullTheWorld
             if (!rotator) rotator = FindFirstObjectByType<WorldRotator>();
             if (!player) player = FindFirstObjectByType<PlayerBody>();
             if (!cameraRig) cameraRig = FindFirstObjectByType<PlaneCameraRig>();
+            if (!sky) sky = FindFirstObjectByType<SkyTheme>();
             if (!levelParent && rotator) levelParent = rotator.WorldRoot;
         }
 
@@ -141,6 +144,7 @@ namespace PullTheWorld
 
             // Framed before the player spawns so the first frame is already composed.
             if (cameraRig) cameraRig.FrameExtents(current.viewExtents);
+            if (sky) sky.Apply(sky.ChapterFor(index, LevelCount));
 
             keysRequired = Mathf.Max(0, current.requiredKeys);
             keysCollected = 0;
@@ -168,6 +172,7 @@ namespace PullTheWorld
             if (player) player.gameObject.SetActive(false);
             if (rotator) rotator.CancelDrive();
             if (cameraRig) cameraRig.FrameExtents(menuViewExtents);
+            if (sky) sky.Apply(0);
             SetState(LevelState.Menu);
         }
 
@@ -188,7 +193,11 @@ namespace PullTheWorld
             state = LevelState.Won;
             OnStateChanged?.Invoke(state);
 
-            if (player) player.Freeze();
+            // Drawn into the doorway rather than frozen on the spot - a ball that just stops at
+            // the door reads as the game hanging.
+            if (player)
+                player.Celebrate(current && current.exit ? current.exit.MouthPosition
+                                                         : player.transform.position);
             if (rotator) { rotator.CancelDrive(); rotator.RotationAllowed = false; }
 
             GameProgress.ReportCleared(index);
@@ -204,6 +213,7 @@ namespace PullTheWorld
             state = LevelState.Failed;
             OnStateChanged?.Invoke(state);
 
+            if (player) player.Die();          // the pop; Kill() has already fired if needed
             if (rotator) rotator.CancelDrive();
             OnLevelFailed?.Invoke(current);
 

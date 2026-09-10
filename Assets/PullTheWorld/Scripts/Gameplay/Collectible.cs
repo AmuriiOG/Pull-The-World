@@ -79,8 +79,13 @@ namespace PullTheWorld
             collected = true;
             if (collectVfx)
             {
-                collectVfx.transform.SetParent(null, true);   // outlive the object being hidden
+                // Detached so it outlives the visuals being hidden - but then it also outlives
+                // the LEVEL, because it is no longer a child of anything that gets destroyed on
+                // unload. The first build leaked one of these per key collected, forever. Give
+                // it a hard lifetime instead.
+                collectVfx.transform.SetParent(null, true);
                 collectVfx.Play();
+                Destroy(collectVfx.gameObject, 2.5f);
             }
             if (visuals) visuals.SetActive(false);
 
