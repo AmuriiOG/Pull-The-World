@@ -148,8 +148,8 @@ namespace PullTheWorld.EditorTools
             Lit(MRock, RockGrey, 0.12f);
             Lit(MFoliage, Foliage, 0.10f);
             Lit(MFoliageDark, FoliageDark, 0.08f);
-            Lit(MMetal, Metal, 0.42f, 0.35f);
-            Lit(MSpike, SpikeSteel, 0.55f, 0.5f);
+            Lit(MMetal, Metal, 0.42f, 0.35f, specular: true);
+            Lit(MSpike, SpikeSteel, 0.55f, 0.5f, specular: true);
 
             // Atmospheric perspective for the distant scenery: shifted towards the sky colour and
             // heavily desaturated, so it reads as far away rather than as level geometry the
@@ -310,14 +310,34 @@ namespace PullTheWorld.EditorTools
         static Shader LitShader => Shader.Find("Universal Render Pipeline/Lit");
         static Shader UnlitShader => Shader.Find("Universal Render Pipeline/Unlit");
 
-        public static Material Lit(string id, Color color, float smoothness, float metallic = 0f)
+        /// <summary>
+        /// Flat-colour URP/Lit. Specular is OFF by default, and that is a fix rather than a
+        /// preference.
+        ///
+        /// The style bible says colour comes from albedo only, but every material was being
+        /// created with _SpecularHighlights on. On this art that is not a subtle difference: the
+        /// geometry is large flat faces, so when a face turns towards the key light the whole face
+        /// takes the specular lobe at once and renders as a uniform bright strip. With the island
+        /// tilted, the grass cap's top face did exactly that and read as a white line painted
+        /// along the grass - it survived lowering the key light, darkening the grass albedo and
+        /// raising the bloom threshold, because none of those were the cause.
+        ///
+        /// Note that setting the float alone does nothing: URP branches on the
+        /// _SPECULARHIGHLIGHTS_OFF shader keyword, so the keyword has to be set too.
+        ///
+        /// Turning it off is also cheaper per fragment, which matters on the mobile target.
+        /// </summary>
+        public static Material Lit(string id, Color color, float smoothness, float metallic = 0f,
+                                   bool specular = false)
         {
             var m = LoadOrCreate(id, LitShader);
             m.SetColor("_BaseColor", color);
             m.SetFloat("_Smoothness", smoothness);
             m.SetFloat("_Metallic", metallic);
             m.SetFloat("_Surface", 0f);
-            m.SetFloat("_SpecularHighlights", 1f);
+            m.SetFloat("_SpecularHighlights", specular ? 1f : 0f);
+            if (specular) m.DisableKeyword("_SPECULARHIGHLIGHTS_OFF");
+            else m.EnableKeyword("_SPECULARHIGHLIGHTS_OFF");
             m.DisableKeyword("_EMISSION");
             m.globalIlluminationFlags = MaterialGlobalIlluminationFlags.EmissiveIsBlack;
             m.enableInstancing = true;
