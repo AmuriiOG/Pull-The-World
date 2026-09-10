@@ -131,7 +131,7 @@ namespace PullTheWorld.Tests
 
         // ========================================================================= tests =====
 
-        [UnityTest]
+        [UnityTest, Timeout(600000)]                        // grows with the level count
         public IEnumerator EveryLevelHasSpawnAndExit()
         {
             for (int i = 0; i < levels.LevelCount; i++)
@@ -289,7 +289,7 @@ namespace PullTheWorld.Tests
         /// that catches the failure mode this architecture is most exposed to: a compound kinematic
         /// body being rotated into dynamic bodies at speed.
         /// </summary>
-        [UnityTest]
+        [UnityTest, Timeout(600000)]                        // grows with the level count
         public IEnumerator PhysicsNeverExplodes()
         {
             for (int i = 0; i < levels.LevelCount; i++)
@@ -747,7 +747,7 @@ namespace PullTheWorld.Tests
         }
 
         // ====================================================================== captures =====
-        [UnityTest]
+        [UnityTest, Timeout(600000)]                        // grows with the level count
         public IEnumerator CaptureAllLevels()
         {
             string dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Captures"));
