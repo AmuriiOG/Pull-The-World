@@ -8,6 +8,7 @@ namespace PullTheWorld
     {
         Grab, Release, Impact, Win, Fail, PlateOn, PlateOff, Smother, SpinTick, Unlock,
         EnemyAlert, EnemySnarl, EnemyBite, EnemyDie,
+        Bounce,
     }
 
     /// <summary>
@@ -152,6 +153,12 @@ namespace PullTheWorld
                 Sine(Mathf.Lerp(1100f, 260f, Mathf.Clamp01(t * 1.6f)) * (1f + 0.02f * Sine(24f, t)), t)
                     * Env(t, 3.2f) * 0.4f +
                 Noise(t) * Env(t, 5f) * 0.25f);
+
+            // The spring pad: a quick upward sweep with a springy second partial.
+            generated[PtwSfx.Bounce] = Make("ptw_bounce", 0.28f, t =>
+                Sine(Mathf.Lerp(190f, 560f, Mathf.Clamp01(t * 5f)), t) * Env(t, 9f) * 0.5f +
+                Sine(Mathf.Lerp(380f, 1120f, Mathf.Clamp01(t * 5f)), t) * Env(t, 14f) * 0.2f +
+                Noise(t) * Env(t, 40f) * 0.15f);
         }
 
         static float Sine(float hz, float t) => Mathf.Sin(2f * Mathf.PI * hz * t);

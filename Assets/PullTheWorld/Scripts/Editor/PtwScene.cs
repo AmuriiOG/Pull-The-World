@@ -45,6 +45,7 @@ namespace PullTheWorld.EditorTools
             systems.AddComponent<PtwAudio>();
             systems.AddComponent<PtwMusic>();
             systems.AddComponent<DangerVignette>();        // finds the Volume itself
+            systems.AddComponent<PullTheWorld.Ads.AdsManager>();   // adds the fake provider itself
 
             Camera cam = BuildCamera(out PlaneCameraRig camRig);
             BuildLighting();
@@ -853,8 +854,14 @@ namespace PullTheWorld.EditorTools
                                      new Color(1f, 1f, 1f, 0.8f), shadowSemi);
             progressLabel.characterSpacing = 6f;
 
+            // Level picker entry. Small and under the progress line: it is a convenience, not the
+            // main verb, and a first-time player should still just hit PLAY.
+            var levelsBtn = PillButton(menuPanel.transform, "LevelsButton", "LEVELS", semi, 36f,
+                                       new Vector2(0f, -352f), new Vector2(340f, 92f),
+                                       PtwArt.Hex("#3E6FB8"), shadowSemi);
+
             var menuSettingsBtn = RoundButton(menuPanel.transform, "SettingsButton",
-                                              new Vector2(0.5f, 0.5f), new Vector2(0f, -430f),
+                                              new Vector2(0.5f, 0.5f), new Vector2(0f, -480f),
                                               108f, MakeGearSprite());
 
             // ======================================================= level complete =========
@@ -943,6 +950,48 @@ namespace PullTheWorld.EditorTools
             flash.color = Color.clear;
             flash.raycastTarget = false;
 
+            // ============================================================ level select =======
+            // A grid of numbered tiles, cloned from one template by UiRoot when it opens. Five
+            // columns of 150 px tiles fits 35 levels without scrolling; past ~45 it will need a
+            // ScrollRect.
+            var pickPanel = Panel(canvasGo.transform, "LevelSelectPanel", out var pickGroup);
+            Dim(pickPanel.transform, "Dim", new Color(0.05f, 0.08f, 0.12f, 0.78f));
+            var pickTitle = Text(pickPanel.transform, "Title", "LEVELS", bold, 72f,
+                                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 740f),
+                                 new Vector2(800f, 100f), TextAlignmentOptions.Center, Color.white, shadowBold);
+            pickTitle.characterSpacing = 8f;
+
+            var gridGo = new GameObject("Grid", typeof(RectTransform), typeof(GridLayoutGroup));
+            gridGo.transform.SetParent(pickPanel.transform, false);
+            var gridRt = gridGo.GetComponent<RectTransform>();
+            gridRt.anchorMin = gridRt.anchorMax = new Vector2(0.5f, 0.5f);
+            gridRt.pivot = new Vector2(0.5f, 1f);
+            gridRt.anchoredPosition = new Vector2(0f, 640f);
+            gridRt.sizeDelta = new Vector2(880f, 1240f);
+            var grid = gridGo.GetComponent<GridLayoutGroup>();
+            grid.cellSize = new Vector2(150f, 150f);
+            grid.spacing = new Vector2(22f, 22f);
+            grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+            grid.constraintCount = 5;
+            grid.childAlignment = TextAnchor.UpperCenter;
+
+            var tile = PillButton(gridGo.transform, "TileTemplate", "1", bold, 52f, Vector2.zero,
+                                  new Vector2(150f, 150f), PtwArt.Hex("#3E6FB8"), shadowBold);
+            tile.gameObject.SetActive(false);
+
+            var closePickBtn = PillButton(pickPanel.transform, "CloseLevelsButton", "CLOSE", bold, 48f,
+                                          new Vector2(0f, -760f), new Vector2(420f, 120f),
+                                          PtwArt.Hex("#3E6FB8"), shadowBold);
+
+            // ================================================================= skip (ad) =======
+            // Lives in the HUD, hidden. UiRoot shows it only after AdsManager.SkipAfterFails deaths
+            // on one level: an offer to a stuck player, never a toll.
+            var skipBtn = PillButton(hudPanel.transform, "SkipButton", "STUCK?  SKIP LEVEL  ▶", semi, 34f,
+                                     new Vector2(0f, -790f), new Vector2(620f, 100f),
+                                     PtwArt.Hex("#B8873E"), shadowSemi);
+            skipBtn.gameObject.AddComponent<Punch>();
+            skipBtn.gameObject.SetActive(false);
+
             // ============================================================ chapter card =======
             // Two lines over the sky, above the island, faded in by UiRoot on the first level of
             // each chapter. Sits above every panel and never takes input.
@@ -982,6 +1031,12 @@ namespace PullTheWorld.EditorTools
             PtwPrefabs.Wire(root, "chapterNumber", chapterNumber);
             PtwPrefabs.Wire(root, "chapterName", chapterName);
             PtwPrefabs.Wire(root, "flyIcon", flyImg);
+            PtwPrefabs.Wire(root, "levelsButton", levelsBtn);
+            PtwPrefabs.Wire(root, "levelSelect", pickGroup);
+            PtwPrefabs.Wire(root, "levelGrid", gridGo.transform);
+            PtwPrefabs.Wire(root, "levelTileTemplate", tile);
+            PtwPrefabs.Wire(root, "closeLevelsButton", closePickBtn);
+            PtwPrefabs.Wire(root, "skipButton", skipBtn);
             PtwPrefabs.Wire(root, "mainMenu", menuGroup);
             PtwPrefabs.Wire(root, "hud", hudGroup);
             PtwPrefabs.Wire(root, "levelComplete", doneGroup);

@@ -43,12 +43,14 @@ namespace PullTheWorld.EditorTools
     ///     e  enemy - rolls like a rock, crawls towards you, kills on touch. A fast heavy rock,
     ///        spikes or fire kill it.
     ///     B  breakable crate - blocks the way until a heavy rock hits it hard. The ball cannot.
+    ///     j  spring pad - throws whatever lands on it along the LEVEL's up, so a tilt aims the
+    ///        throw. 2.5 m straight up: clears a two-block ledge, never a three-block one.
     ///     T  tree   t  small tree   r  rock   u  bush   y  crystal
     /// </summary>
     public static class PtwLevels
     {
         public const string Dir = "Assets/PullTheWorld/Prefabs/Levels";
-        public const int Count = 23;
+        public const int Count = 35;
 
         public static void BuildAll()
         {
@@ -59,6 +61,8 @@ namespace PullTheWorld.EditorTools
             Level15(); Level16(); Level17(); Level18();
             Level19(); Level20();
             Level21(); Level22(); Level23();
+            Level24(); Level25(); Level26(); Level27(); Level28(); Level29();
+            Level30(); Level31(); Level32(); Level33(); Level34(); Level35();
             AssetDatabase.SaveAssets();
         }
 
@@ -76,6 +80,162 @@ namespace PullTheWorld.EditorTools
         }
 
         // ==================================================================== the levels =====
+
+        // ------------------------------------------------- chapter three: springs and combos --
+        // Levels 24-35 assume everything before them is known and add ONE new toy, the spring pad,
+        // then combine it with rocks, crates, enemies, water and ferries. Each was reasoned out
+        // against the numbers in the legend (11 m/s throw under 24 m/s^2 gravity = 2.5 m; a rock
+        // needs about two free cells of run-up to break a crate or crush an enemy; the ball floats,
+        // rocks sink) rather than tuned by hand - see the note below on why hands are still needed.
+
+        /// <summary>Teach the pad: roll onto it, get thrown onto a two-block ledge, roll home.</summary>
+        static void Level24()
+        {
+            var b = new Builder(24, "Spring Step") { AngleLimit = 45f };
+            b.Map(
+                "# . . . . . . . . D #",
+                "# . . . . . . g g g #",
+                "# . P . j . . g g g #",
+                "# g g g g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>Plate at the near end, ferry over the pit, gate before the door: two tilts and a wait.</summary>
+        static void Level25()
+        {
+            var b = new Builder(25, "Hold, Then Cross") { AngleLimit = 45f };
+            b.Map(
+                "# . P . b . . . . X . D #",
+                "# p g g g M . . . g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>The crate guards the gem. Smash it with the rock, then go and get it.</summary>
+        static void Level26()
+        {
+            var b = new Builder(26, "Smash and Grab")
+            { Teach = TeachHint.RockIsATool, RequiredKeys = 1, AngleLimit = 65f };
+            b.Map(
+                "# . P . b . . B K . . D #",
+                "# g g g g g g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>The rock has to go OVER a wall: roll it onto the pad, and the tilt aims the throw onto the plate.</summary>
+        static void Level27()
+        {
+            var b = new Builder(27, "Over the Wall") { AngleLimit = 50f };
+            b.Map(
+                "# . . . . . . . . . . . . #",
+                "# . P . . b j # . . . X D #",
+                "# g g g g g g g g g p g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>A hole right through the island. Tip the enemy into it, then jump it with the pad.</summary>
+        static void Level28()
+        {
+            var b = new Builder(28, "Long Jump") { AngleLimit = 40f };
+            b.Map(
+                "# . P . j . . . . e . . D #",
+                "# g g g g . . . g g g g g #",
+                "# g g g g . . . g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>One rock, two enemies in a line. It has to keep its speed through the first to reach the second.</summary>
+        static void Level29()
+        {
+            var b = new Builder(29, "Double Trouble") { AngleLimit = 65f };
+            b.Map(
+                "# . P . b . . . e . . . e . D #",
+                "# g g g g g g g g g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>Tilt to pour the pool onto the fire, float across, and the pad throws you over the wall.</summary>
+        static void Level30()
+        {
+            var b = new Builder(30, "Steam") { AngleLimit = 50f };
+            b.Map(
+                "# . . . . . . . . . . . . #",
+                "# P . . . f . . j # . . D #",
+                "# g g g w g g g g g g g g #",
+                "# g g g g g g g g g g g g #"   // a pool needs a block under its bed
+            );
+            b.Save();
+        }
+
+        /// <summary>The crate stands between the rock and the plate. It needs a hard tilt to break through.</summary>
+        static void Level31()
+        {
+            var b = new Builder(31, "Break In") { AngleLimit = 65f };
+            b.Map(
+                "# . B . b . . P . . X . D #",
+                "# p g g g g g g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>Two pads, three ledges. The second throw has to be aimed to reach the top.</summary>
+        static void Level32()
+        {
+            var b = new Builder(32, "Stairway") { AngleLimit = 40f };
+            b.Map(
+                "# . . . . . . . . . . . D #",
+                "# . . . . . . . . . g g g #",
+                "# . . . . . j . . g g g g #",
+                "# . P . j . g g g g g g g #",
+                "# g g g g g g g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>Right first: the rock bowls the enemy. Then left: pour on the fire, float across, take the gem home.</summary>
+        static void Level33()
+        {
+            var b = new Builder(33, "Gauntlet") { RequiredKeys = 1, AngleLimit = 60f };
+            b.Map(
+                "# D K f . . . P . . b . . e . #",
+                "# g g g w g g g g g g g g g g #",
+                "# g g g g g g g g g g g g g g #"   // a pool needs a block under its bed
+            );
+            b.Save();
+        }
+
+        /// <summary>A gem on a floating slab between two pads. Land on the slab, take it, fall onto the second pad.</summary>
+        static void Level34()
+        {
+            var b = new Builder(34, "Trampoline Park") { RequiredKeys = 1, AngleLimit = 45f };
+            b.Map(
+                "# . . . . . . . . . . . . #",
+                "# . . . . . K . . . . . . #",
+                "# . . . . # # # . . . . . #",
+                "# . P . j . . . j . . . D #",
+                "# g g g g g g g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>Everything, in order: rock through crate and enemy to the right; then left over the water, past the doused fire, up the pad to the door.</summary>
+        static void Level35()
+        {
+            var b = new Builder(35, "The Long Way") { AngleLimit = 55f };
+            b.Map(
+                "# D . . . . . . . . . . . . . . . . . #",
+                "# g g g . . . . . . . . . . . . . . . #",
+                "# g g g j . f . . P . . b . . B . . e #",
+                "# g g g g g g w g g g g g g g g g g g #",
+                "# g g g g g g g g g g g g g g g g g g #"   // a pool needs a block under its bed
+            );
+            b.Save();
+        }
 
         // A note on how conservative these layouts are.
         //
@@ -663,7 +823,7 @@ namespace PullTheWorld.EditorTools
                 // asserting at generation time rather than discovering in a capture: the first
                 // build put a tree one cell too high and it hung in mid-air, which costs five
                 // seconds to fix and a surprisingly long time to notice in a screenshot.
-                const string mustBeGrounded = "DfktTruywB";
+                const string mustBeGrounded = "DfktTruywBj";
                 if (mustBeGrounded.IndexOf(c) >= 0 && !IsSolid(at(col, row + 1)))
                 {
                     Debug.LogWarning($"PTW: level {number} has '{c}' at col {col}, row {row} " +
@@ -740,6 +900,9 @@ namespace PullTheWorld.EditorTools
                     // Static: stands on the floor and is part of the level's compound collider
                     // until a rock breaks it.
                     case 'B': Prop("Breakable_Crate", col, bottom); break;
+
+                    // Spring pad: stands on the floor, throws along the level's up.
+                    case 'j': Prop("Pad_Bounce", col, bottom); break;
 
                     // --- hazards -------------------------------------------------------------
                     case 'f': Prop("Hazard_Fire", col, bottom); break;

@@ -70,6 +70,7 @@ namespace PullTheWorld.EditorTools
             Save(Enemy(), "Mesh_Enemy");
             Save(EnemySpikes(), "Mesh_EnemySpikes");
             Save(EnemyFace(), "Mesh_EnemyFace");
+            Save(BouncePad(), "Mesh_BouncePad");
             Save(QuadXZ(), "Mesh_QuadXZ");
             Save(QuadXY(), "Mesh_QuadXY");
             Save(WaterTile(6, 1f), "Mesh_WaterTile");
@@ -496,6 +497,21 @@ namespace PullTheWorld.EditorTools
                                Quaternion.FromToRotation(Vector3.up, Vector3.down));
             }
             return mb.ToMesh("Enemy");
+        }
+
+        /// <summary>
+        /// The spring pad: a stone plinth, a three-ring coil and a fat bright cap. Submesh 0 is the
+        /// cap (bright), 1 the plinth and coil (metal). BouncePad punches the whole visual.
+        /// </summary>
+        static Mesh BouncePad()
+        {
+            var mb = new MeshBuilder();
+            mb.AddCylinder(1, Vector3.zero, 0.36f, 0.34f, 0.10f, 14);
+            mb.AddCylinder(1, new Vector3(0f, 0.10f, 0f), 0.16f, 0.16f, 0.06f, 10);
+            mb.AddCylinder(1, new Vector3(0f, 0.17f, 0f), 0.21f, 0.21f, 0.05f, 10);
+            mb.AddCylinder(1, new Vector3(0f, 0.23f, 0f), 0.16f, 0.16f, 0.06f, 10);
+            mb.AddBlob(0, new Vector3(0f, 0.35f, 0f), new Vector3(0.38f, 0.075f, 0.38f), 2, 0f, 5);
+            return mb.ToMesh("BouncePad");
         }
 
         /// <summary>Nine uneven spikes on a ring: the part that rolls. Uneven so it reads jagged, not gear-like.</summary>

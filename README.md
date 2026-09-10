@@ -252,6 +252,25 @@ every level loads; they cannot tell you whether a puzzle is interesting.
 | 21 | Bowl It Over | the enemy; the rock between you and it is the answer |
 | 22 | Break Through | a crate only a fast heavy rock can smash |
 | 23 | Clear the Way | one rock through crate and enemy, then the gem, then the door |
+| 24 | Spring Step | the **spring pad**: roll on, get thrown onto a two-block ledge |
+| 25 | Hold, Then Cross | plate at the near end, ferry over a pit, gate before the door |
+| 26 | Smash and Grab | the crate guards the gem |
+| 27 | Over the Wall | the rock goes over a wall via the pad; the tilt aims it onto the plate |
+| 28 | Long Jump | a hole through the island: tip the enemy in, then jump it |
+| 29 | Double Trouble | one rock, two enemies in a line |
+| 30 | Steam | pour the pool on the fire, float across, pad over the wall |
+| 31 | Break In | crate between rock and plate — needs a hard tilt |
+| 32 | Stairway | two pads, three ledges; aim the second throw |
+| 33 | Gauntlet | right: rock bowls the enemy; left: douse, float, gem, door |
+| 34 | Trampoline Park | gem on a floating slab between two pads |
+| 35 | The Long Way | rock through crate and enemy, then water, fire, pad, ledge, door |
+
+Levels 24–35 add one new toy — the **spring pad** (`j`) — and then combine it with everything
+before it. A pad throws whatever lands on it (ball, rock, enemy) at 11 m/s along the **level's** up,
+so a tilt aims the throw: 2.5 m straight up under 24 m/s² gravity, enough for a two-block ledge and
+never a three-block one. Detection is the usual explicit zone check (`BouncePad`), with a per-body
+cooldown so the zone cannot re-fire while the body is still inside it. The ball's own physics
+settings are untouched; the pad acts on it exactly the way the portal does.
 
 ## Enemies and breakables
 
@@ -458,6 +477,9 @@ The second juice pass (all visual/audio, none of it touches the ball's body):
 * **Hit-stop**: 90 ms of 12 % slow motion on the frame of an on-screen death. Not on falls, which
   restart in a quarter of a second.
 * The enemy is 12 % bigger so it carries on a phone.
+* **FLAWLESS!** replaces "LEVEL COMPLETE" when a level is cleared without a death, with a brighter
+  chime; consecutive flawless levels show "N FLAWLESS IN A ROW" — the cheapest replay hook a level
+  game has.
 
 None of this uses a tween library. The project already had an unconditionally stable spring
 integrator (`Spring.cs`), and every bit of motion below is a spring:
@@ -489,7 +511,7 @@ reports success. This cost half of the levels in one build — `DynamicProp` was
 
 ## Tests
 
-27 PlayMode tests. They assert the promises v2 makes, which are nearly the opposite of v1's:
+31 PlayMode tests. They assert the promises v2 makes, which are nearly the opposite of v1's:
 
 * the camera **never** moves — the one invariant inherited unchanged
 * gravity is constant and points down, before and after rotation
@@ -536,6 +558,52 @@ git checkout v1-move-world            # or: git checkout prototype/move-world-v1
 ```
 
 v2 lives on `prototype/rotate-gravity-v2`. Nothing about v2 can damage v1.
+
+---
+
+## Level select
+
+**LEVELS** on the main menu opens a grid of numbered tiles, cloned at runtime from one template
+(`UiRoot.OpenLevelSelect`). Unlocked tiles are bright and tappable; locked ones are dimmed. Five
+columns of 150 px tiles hold 35 levels without scrolling; past about 45 it will need a `ScrollRect`.
+
+This also answers "why does the phone start on the same level after a new build": progress lives
+in `PlayerPrefs` on the device and survives reinstalling the same package (Android auto-backup
+restores it). That is what players want; for testing, jump anywhere from the picker, or
+**Settings → Restart All Levels** to wipe it.
+
+---
+
+## Ads
+
+`Scripts/Ads/`. Three files, and gameplay code only ever talks to one of them.
+
+* **`IAdProvider`** — what the game needs from a network and nothing more: initialize, is a
+  rewarded/interstitial ready, show one with a callback. One adapter per SDK (AdMob, LevelPlay,
+  AppLovin…), none written yet.
+* **`FakeAdProvider`** — a full-screen "TEST AD" card with a countdown, added automatically when
+  no real adapter is present. It is why every placement can be tried on a phone today and tested
+  headlessly.
+* **`AdsManager`** — owns the provider, the cadence rules and the pause/mute around a showing.
+
+The rules are the design, not a detail — they are what makes ads *improve* the game rather than
+tax it:
+
+* **Interstitials only ever follow a win**, on the way to the next level, never a death. A death is
+  already the low point and the restart has to be instant (that was a real complaint).
+* **None before level 6** (`firstInterstitialLevel = 5`, zero-based). The first minutes are for
+  learning the verb; retention is decided there.
+* **At most one per 3 wins and one per 150 s**, whichever is later.
+* **Rewarded ads are offered, never forced, and only when they help.** *STUCK? SKIP LEVEL* appears
+  in the HUD after 3 deaths on the same level — exactly the moment a stuck player would otherwise
+  quit — and watching it advances to the next level. `AdPlacement.Hint` is reserved for a rewarded
+  "show me the first tilt" once per-level hints are authored.
+* **`AdsManager.AdsRemoved`** (a future "remove ads" purchase, stored in PlayerPrefs) turns off
+  interstitials only; rewarded offers stay, because they are a favour to the player.
+
+Wiring a real network: add a component implementing `IAdProvider` to `~Systems` next to
+`AdsManager` (it picks up whatever `IAdProvider` is on the object, and only falls back to the fake
+one when none is), or call `AdsManager.SetProvider(...)`. `OnAdClosed` is the analytics hook.
 
 ---
 

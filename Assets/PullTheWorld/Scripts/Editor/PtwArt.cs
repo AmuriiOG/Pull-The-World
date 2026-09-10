@@ -117,6 +117,7 @@ namespace PullTheWorld.EditorTools
         public const string MGlowEvil = "M_GlowEvil";
         public const string MEnemyAura = "M_EnemyAura";
         public const string MTrail = "M_Trail";
+        public const string MBounce = "M_Bounce";
         public const string MOcean = "M_Ocean";
         public const string MFarStone = "M_FarStone";
         public const string MFarGrass = "M_FarGrass";
@@ -174,6 +175,8 @@ namespace PullTheWorld.EditorTools
             Lit(MEnemy, Hex("#6B1A40"), 0.42f);
             Lit(MEnemySpike, Hex("#1C0B16"), 0.50f);
             Lit(MEnemyTeeth, Hex("#EDE6D6"), 0.35f);
+            // Spring pad cap: the one hot orange thing on the island, so "that throws you" reads at once.
+            Lit(MBounce, Hex("#FF7A45"), 0.50f);
 
             // The key has to out-read every rock in the level from across the screen, so it gets a
             // real emissive rather than just a bright albedo. Kept below the door's amber so the

@@ -32,6 +32,7 @@ namespace PullTheWorld.EditorTools
             BuildWaterProp();
             BuildEnemy();
             BuildBreakable();
+            BuildBouncePad();
             BuildPlayer();
 
             AssetDatabase.SaveAssets();
@@ -146,6 +147,24 @@ namespace PullTheWorld.EditorTools
             Wire(br, "blocker", box);
             Wire(br, "debrisVfx", debris);
             Save(b, Play);
+        }
+
+        // ===================================================================== bounce pad ====
+        static void BuildBouncePad()
+        {
+            var pad = Node("Pad_Bounce");
+            var visual = MeshNode("Visual", "Mesh_BouncePad", pad.transform, PtwArt.MBounce, PtwArt.MMetal);
+            var punch = visual.AddComponent<Punch>();
+            // Low enough that a rolling ball simply goes over it; the throw comes from the zone
+            // check in BouncePad, not from this collider.
+            AddBox(pad, new Vector3(0f, 0.09f, 0f), new Vector3(0.8f, 0.18f, 0.8f));
+            var puff = Dust("PuffVfx", pad.transform, PtwArt.Get(PtwArt.MParticleSoft),
+                            PtwArt.Hex("#FFB08A"), 0.08f, 0.4f);
+
+            var bp = pad.AddComponent<BouncePad>();
+            Wire(bp, "visualPunch", punch);
+            Wire(bp, "puffVfx", puff);
+            Save(pad, Play);
         }
 
         // ========================================================================= water =====

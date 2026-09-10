@@ -66,6 +66,9 @@ namespace PullTheWorld
 
         public LevelDefinition Current => current;
         public int CurrentIndex => index;
+        /// <summary>Deaths on the current level since it was first entered. Drives the skip offer and "flawless".</summary>
+        public int FailsOnLevel => failsOnLevel;
+        int failsOnLevel;
         public int LevelCount => levels != null ? levels.Length : 0;
         public LevelState State => state;
         public bool IsPlaying => state == LevelState.Playing;
@@ -93,6 +96,9 @@ namespace PullTheWorld
         void OnDisable()
         {
             if (player) player.OnDied -= HandlePlayerDied;
+            // Time.timeScale is global and outlives this object. Going away mid hit-stop (a scene
+            // reload, the test harness between tests) must not leave the world at 12 % speed.
+            CancelPending();
         }
 
         void Start()
@@ -128,9 +134,11 @@ namespace PullTheWorld
         public void LoadLevel(int i)
         {
             if (levels == null || levels.Length == 0) return;
-            if (pending != null) { StopCoroutine(pending); pending = null; }
+            CancelPending();
 
-            index = Mathf.Clamp(i, 0, levels.Length - 1);
+            int next = Mathf.Clamp(i, 0, levels.Length - 1);
+            if (next != index || current == null) failsOnLevel = 0;   // a restart keeps the count
+            index = next;
 
             // Clears both the previous level and the editor preview island, which are the same
             // kind of thing as far as the world root is concerned.
@@ -181,7 +189,7 @@ namespace PullTheWorld
 
         public void ReturnToMenu()
         {
-            if (pending != null) { StopCoroutine(pending); pending = null; }
+            CancelPending();
             if (current) { Destroy(current.gameObject); current = null; }
             DynamicRegistry.Prune();
             if (player) player.gameObject.SetActive(false);
@@ -227,6 +235,7 @@ namespace PullTheWorld
         {
             if (state != LevelState.Playing) return;
             state = LevelState.Failed;
+            failsOnLevel++;
             OnStateChanged?.Invoke(state);
 
             if (player) player.Die();          // the pop; Kill() has already fired if needed
@@ -246,6 +255,19 @@ namespace PullTheWorld
             // Otherwise UiRoot has shown the level-complete panel and waits for a tap.
         }
 
+        bool hitStopActive;
+
+        /// <summary>
+        /// Stop whatever win/fail routine is in flight. If that routine was mid hit-stop, put the
+        /// clock back: a restart tapped within those 90 ms used to leave the entire game running
+        /// at 12 % speed, which the test suite found by crawling into a timeout.
+        /// </summary>
+        void CancelPending()
+        {
+            if (pending != null) { StopCoroutine(pending); pending = null; }
+            if (hitStopActive) { Time.timeScale = 1f; hitStopActive = false; }
+        }
+
         IEnumerator FailRoutine()
         {
             bool fell = player && player.Fell;
@@ -254,9 +276,11 @@ namespace PullTheWorld
                 // A blink of slow motion on the frame of death - the classic hit-stop. Realtime, so
                 // it is the same length whatever the time scale is doing. Not for falls: there is
                 // nothing on screen to freeze.
+                hitStopActive = true;
                 Time.timeScale = hitStopScale;
                 yield return new WaitForSecondsRealtime(hitStopSeconds);
-                if (Mathf.Approximately(Time.timeScale, hitStopScale)) Time.timeScale = 1f;
+                if (hitStopActive && Mathf.Approximately(Time.timeScale, hitStopScale)) Time.timeScale = 1f;
+                hitStopActive = false;
             }
             yield return new WaitForSeconds(fell ? fallRestartDelay : failRestartDelay);
             pending = null;

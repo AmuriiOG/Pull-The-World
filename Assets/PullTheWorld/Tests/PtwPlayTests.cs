@@ -623,6 +623,89 @@ namespace PullTheWorld.Tests
                         "The ball was not back at spawn after the fall restart");
         }
 
+        /// <summary>
+        /// A restart tapped during the death hit-stop must put the clock back. The first build left
+        /// the whole game at 12 % speed, which the suite found by crawling into a timeout.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator RestartDuringHitStopRestoresTime()
+        {
+            yield return LoadLevel(0);
+            levels.ReportFail();                            // on-screen death: hit-stop begins
+            yield return null;
+            Assert.Less(Time.timeScale, 0.5f, "Hit-stop did not slow the clock");
+
+            levels.Restart();                               // cancels the pending fail routine
+            yield return null;
+            Assert.AreEqual(1f, Time.timeScale, 0.001f, "Restart during hit-stop left the clock slow");
+            yield return Wait(0.3f);
+            Assert.AreEqual(1f, Time.timeScale, 0.001f, "Clock drifted after the restart");
+        }
+
+        /// <summary>A body set down on a spring pad is thrown along the pad's up.</summary>
+        [UnityTest]
+        public IEnumerator BouncePadLaunchesTheBall()
+        {
+            yield return LoadLevel(23);                     // level 24: Spring Step
+            var pad = levels.Current.GetComponentInChildren<BouncePad>();
+            Assert.IsNotNull(pad, "Level 24 has no spring pad");
+
+            player.Body.position = pad.transform.position + pad.transform.up * 0.5f;
+            player.Body.linearVelocity = Vector3.zero;
+            for (int i = 0; i < 4; i++) yield return new WaitForFixedUpdate();
+
+            float up = Vector3.Dot(player.Body.linearVelocity, pad.transform.up);
+            Assert.Greater(up, 5f, $"The pad did not throw the ball (up speed {up:F2} m/s)");
+        }
+
+        /// <summary>Three deaths on one level and the HUD offers the rewarded skip; a fresh level withdraws it.</summary>
+        [UnityTest]
+        public IEnumerator SkipIsOfferedAfterRepeatedFails()
+        {
+            yield return LoadLevel(0);
+            var ui = UiRoot.Instance;
+            var ads = PullTheWorld.Ads.AdsManager.Instance;
+            Assert.IsNotNull(ui, "No UiRoot");
+            Assert.IsNotNull(ads, "No AdsManager");
+            Assert.IsFalse(ui.SkipOffered, "Skip offered before any failure");
+
+            for (int i = 0; i < ads.SkipAfterFails; i++)
+            {
+                levels.ReportFail();
+                yield return Wait(1.4f);                    // death pause + restart + settle
+            }
+
+            Assert.AreEqual(ads.SkipAfterFails, levels.FailsOnLevel, "Fail count did not survive restarts");
+            Assert.IsTrue(ui.SkipOffered, "Skip was not offered after repeated failures");
+
+            yield return LoadLevel(1);
+            Assert.IsFalse(ui.SkipOffered, "Skip offer survived into a new level");
+        }
+
+        /// <summary>The interstitial cadence: never early, never on its own, never too often.</summary>
+        [UnityTest]
+        public IEnumerator InterstitialCadenceIsConservative()
+        {
+            var ads = PullTheWorld.Ads.AdsManager.Instance;
+            Assert.IsNotNull(ads, "No AdsManager");
+            bool removed = PullTheWorld.Ads.AdsManager.AdsRemoved;
+            PullTheWorld.Ads.AdsManager.AdsRemoved = false;
+            try
+            {
+                Assert.IsFalse(ads.IsInterstitialDue(2, 10, 1000f), "Interstitial due in the tutorial levels");
+                Assert.IsFalse(ads.IsInterstitialDue(10, 1, 1000f), "Interstitial due after a single win");
+                Assert.IsFalse(ads.IsInterstitialDue(10, 3, 10f), "Interstitial due seconds after the last one");
+                Assert.IsTrue(ads.IsInterstitialDue(10, 3, 1000f), "Interstitial not due when every rule is met");
+                PullTheWorld.Ads.AdsManager.AdsRemoved = true;
+                Assert.IsFalse(ads.IsInterstitialDue(10, 3, 1000f), "Interstitial due with ads removed");
+            }
+            finally
+            {
+                PullTheWorld.Ads.AdsManager.AdsRemoved = removed;
+            }
+            yield return null;
+        }
+
         /// <summary>The soundtrack obeys the Music toggle: it fades out when off and back in when on.</summary>
         [UnityTest]
         public IEnumerator MusicFollowsTheSetting()

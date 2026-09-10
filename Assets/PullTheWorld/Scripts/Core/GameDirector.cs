@@ -47,6 +47,10 @@ namespace PullTheWorld
             Physics.defaultSolverVelocityIterations = solverVelocityIterations;
             Physics.autoSyncTransforms = autoSyncTransforms;
 
+            // Ads live on the same systems object. Added here as well as by the scene generator so
+            // a scene built before ads existed still gets the manager (and its fake provider).
+            if (!GetComponent<Ads.AdsManager>()) gameObject.AddComponent<Ads.AdsManager>();
+
             if (lockPortrait && Application.isMobilePlatform)
                 Screen.orientation = ScreenOrientation.Portrait;
         }

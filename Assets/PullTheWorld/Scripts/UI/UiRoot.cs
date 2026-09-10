@@ -59,6 +59,18 @@ namespace PullTheWorld
         [Tooltip("Seconds the armed 'tap again' state lasts before it quietly disarms.")]
         [SerializeField] float restartArmSeconds = 3.5f;
 
+        [Header("Level select")]
+        [SerializeField] Button levelsButton;
+        [SerializeField] UiPanel levelSelect;
+        [SerializeField] Transform levelGrid;
+        [Tooltip("One inactive tile; cloned per level when the picker opens.")]
+        [SerializeField] Button levelTileTemplate;
+        [SerializeField] Button closeLevelsButton;
+
+        [Header("Ads")]
+        [Tooltip("Rewarded skip, shown in the HUD only after several failures on one level.")]
+        [SerializeField] Button skipButton;
+
         [Header("Chapter card")]
         [Tooltip("Fades in over the first level of each chapter: 'CHAPTER II' and the sky's name.")]
         [SerializeField] CanvasGroup chapterCard;
@@ -107,6 +119,9 @@ namespace PullTheWorld
             if (continueButton) continueButton.onClick.AddListener(OnContinue);
             if (closeSettingsButton) closeSettingsButton.onClick.AddListener(CloseSettings);
             if (restartAllButton) restartAllButton.onClick.AddListener(OnRestartAll);
+            if (levelsButton) levelsButton.onClick.AddListener(OpenLevelSelect);
+            if (closeLevelsButton) closeLevelsButton.onClick.AddListener(CloseLevelSelect);
+            if (skipButton) { skipButton.onClick.AddListener(OnSkipLevel); skipButton.gameObject.SetActive(false); }
 
             if (soundToggle) soundToggle.onValueChanged.AddListener(v => SetSetting(() => GameProgress.SoundOn = v));
             if (musicToggle) musicToggle.onValueChanged.AddListener(v => SetSetting(() => GameProgress.MusicOn = v));
@@ -165,12 +180,14 @@ namespace PullTheWorld
                 if (hud) hud.SetImmediate(playing);
                 if (levelComplete) levelComplete.SetImmediate(complete);
                 if (settings) settings.SetImmediate(false);
+                if (levelSelect) levelSelect.SetImmediate(false);
             }
             else
             {
                 if (mainMenu) mainMenu.SetVisible(menu);
                 if (hud) hud.SetVisible(playing);
                 if (levelComplete) levelComplete.SetVisible(complete);
+                if (levelSelect) levelSelect.SetVisible(false);
             }
 
             if (menu) RefreshProgressLabel();
@@ -195,8 +212,77 @@ namespace PullTheWorld
         void OnContinue()
         {
             Click();
-            GoTo(Screen.Playing);
-            if (levels) levels.Next();
+            // The only place an interstitial can ever appear: after a win, on the way to the next
+            // level, and only when AdsManager's cadence says so. Never on a death.
+            var ads = PullTheWorld.Ads.AdsManager.Instance;
+            int idx = levels ? levels.CurrentIndex : 0;
+            System.Action advance = () => { GoTo(Screen.Playing); if (levels) levels.Next(); };
+            if (ads) ads.TryShowInterstitial(idx, advance); else advance();
+        }
+
+        // ---------------------------------------------------------------------- ads ----------
+        /// <summary>True while the HUD is showing the rewarded skip. Read by the tests.</summary>
+        public bool SkipOffered => skipButton && skipButton.gameObject.activeSelf;
+
+        void RefreshSkipOffer()
+        {
+            if (!skipButton) return;
+            var ads = PullTheWorld.Ads.AdsManager.Instance;
+            bool offer = screen == Screen.Playing && levels && ads && ads.CanOfferSkip(levels.FailsOnLevel);
+            if (offer && !skipButton.gameObject.activeSelf) PunchOn(skipButton.transform, 1f);
+            skipButton.gameObject.SetActive(offer);
+        }
+
+        void OnSkipLevel()
+        {
+            Click();
+            var ads = PullTheWorld.Ads.AdsManager.Instance;
+            if (!ads || !levels) return;
+            ads.ShowRewarded(PullTheWorld.Ads.AdPlacement.SkipLevel,
+                onReward: () => { skipButton.gameObject.SetActive(false); levels.Next(); });
+        }
+
+        // -------------------------------------------------------------- level select ---------
+        void OpenLevelSelect()
+        {
+            Click();
+            if (!levelSelect || !levelGrid || !levelTileTemplate || !levels) return;
+
+            // Rebuild the grid each time: it is cheap and it always reflects current progress.
+            for (int i = levelGrid.childCount - 1; i >= 0; i--)
+            {
+                var child = levelGrid.GetChild(i);
+                if (child != levelTileTemplate.transform) Destroy(child.gameObject);
+            }
+
+            int unlocked = GameProgress.UnlockedIndex;
+            for (int i = 0; i < levels.LevelCount; i++)
+            {
+                var tile = Instantiate(levelTileTemplate, levelGrid);
+                tile.gameObject.SetActive(true);
+                tile.name = $"Level {i + 1}";
+                bool open = i <= unlocked;
+                var label = tile.GetComponentInChildren<TMP_Text>();
+                if (label) label.text = (i + 1).ToString();
+                var img = tile.GetComponent<Image>();
+                if (img) img.color = open ? img.color : new Color(img.color.r, img.color.g, img.color.b, 0.28f);
+                if (label && !open) label.color = new Color(1f, 1f, 1f, 0.35f);
+                tile.interactable = open;
+                int index = i;
+                tile.onClick.AddListener(() =>
+                {
+                    Click();
+                    GoTo(Screen.Playing);
+                    levels.LoadLevel(index);
+                });
+            }
+            levelSelect.SetVisible(true);
+        }
+
+        void CloseLevelSelect()
+        {
+            Click();
+            if (levelSelect) levelSelect.SetVisible(false);
         }
 
         // ------------------------------------------------------------------- settings -------
@@ -316,6 +402,7 @@ namespace PullTheWorld
             PunchOn(levelLabel, 0.6f);
             SetRotationInput(true);
             if (onboarding) onboarding.Begin(def);
+            RefreshSkipOffer();
 
             // First level of a chapter (or first level after the menu): a title card.
             int chapter = ChapterOf(levels ? levels.CurrentIndex : 0);
@@ -425,11 +512,21 @@ namespace PullTheWorld
             flash = winFlash;
 
             bool last = levels && levels.CurrentIndex + 1 >= levels.LevelCount;
-            if (completeTitle) completeTitle.text = last ? "ALL LEVELS DONE" : "LEVEL COMPLETE";
+
+            // No deaths on the way through: say so. Consecutive flawless levels build a streak,
+            // which is the cheapest replay hook a level game has.
+            bool flawless = levels && levels.FailsOnLevel == 0;
+            flawlessStreak = flawless ? flawlessStreak + 1 : 0;
+            if (completeTitle)
+                completeTitle.text = last ? "ALL LEVELS DONE" : flawless ? "FLAWLESS!" : "LEVEL COMPLETE";
             if (completeSubtitle)
-                completeSubtitle.text = levels
-                    ? $"LEVEL {levels.CurrentIndex + 1} OF {levels.LevelCount}"
-                    : "";
+            {
+                string where = levels ? $"LEVEL {levels.CurrentIndex + 1} OF {levels.LevelCount}" : "";
+                completeSubtitle.text = flawlessStreak >= 2 ? $"{where}   ·   {flawlessStreak} FLAWLESS IN A ROW" : where;
+            }
+            if (flawless) PtwAudio.Play(PtwSfx.Win, 0.6f, 1.25f);   // a brighter chime on top of the usual one
+            PullTheWorld.Ads.AdsManager.Instance?.ReportWin();
+            if (skipButton) skipButton.gameObject.SetActive(false);
 
             if (onboarding) onboarding.Stop();
             if (celebrationVfx) celebrationVfx.Play();
@@ -441,7 +538,10 @@ namespace PullTheWorld
         {
             flash = failFlash;
             if (onboarding) onboarding.Stop();
+            RefreshSkipOffer();
         }
+
+        int flawlessStreak;
 
         void RefreshProgressLabel()
         {
