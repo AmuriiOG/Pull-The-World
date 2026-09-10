@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Let Git auto-detect text vs binary. Verified against this project: every
+# Unity YAML file (.unity/.prefab/.asset/.mat/.meta) is plain text because
+# EditorSettings has m_SerializationMode: 2 (Force Text). The only true
+# binaries are .png and .ttf, declared explicitly below.
+#
+# EOL is pinned to LF (eol=lf) rather than left to the platform. Unity writes
+# LF on every OS, and this project's 450 Unity/source files are LF on disk, so
+# pinning LF makes a fresh clone byte-identical to this checkpoint instead of
+# rewriting every file to CRLF under this machine's core.autocrlf=true.
+# ─────────────────────────────────────────────────────────────────────────────
+* text=auto eol=lf
+
+# Unity YAML — use Unity's smart merge tool when it is configured as a driver.
+# If unityyamlmerge is not configured, Git silently falls back to its normal
+# 3-way merge, so this line is safe either way. See README notes in the repo.
+*.unity          merge=unityyamlmerge
+*.prefab         merge=unityyamlmerge
+*.asset          merge=unityyamlmerge
+*.mat            merge=unityyamlmerge
+*.meta           merge=unityyamlmerge
+*.anim           merge=unityyamlmerge
+*.controller     merge=unityyamlmerge
+*.physicMaterial merge=unityyamlmerge
+*.playable       merge=unityyamlmerge
+*.terrainlayer   merge=unityyamlmerge
+
+# Source
+*.cs   text diff=csharp
+*.shader text
+*.hlsl text
+*.cginc text
+
+# Explicit binaries — never line-ending-normalise or diff these
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.psd  binary
+*.tga  binary
+*.tif  binary
+*.exr  binary
+*.hdr  binary
+*.ttf  binary
+*.otf  binary
+*.fbx  binary
+*.blend binary
+*.obj  binary
+*.wav  binary
+*.mp3  binary
+*.ogg  binary
+*.mp4  binary
+*.dll  binary
+*.so   binary
+*.dylib binary
+*.a    binary
+*.lib  binary
+*.unitypackage binary
