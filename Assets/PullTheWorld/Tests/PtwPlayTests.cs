@@ -27,9 +27,18 @@ namespace PullTheWorld.Tests
         PlayerBody player;
         Camera cam;
 
+        // The suite plays the real game against the REAL PlayerPrefs on whoever's machine runs
+        // it. PhysicsNeverExplodes sweeps every level to its limits, which quite legitimately
+        // rolls the ball into the door, and every one of those wins was being saved - a test run
+        // left the developer's game at "LEVEL 18 OF 18". Snapshot progress before the first test
+        // and put it back after the last.
+        static int? suiteSavedProgress;
+
         [UnitySetUp]
         public IEnumerator SetUp()
         {
+            if (!suiteSavedProgress.HasValue) suiteSavedProgress = GameProgress.UnlockedIndex;
+
             SceneManager.LoadScene("Game", LoadSceneMode.Single);
             yield return null;
             yield return null;
@@ -353,23 +362,17 @@ namespace PullTheWorld.Tests
         }
 
         /// <summary>The two-tap restart: first tap arms, second wipes progress and goes to level 1.</summary>
-        [UnityTest]
-        public IEnumerator RestartAllNeedsTwoTapsAndGoesToLevelOne()
+        [OneTimeTearDown]
+        public void RestoreProgress()
         {
-            // This test writes REAL PlayerPrefs on the machine running it. Save the developer's
-            // progress and put it back afterwards, or every test run resets their game.
-            int savedProgress = GameProgress.UnlockedIndex;
-            try
-            {
-                yield return RestartAllBody();
-            }
-            finally
-            {
-                GameProgress.UnlockedIndex = savedProgress;
-            }
+            if (!suiteSavedProgress.HasValue) return;
+            GameProgress.UnlockedIndex = suiteSavedProgress.Value;
+            suiteSavedProgress = null;
         }
 
-        IEnumerator RestartAllBody()
+        /// <summary>The two-tap restart: first tap arms, second wipes progress and goes to level 1.</summary>
+        [UnityTest]
+        public IEnumerator RestartAllNeedsTwoTapsAndGoesToLevelOne()
         {
             yield return LoadLevel(4);                      // be on level 5 with some progress
             GameProgress.ReportCleared(3);
