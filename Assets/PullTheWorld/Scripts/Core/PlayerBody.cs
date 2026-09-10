@@ -126,9 +126,9 @@ namespace PullTheWorld
             body.angularDamping = angularDamping;
             body.linearDamping = linearDamping;
             body.useGravity = true;
-            // PhysX spin ceiling defaults to 7 rad/s, which would force a 0.35 m ball to slide above
-            // 2.4 m/s. Enough to roll at maxSpeed, with headroom for the level turning under it.
-            body.maxAngularVelocity = 1.5f * maxSpeed / Mathf.Max(0.05f, Radius);
+            // NOTE: the spin ceiling is left at PhysX's default on purpose. Raising it makes the
+            // ball roll instead of skid above ~2.4 m/s, which reads heavier and slower; the skid
+            // is part of the feel play-testing called perfect. Do not "fix" this.
             body.interpolation = RigidbodyInterpolation.Interpolate;
             // The level can sweep into the player fast on a hard spin, and the player can fall
             // fast. Continuous dynamic is the only mode that reliably survives both.
@@ -223,13 +223,10 @@ namespace PullTheWorld
 
             // Clamp speed rather than lowering gravity: gravity has to stay heavy so the response
             // to a tilt is immediate, but terminal velocity has to stay sane.
-            // Clamp the ball's OWN motion, not the velocity it rides the turning level with -
-            // that part is exact (see WorldRotator.CoRotate) and cutting it makes the ball lag.
-            Vector3 ride = WorldRotator.Instance ? WorldRotator.Instance.CarriedVelocity(body) : Vector3.zero;
-            var v = body.linearVelocity - ride;
+            var v = body.linearVelocity;
             float sqr = v.sqrMagnitude;
             if (sqr > maxSpeed * maxSpeed)
-                body.linearVelocity = ride + v * (maxSpeed / Mathf.Sqrt(sqr));
+                body.linearVelocity = v * (maxSpeed / Mathf.Sqrt(sqr));
 
             ProbeGround();
 

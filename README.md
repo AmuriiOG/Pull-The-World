@@ -120,11 +120,16 @@ resting on the floor picks up the floor's tangential velocity through the contac
 stops the level stops but the rock keeps going — straight up if it was on the rising side. In
 testing, a 110°/s drag hopped a rock 1.2 m and clean over a crate; low-friction rocks also lag the
 floor sliding under them and drift *uphill* mid-drag. `WorldRotator.CoRotate` therefore makes every
-body in `DynamicRegistry` ride the level explicitly each physics step: strip the velocity it was
+**prop** in `DynamicRegistry` ride the level explicitly each physics step: strip the velocity it was
 given last step, rotate its own motion by this step's turn, add the exact chord velocity that keeps
-it with the level. Turning the world now changes *only* gravity for everything on it — no sling, no
-lag, no centrifugal drift. The speed clamps in `PlayerBody` and `DynamicProp` clamp the body's own
-motion, not the ride, so a fast fling cannot make anything lag the floor.
+it with the level. Turning the world changes *only* gravity for rocks and enemies — no sling, no
+lag, no centrifugal drift — so a puzzle piece ends up where the puzzle says. `DynamicProp`'s speed
+clamp clamps the prop's own motion, not the ride.
+
+**The player is deliberately left out.** The ball keeps raw turntable physics — carried and slung
+by a fast spin, skidding rather than rolling above ~2.4 m/s (PhysX's default spin ceiling, left
+alone on purpose). Play-testing called that feel perfect, and an attempt to make the ball ride the
+level and roll "correctly" was reverted the same day. The ball is the toy; the rocks are the tools.
 
 **`Scripts/Core/PlayerBody.cs`** — the character. A sphere collider under a ball mesh, locked to the
 XY plane (`FreezePositionZ | FreezeRotationX | FreezeRotationY`) so it can only ever roll about Z.

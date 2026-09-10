@@ -290,8 +290,9 @@ namespace PullTheWorld
         }
 
         /// <summary>
-        /// Make every dynamic body ride the level as if bolted to it for this step's turn, so that
-        /// gravity is the ONLY thing that moves anything relative to the level.
+        /// Make every dynamic PROP (rocks, enemies - not the player) ride the level as if bolted to
+        /// it for this step's turn, so that gravity is the only thing that moves it relative to
+        /// the level.
         ///
         /// Without this the level is a turntable and PhysX treats it as one. A rock resting on the
         /// floor picks up the floor's tangential velocity through the contact; when the finger stops
@@ -314,12 +315,17 @@ namespace PullTheWorld
             float omega = moving ? movedDegrees * Mathf.Deg2Rad / Mathf.Max(1e-5f, dt) : 0f;
             var rot = Quaternion.AngleAxis(movedDegrees, Vector3.forward);
             Vector3 pivot = WorldRoot.position;
+            var player = PlayerBody.Instance ? PlayerBody.Instance.Body : null;
 
             var bodies = DynamicRegistry.Bodies;
             for (int i = bodies.Count - 1; i >= 0; i--)
             {
                 var rb = bodies[i];
                 if (!rb) { bodies.RemoveAt(i); continue; }
+                // The PLAYER is deliberately left out and keeps raw turntable physics: being carried
+                // and slung by a fast spin is the toy, and play-testing called that feel perfect.
+                // The ride is for puzzle pieces, which have to end up where the puzzle says.
+                if (rb == player) { carried.Remove(rb); continue; }
                 if (rb.isKinematic || !rb.gameObject.activeInHierarchy) { carried.Remove(rb); continue; }
 
                 carried.TryGetValue(rb, out var was);
