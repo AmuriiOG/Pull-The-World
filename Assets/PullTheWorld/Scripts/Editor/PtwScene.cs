@@ -940,11 +940,17 @@ namespace PullTheWorld.EditorTools
             // Destructive, so it is coloured like one and sits apart from the toggles. UiRoot makes
             // it a two-tap confirm; the label text is swapped to say so.
             var restartAllBtn = PillButton(card.transform, "RestartAllButton", "RESTART ALL LEVELS",
-                                           bold, 36f, new Vector2(0f, -190f), new Vector2(660f, 118f),
+                                           bold, 36f, new Vector2(0f, -175f), new Vector2(660f, 118f),
                                            PtwArt.Hex("#9B4343"), shadowBold);
 
+            // Development convenience: opens every level in the picker so a build can be tested
+            // from any point. UiRoot hides it when showDevUnlock is off - flip that for release.
+            var unlockAllBtn = PillButton(card.transform, "UnlockAllButton", "UNLOCK ALL LEVELS  (DEV)",
+                                          semi, 30f, new Vector2(0f, -292f), new Vector2(660f, 100f),
+                                          PtwArt.Hex("#3E8A8A"), shadowSemi);
+
             var closeBtn = PillButton(card.transform, "CloseButton", "CLOSE", bold, 48f,
-                                      new Vector2(0f, -400f), new Vector2(520f, 132f),
+                                      new Vector2(0f, -445f), new Vector2(520f, 132f),
                                       PtwArt.Hex("#55708E"), shadowBold);
 
             // ================================================================= flash =========
@@ -966,16 +972,41 @@ namespace PullTheWorld.EditorTools
                                  new Vector2(800f, 100f), TextAlignmentOptions.Center, Color.white, shadowBold);
             pickTitle.characterSpacing = 8f;
 
-            var gridGo = new GameObject("Grid", typeof(RectTransform), typeof(GridLayoutGroup));
-            gridGo.transform.SetParent(pickPanel.transform, false);
+            // The grid scrolls: fifty levels do not fit a phone, and the count keeps growing. The
+            // viewport carries an invisible Image so a drag that starts between tiles still scrolls.
+            var scrollGo = new GameObject("Scroll", typeof(RectTransform), typeof(Image),
+                                          typeof(RectMask2D), typeof(ScrollRect));
+            scrollGo.transform.SetParent(pickPanel.transform, false);
+            var scrollRt = scrollGo.GetComponent<RectTransform>();
+            scrollRt.anchorMin = scrollRt.anchorMax = new Vector2(0.5f, 0.5f);
+            scrollRt.pivot = new Vector2(0.5f, 1f);
+            scrollRt.anchoredPosition = new Vector2(0f, 640f);
+            scrollRt.sizeDelta = new Vector2(880f, 1240f);
+            scrollGo.GetComponent<Image>().color = Color.clear;
+
+            var gridGo = new GameObject("Grid", typeof(RectTransform), typeof(GridLayoutGroup),
+                                        typeof(ContentSizeFitter));
+            gridGo.transform.SetParent(scrollGo.transform, false);
             var gridRt = gridGo.GetComponent<RectTransform>();
-            gridRt.anchorMin = gridRt.anchorMax = new Vector2(0.5f, 0.5f);
+            gridRt.anchorMin = new Vector2(0f, 1f);
+            gridRt.anchorMax = new Vector2(1f, 1f);
             gridRt.pivot = new Vector2(0.5f, 1f);
-            gridRt.anchoredPosition = new Vector2(0f, 640f);
-            gridRt.sizeDelta = new Vector2(880f, 1240f);
+            gridRt.anchoredPosition = Vector2.zero;
+            gridRt.sizeDelta = new Vector2(0f, 1240f);
+            gridGo.GetComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            var scroll = scrollGo.GetComponent<ScrollRect>();
+            scroll.content = gridRt;
+            scroll.viewport = scrollRt;
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Elastic;
+            scroll.scrollSensitivity = 30f;
+
             var grid = gridGo.GetComponent<GridLayoutGroup>();
             grid.cellSize = new Vector2(150f, 150f);
             grid.spacing = new Vector2(22f, 22f);
+            grid.padding = new RectOffset(0, 0, 0, 40);
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = 5;
             grid.childAlignment = TextAnchor.UpperCenter;
@@ -1066,6 +1097,7 @@ namespace PullTheWorld.EditorTools
             PtwPrefabs.Wire(root, "closeSettingsButton", closeBtn);
             PtwPrefabs.Wire(root, "restartAllButton", restartAllBtn);
             PtwPrefabs.Wire(root, "restartAllLabel", restartAllBtn.GetComponentInChildren<TMP_Text>());
+            PtwPrefabs.Wire(root, "unlockAllButton", unlockAllBtn);
             PtwPrefabs.Wire(root, "soundToggle", soundToggle);
             PtwPrefabs.Wire(root, "musicToggle", musicToggle);
             PtwPrefabs.Wire(root, "hapticsToggle", hapticsToggle);

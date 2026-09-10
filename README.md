@@ -264,6 +264,26 @@ every level loads; they cannot tell you whether a puzzle is interesting.
 | 33 | Gauntlet | right: rock bowls the enemy; left: douse, float, gem, door |
 | 34 | Trampoline Park | gem on a floating slab between two pads |
 | 35 | The Long Way | rock through crate and enemy, then water, fire, pad, ledge, door |
+| 36 | Two Steps Up | two throws up two ledges; the second has to be aimed |
+| 37 | Rock Ferry | the rock rides the ferry to the far plate |
+| 38 | Mind the Gap | throw the rock over a hole onto the plate |
+| 39 | Bowling Alley | one rock, three enemies |
+| 40 | Double Ferry | two ferries in a row |
+| 41 | Drop In | door and enemy share a pit; drop the rock on it first |
+| 42 | Switchback | roll under the tier, bounce onto it, roll back the other way |
+| 43 | Plug the Hole | roll the rock off a tier into a one-cell pit holding an enemy, then roll over it |
+| 44 | Ferry, Then Fly | off the ferry onto a pad, up to the door |
+| 45 | Twin Gaps | ferry across one gap, throw across the next |
+| 46 | Hopscotch | two one-cell holes, a pad before each |
+| 47 | Long Shot | the gem hangs over the hole; only one arc takes it |
+| 48 | Rolling Thunder | rock → crate → rock → crate → enemy → plate, in one hard tilt |
+| 49 | Skylight | up through a gap in the tier and onto the roof |
+| 50 | Grand Finale | everything, then two ledges to the door |
+
+Levels 36–50 stop being trays: floating **tiers** the ball rolls under and is thrown onto, **holes**
+it must clear, ferries in sequence, rocks dropped from height. Two more numbers were relied on: a
+rock falling one block lands at ~7 m/s (enough to crush or break), and a rock sitting in a one-cell
+pit leaves a 0.32 m gap that the ball rolls over.
 
 Levels 24–35 add one new toy — the **spring pad** (`j`) — and then combine it with everything
 before it. A pad throws whatever lands on it (ball, rock, enemy) at 11 m/s along the **level's** up,
@@ -565,12 +585,16 @@ v2 lives on `prototype/rotate-gravity-v2`. Nothing about v2 can damage v1.
 
 **LEVELS** on the main menu opens a grid of numbered tiles, cloned at runtime from one template
 (`UiRoot.OpenLevelSelect`). Unlocked tiles are bright and tappable; locked ones are dimmed. Five
-columns of 150 px tiles hold 35 levels without scrolling; past about 45 it will need a `ScrollRect`.
+columns of 150 px tiles inside a `ScrollRect`, so the count can keep growing.
 
 This also answers "why does the phone start on the same level after a new build": progress lives
 in `PlayerPrefs` on the device and survives reinstalling the same package (Android auto-backup
 restores it). That is what players want; for testing, jump anywhere from the picker, or
 **Settings → Restart All Levels** to wipe it.
+
+**Settings → UNLOCK ALL LEVELS (DEV)** opens every tile so a build can be tested from any point.
+It is a development convenience: set `UiRoot.showDevUnlock` off (and regenerate the scene) for a
+release build.
 
 ---
 

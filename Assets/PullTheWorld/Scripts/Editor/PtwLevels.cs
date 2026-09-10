@@ -50,7 +50,7 @@ namespace PullTheWorld.EditorTools
     public static class PtwLevels
     {
         public const string Dir = "Assets/PullTheWorld/Prefabs/Levels";
-        public const int Count = 35;
+        public const int Count = 50;
 
         public static void BuildAll()
         {
@@ -63,6 +63,9 @@ namespace PullTheWorld.EditorTools
             Level21(); Level22(); Level23();
             Level24(); Level25(); Level26(); Level27(); Level28(); Level29();
             Level30(); Level31(); Level32(); Level33(); Level34(); Level35();
+            Level36(); Level37(); Level38(); Level39(); Level40();
+            Level41(); Level42(); Level43(); Level44(); Level45();
+            Level46(); Level47(); Level48(); Level49(); Level50();
             AssetDatabase.SaveAssets();
         }
 
@@ -87,6 +90,200 @@ namespace PullTheWorld.EditorTools
         // against the numbers in the legend (11 m/s throw under 24 m/s^2 gravity = 2.5 m; a rock
         // needs about two free cells of run-up to break a crate or crush an enemy; the ball floats,
         // rocks sink) rather than tuned by hand - see the note below on why hands are still needed.
+
+        // ------------------------------------------------- chapter four: tiers and timing ------
+        // Levels 36-50 stop being trays. Floating tiers the ball rolls UNDER and is thrown ONTO,
+        // holes it must clear, ferries in sequence, rocks dropped from height. Same numbers as the
+        // batch above, plus: a rock falling one block lands at ~7 m/s (enough to crush or break), a
+        // rock in a one-cell pit leaves a 0.32 m gap the ball rolls over, and the gap under a tier
+        // needs to be at least one block for the ball (0.67 m) to pass.
+
+        /// <summary>Two throws up two ledges. The second has to be aimed.</summary>
+        static void Level36()
+        {
+            var b = new Builder(36, "Two Steps Up") { AngleLimit = 40f };
+            b.Map(
+                "# . . . . . . . . . . . . . . #",
+                "# . . . . . . . . . . . . . D #",
+                "# . . . . . . . . . . . g g g #",
+                "# . . . . . . . . j . . g g g #",
+                "# . . . . . . . . g g g g g g #",
+                "# . P . . j . . . g g g g g g #",
+                "# g g g g g g g g g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>The rock rides the ferry to the plate on the far side. Miss the timing and it falls out and comes back.</summary>
+        static void Level37()
+        {
+            var b = new Builder(37, "Rock Ferry") { AngleLimit = 45f };
+            b.Map(
+                "# . P . b . . . . . . . X D #",
+                "# g g g g M . . . g g p g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>Throw the rock over a hole onto the plate. Too little tilt and it bounces in place; a miss falls out and respawns.</summary>
+        static void Level38()
+        {
+            var b = new Builder(38, "Mind the Gap") { AngleLimit = 45f };
+            b.Map(
+                "# . P . . b j . . . . X D #",
+                "# g g g g g g . . g p g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>One rock, three enemies down a long alley. It has to keep its speed.</summary>
+        static void Level39()
+        {
+            var b = new Builder(39, "Bowling Alley") { AngleLimit = 70f };
+            b.Map(
+                "# . P . b . . . e . . . e . . . e . D #",
+                "# g g g g g g g g g g g g g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>Two ferries in a row.</summary>
+        static void Level40()
+        {
+            var b = new Builder(40, "Double Ferry") { Teach = TeachHint.Timing, AngleLimit = 45f };
+            b.Map(
+                "# . P . . . . . . . . . . . . D #",
+                "# g g M . . . g g M . . . g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>The door is at the bottom of a pit, and so is an enemy. Drop the rock on it first.</summary>
+        static void Level41()
+        {
+            var b = new Builder(41, "Drop In") { AngleLimit = 45f };
+            b.Map(
+                "# . P b . . . . . #",
+                "# g g g g . . g g #",
+                "# g g g g e D g g #",
+                "# g g g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>Roll right under the tier, bounce on the pad at its end, land on top, roll back left to the door.</summary>
+        static void Level42()
+        {
+            var b = new Builder(42, "Switchback") { AngleLimit = 35f };
+            b.Map(
+                "# D . . . . . . . . . . . #",
+                "# g g g g g g g g g . . . #",
+                "# . P . . . . . . . j . . #",
+                "# g g g g g g g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>An enemy sits in a one-cell pit in the floor. Roll the rock off the tier into the pit, then roll over the plug.</summary>
+        static void Level43()
+        {
+            var b = new Builder(43, "Plug the Hole") { AngleLimit = 45f };
+            b.Map(
+                "# . . b . . . . . . . . . . #",
+                "# g g g g g . . . . . . . . #",
+                "# . . . . . . . . . . . . . #",
+                "# D . . . . . . . . . . P . #",
+                "# g g g g g e g g g g g g g #",
+                "# g g g g g g g g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>Off the ferry straight onto a pad, and up to the door.</summary>
+        static void Level44()
+        {
+            var b = new Builder(44, "Ferry, Then Fly") { AngleLimit = 40f };
+            b.Map(
+                "# . . . . . . . . . . . . D #",
+                "# . . . . . . . . . . . g g #",
+                "# . P . . . . . . j . . g g #",
+                "# g g g M . . . g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>A ferry across the first gap, a throw across the second.</summary>
+        static void Level45()
+        {
+            var b = new Builder(45, "Twin Gaps") { AngleLimit = 40f };
+            b.Map(
+                "# . P . . . . . j . . . . D #",
+                "# g g M . . . g g g . . g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>Two one-cell holes, a pad before each. Small tilts.</summary>
+        static void Level46()
+        {
+            var b = new Builder(46, "Hopscotch") { AngleLimit = 35f };
+            b.Map(
+                "# . P . j . . . j . . . D #",
+                "# g g g g . g g g . g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>The gem hangs over the hole. Only one arc takes it: flatter throws fly lower.</summary>
+        static void Level47()
+        {
+            var b = new Builder(47, "Long Shot") { RequiredKeys = 1, AngleLimit = 45f };
+            b.Map(
+                "# . . . . . K . . . . . #",
+                "# . P . j . . . . . . D #",
+                "# g g g g . . . g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>Rock into crate into rock into crate into enemy onto the plate. One tilt, if it is a hard one.</summary>
+        static void Level48()
+        {
+            var b = new Builder(48, "Rolling Thunder") { AngleLimit = 65f };
+            b.Map(
+                "# . P . b . B . b . B . e . . X D #",
+                "# g g g g g g g g g g g g g p g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>A tier with a two-cell gap and a pad beneath it. Up through the skylight and onto the roof.</summary>
+        static void Level49()
+        {
+            var b = new Builder(49, "Skylight") { AngleLimit = 30f };
+            b.Map(
+                "# . . . . . . . . D #",
+                "# g g g g . . g g g #",
+                "# . P . . j . . . . #",
+                "# g g g g g g g g g #"
+            );
+            b.Save();
+        }
+
+        /// <summary>Everything, then up two ledges to the door.</summary>
+        static void Level50()
+        {
+            var b = new Builder(50, "Grand Finale") { AngleLimit = 45f };
+            b.Map(
+                "# . . . . . . . . . . . . . . . . . . . . D #",
+                "# . . . . . . . . . . . . . . . . . . . g g #",
+                "# . . . . . . . . . . . . . . . . . j . g g #",
+                "# . . . . . . . . . . . . . . . . g g g g g #",
+                "# . P . b . . B . e . . . . . j . g g g g g #",
+                "# g g g g g g g g g M . . . g g g g g g g g #"
+            );
+            b.Save();
+        }
 
         /// <summary>Teach the pad: roll onto it, get thrown onto a two-block ledge, roll home.</summary>
         static void Level24()

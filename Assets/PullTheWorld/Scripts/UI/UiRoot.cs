@@ -60,6 +60,10 @@ namespace PullTheWorld
         [SerializeField] float restartArmSeconds = 3.5f;
 
         [Header("Level select")]
+        [Tooltip("Development convenience in Settings: unlocks every level so a build can be tested " +
+                 "from any point. Turn off for release.")]
+        [SerializeField] bool showDevUnlock = true;
+        [SerializeField] Button unlockAllButton;
         [SerializeField] Button levelsButton;
         [SerializeField] UiPanel levelSelect;
         [SerializeField] Transform levelGrid;
@@ -120,6 +124,11 @@ namespace PullTheWorld
             if (closeSettingsButton) closeSettingsButton.onClick.AddListener(CloseSettings);
             if (restartAllButton) restartAllButton.onClick.AddListener(OnRestartAll);
             if (levelsButton) levelsButton.onClick.AddListener(OpenLevelSelect);
+            if (unlockAllButton)
+            {
+                unlockAllButton.onClick.AddListener(OnUnlockAll);
+                unlockAllButton.gameObject.SetActive(showDevUnlock);
+            }
             if (closeLevelsButton) closeLevelsButton.onClick.AddListener(CloseLevelSelect);
             if (skipButton) { skipButton.onClick.AddListener(OnSkipLevel); skipButton.gameObject.SetActive(false); }
 
@@ -283,6 +292,17 @@ namespace PullTheWorld
         {
             Click();
             if (levelSelect) levelSelect.SetVisible(false);
+        }
+
+        void OnUnlockAll()
+        {
+            Click();
+            if (!levels) return;
+            GameProgress.UnlockedIndex = Mathf.Max(0, levels.LevelCount - 1);
+            RefreshProgressLabel();
+            var label = unlockAllButton ? unlockAllButton.GetComponentInChildren<TMP_Text>() : null;
+            if (label) label.text = $"ALL {levels.LevelCount} UNLOCKED";
+            PunchOn(unlockAllButton ? unlockAllButton.transform : null, 0.8f);
         }
 
         // ------------------------------------------------------------------- settings -------
