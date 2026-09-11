@@ -799,20 +799,15 @@ namespace PullTheWorld.EditorTools
         /// teeth. The spike ring is a SEPARATE mesh (<see cref="EnemySpikes"/>) because Enemy.cs
         /// holds the body upright and lets the spikes roll with the rigidbody.
         /// </summary>
+        /// <summary>
+        /// The enemy's body, after the painting: a smooth dark plum sphere with a soft sheen. No
+        /// grin, no teeth - the painted creature is a ball with eyes, and the mouth read as a
+        /// cartoon. Smooth-shaded (flat: false) so the specular highlight rolls over it.
+        /// </summary>
         static Mesh Enemy()
         {
             var mb = new MeshBuilder();
-            mb.AddBlob(0, Vector3.zero, new Vector3(0.30f, 0.28f, 0.30f), 2, 0.09f, 23);
-            // A grin: a dark slot low on the face, and a row of uneven teeth hanging into it.
-            mb.AddChamferBox(1, new Vector3(0f, -0.10f, -0.265f), new Vector3(0.27f, 0.075f, 0.06f), 0.02f);
-            const int teeth = 5;
-            for (int i = 0; i < teeth; i++)
-            {
-                float x = Mathf.Lerp(-0.10f, 0.10f, i / (teeth - 1f));
-                float len = i % 2 == 0 ? 0.07f : 0.05f;
-                mb.AddCylinder(2, new Vector3(x, -0.065f, -0.29f), 0.02f, 0.003f, len, 4, false, true,
-                               Quaternion.FromToRotation(Vector3.up, Vector3.down));
-            }
+            mb.AddBlob(0, Vector3.zero, new Vector3(0.30f, 0.29f, 0.30f), 3, 0.035f, 23, flat: false);
             return mb.ToMesh("Enemy");
         }
 
@@ -831,32 +826,51 @@ namespace PullTheWorld.EditorTools
             return mb.ToMesh("BouncePad");
         }
 
-        /// <summary>Nine uneven spikes on a ring: the part that rolls. Uneven so it reads jagged, not gear-like.</summary>
+        /// <summary>
+        /// Short stubby spikes all over the body, like the painting's urchin, not nine long blades in
+        /// one ring. Spread by a Fibonacci sphere, rooted a little inside the body, blunt-tipped. The
+        /// spikes roll with the rigidbody about Z while the face stays upright, so the front cap
+        /// (towards the camera) is left bare: a spike there would sweep across the eyes forever.
+        /// The back cap is skipped too - never seen.
+        /// </summary>
         static Mesh EnemySpikes()
         {
             var mb = new MeshBuilder();
-            const int spikes = 9;
-            for (int i = 0; i < spikes; i++)
+            const int candidates = 44;
+            const float golden = 2.39996323f;                       // radians
+            var rnd = new System.Random(31);
+            for (int i = 0; i < candidates; i++)
             {
-                float a = (i + 0.5f) / spikes * Mathf.PI * 2f;
-                Vector3 dir = new Vector3(Mathf.Cos(a), Mathf.Sin(a), 0f);
-                float len = i % 3 == 0 ? 0.24f : 0.19f;
-                mb.AddCylinder(0, dir * 0.20f, 0.065f, 0f, len, 5, false, false,
+                float y = 1f - (i + 0.5f) / candidates * 2f;          // -1..1
+                float r = Mathf.Sqrt(Mathf.Max(0f, 1f - y * y));
+                float a = i * golden;
+                var dir = new Vector3(Mathf.Cos(a) * r, y, Mathf.Sin(a) * r);
+                if (dir.z < -0.45f || dir.z > 0.75f) continue;          // bare front cap, unseen back cap
+                float len = 0.085f + (float)rnd.NextDouble() * 0.04f;   // stubby, like the painting's
+                mb.AddCylinder(0, dir * 0.27f, 0.05f, 0.02f, len, 6, false, true,
                                Quaternion.FromToRotation(Vector3.up, dir));
             }
             return mb.ToMesh("EnemySpikes");
         }
 
         /// <summary>
-        /// Two narrow slabs tilted so the inner ends drop: the universal angry brow. Glowing
-        /// material, driven per instance by Enemy.cs.
+        /// Two slanted almond eyes (the painting's angry glare), as textured quads carrying
+        /// Tex_EnemyEye: inner ends dropped, outer ends pointed. The right eye's quad is mirrored
+        /// so the pointed end faces outward on both. Enemy.cs drives the colour per instance.
         /// </summary>
         static Mesh EnemyFace()
         {
             var mb = new MeshBuilder();
+            const float w = 0.19f, h = 0.15f, z = -0.292f;
             for (int s = -1; s <= 1; s += 2)
-                mb.AddChamferBox(0, new Vector3(0.115f * s, 0.075f, -0.285f), new Vector3(0.15f, 0.05f, 0.05f),
-                                 0.018f, Quaternion.Euler(0f, 0f, 22f * s));
+            {
+                var centre = new Vector3(0.14f * s, 0.06f, z);        // a clear gap between the eyes
+                var rot = Quaternion.Euler(0f, 0f, 20f * s);        // inner ends drop
+                Vector3 P(float u, float v) => centre + rot * new Vector3(u * w * 0.5f, v * h * 0.5f, 0f);
+                // Texture u runs inner -> outer; mirror the left eye by walking its corners the other way.
+                if (s > 0) mb.AddFlatQuad(0, P(-1, -1), P(1, -1), P(1, 1), P(-1, 1), Vector3.back);
+                else       mb.AddFlatQuad(0, P(1, -1), P(-1, -1), P(-1, 1), P(1, 1), Vector3.back);
+            }
             return mb.ToMesh("EnemyFace");
         }
 

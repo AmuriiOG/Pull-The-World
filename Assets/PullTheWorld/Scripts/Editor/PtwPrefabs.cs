@@ -58,28 +58,30 @@ namespace PullTheWorld.EditorTools
             // Upright part - body, grin, glaring face, aura. Enemy.cs holds Visual world-upright
             // and leans it towards the player, so the stare never rolls.
             var visual = Node("Visual", e.transform);
-            MeshNode("Body", "Mesh_Enemy", visual.transform, PtwArt.MEnemy, PtwArt.MEnemySpike, PtwArt.MEnemyTeeth);
+            MeshNode("Body", "Mesh_Enemy", visual.transform, PtwArt.MEnemy);
             var face = MeshNode("Face", "Mesh_EnemyFace", visual.transform, PtwArt.MGlowEvil);
-            face.GetComponent<MeshRenderer>().shadowCastingMode =
-                UnityEngine.Rendering.ShadowCastingMode.Off;
+            NoShadows(face);
             var aura = MeshNode("Aura", "Mesh_QuadXY", visual.transform, PtwArt.MEnemyAura);
             aura.transform.localPosition = new Vector3(0f, 0f, 0.06f);       // just behind the body
-            aura.transform.localScale = new Vector3(1.45f, 1.45f, 1f);
-            aura.GetComponent<MeshRenderer>().shadowCastingMode =
-                UnityEngine.Rendering.ShadowCastingMode.Off;
+            aura.transform.localScale = new Vector3(1.7f, 1.7f, 1f);
+            NoShadows(aura);
+            // The painting's few red sparks drifting off the creature.
+            EnemySparks("Sparks", visual.transform, PtwArt.Get(PtwArt.MParticleAdd), PtwArt.Hex("#FF6070"));
 
-            // Rolling part - the spike ring is a sibling of Visual, so it turns with the rigidbody:
-            // a creature gliding on a saw.
+            // Rolling part - the spikes are a sibling of Visual, so they turn with the rigidbody: an
+            // urchin rolling under a face that does not.
             var spikes = MeshNode("Spikes", "Mesh_EnemySpikes", e.transform, PtwArt.MEnemySpike);
             spikes.transform.localScale = Vector3.one * 1.12f;    // matches Enemy.visualScale
 
+            // Pink-red and faint: enough to tint the grass under it, not enough to light the body
+            // (which is what made it read as a hot magenta ball).
             var lightGo = Node("EyeLight", visual.transform);
-            lightGo.transform.localPosition = new Vector3(0f, 0.08f, -0.42f);
+            lightGo.transform.localPosition = new Vector3(0f, -0.05f, -0.55f);   // low and forward: on the grass, not the body
             var eye = lightGo.AddComponent<Light>();
             eye.type = LightType.Point;
-            eye.color = PtwArt.Hex("#FF3A2A");
-            eye.intensity = 0.6f;
-            eye.range = 2.6f;
+            eye.color = PtwArt.Hex("#FF5A66");
+            eye.intensity = 0.22f;
+            eye.range = 2.2f;
             eye.shadows = LightShadows.None;
 
             var trail = Trail("TrailVfx", e.transform, PtwArt.Get(PtwArt.MParticleSoft), PtwArt.Hex("#4A0F2E"));
@@ -97,6 +99,28 @@ namespace PullTheWorld.EditorTools
             Wire(en, "trail", trail);
             Wire(en, "deathVfx", death);
             Save(e, Play);
+        }
+
+        /// <summary>A few tiny red sparks drifting up off the creature, as in the painting.</summary>
+        static ParticleSystem EnemySparks(string name, Transform parent, Material mat, Color color)
+        {
+            var ps = BaseSystem(name, parent, mat, false);
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(1.2f, 2.0f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.02f, 0.045f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.08f, 0.2f);
+            main.startColor = new Color(color.r, color.g, color.b, 0.85f);
+            main.gravityModifier = -0.03f;
+            main.loop = true;
+            main.playOnAwake = true;
+            main.maxParticles = 12;
+            var em = ps.emission; em.enabled = true; em.rateOverTime = 2.5f;
+            var sh = ps.shape;
+            sh.enabled = true;
+            sh.shapeType = ParticleSystemShapeType.Sphere;
+            sh.radius = 0.36f;
+            var col = ps.colorOverLifetime; col.enabled = true; col.color = FadeInOut(color);
+            return ps;
         }
 
         /// <summary>Dark smoke shed while moving. Emission is toggled by Enemy with its speed.</summary>

@@ -247,9 +247,12 @@ namespace PullTheWorld.EditorTools
             // Hostile has to read in one glance against grey rock and green grass.
             // The enemy: a wet, dark bruise-purple body, near-black spikes and mouth, bone teeth.
             // Darker than anything else on the island so it reads as a hole in the scene.
-            Lit(MEnemy, Hex("#6B1A40"), 0.42f);
-            Lit(MEnemySpike, Hex("#1C0B16"), 0.50f);
-            Lit(MEnemyTeeth, Hex("#EDE6D6"), 0.35f);
+            // Painting samples: body centre (130,79,88), lit upper-left (207,145,149) - a dark plum
+            // with a soft satin sheen, not a hot magenta. The sheen is real specular; the body used to
+            // read pink because its own red eye light and aura lit it.
+            Lit(MEnemy, Hex("#6E2046"), 0.55f, 0f, specular: true);
+            Lit(MEnemySpike, Hex("#2A1020"), 0.45f);
+            Lit(MEnemyTeeth, Hex("#EDE6D6"), 0.35f);   // no longer on the enemy; kept for any level that references it
             // Spring pad cap: soft coral, the one warm-saturated thing on the island, so "that
             // throws you" reads at once without fighting the pastel.
             Lit(MBounce, Hex("#FF9E86"), 0.50f);
@@ -263,7 +266,10 @@ namespace PullTheWorld.EditorTools
             Emissive(MGlowCyan, Cyan, Cyan, 2.4f, 0.3f);
             Emissive(MGlowFire, Fire, Fire, 3.8f, 0.2f);
             // Enemy eyes. Enemy.cs drives the emission per instance; this is only the resting look.
-            Emissive(MGlowEvil, Hex("#FF2E1E"), Hex("#FF3A22"), 2.0f, 0.3f);
+            // The eyes are painted sprites (Tex_EnemyEye on alpha-blended Unlit), not emissive
+            // slabs: an almond shape with a soft edge that Enemy.cs pushes past the bloom threshold
+            // for the white-hot core. Colour is driven per instance via _BaseColor.
+            UnlitTextured(MGlowEvil, MakeEyeTexture("Tex_EnemyEye", 128), new Color(1f, 0.30f, 0.30f, 1f), additive: false);
             Emissive(MPlateOn, Hex("#F08A7A"), Hex("#F08A7A"), 1.1f, 0.3f);
 
             // Screen furniture and effects.
@@ -286,7 +292,8 @@ namespace PullTheWorld.EditorTools
             UnlitTextured(MPortalGlow, glowTex, new Color(1f, 0.80f, 0.50f, 0.08f), additive: true);
             UnlitTextured(MPortalFloor, glowTex, new Color(1f, 0.72f, 0.38f, 0.14f), additive: true);
             UnlitTextured(MPortalSpark, starTex, new Color(1f, 0.93f, 0.78f, 1f), additive: true);
-            UnlitTextured(MEnemyAura, glowTex, new Color(1f, 0.10f, 0.18f, 0.45f), additive: true);
+            // Soft pink-red, wide and faint (painting: (218,190,196) round the body), not a red flare.
+            UnlitTextured(MEnemyAura, glowTex, new Color(1f, 0.32f, 0.42f, 0.30f), additive: true);
             // Cyan and faint: additive over a pale sky, a brighter trail just reads as white.
             UnlitTextured(MTrail, glowTex, new Color(0.45f, 0.86f, 1f, 0.34f), additive: true);
             MultiplyTextured(MBlobShadow, shadowTex);
@@ -762,6 +769,37 @@ namespace PullTheWorld.EditorTools
                     float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), new Vector2(r, r)) / r;
                     float a = Mathf.Clamp01(1f - d);
                     a = Mathf.Pow(a, power);
+                    tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                }
+            tex.Apply(false, false);
+            return SaveTexture(tex, id);
+        }
+
+        /// <summary>
+        /// One angry eye: an almond, rounder at the inner end (u = 0) and pointed at the outer (u = 1),
+        /// solid in the middle with a soft edge and a faint glow round it. White; the material tints it.
+        /// </summary>
+        public static Texture2D MakeEyeTexture(string id, int size)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false, false)
+            {
+                name = id,
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear
+            };
+            float half = size * 0.5f;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float px = (x + 0.5f - half) / half, py = (y + 0.5f - half) / half;   // -1..1
+                    // Half-height of the almond at this u: an ellipse squeezed towards the outer end.
+                    // Chunky: the painted eye is nearly half as tall as it is long. At 0.36 it was a slit.
+                    float taper = Mathf.Lerp(1f, 0.5f, (px + 1f) * 0.5f);
+                    float hh = 0.52f * Mathf.Pow(Mathf.Clamp01(1f - px * px), 0.5f) * taper;
+                    float inside = hh > 0.001f ? Mathf.Abs(py) / hh : 9f;
+                    float body = 1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((inside - 0.82f) / 0.30f));
+                    float glow = Mathf.Clamp01(1f - Mathf.Sqrt(px * px * 0.5f + py * py * 2.2f)) * 0.30f;
+                    float a = Mathf.Clamp01(body + glow * (1f - body));
                     tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
                 }
             tex.Apply(false, false);

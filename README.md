@@ -448,6 +448,28 @@ no redesign. What the reference orb is, and what changed:
 * **A mint tint on the grass, not a green flare.** Halo and point light are mint-white and softer
   (halo alpha 0.22 base, light 0.45 base); at speed they still swell.
 
+### The enemy
+
+Polished against the gameplay painting on 2026-09-12, same brief. What the painted creature is,
+and what changed:
+
+* **A dark plum ball with a satin sheen.** Painting samples: centre (130,79,88), lit upper-left
+  (207,145,149). Ours read as a hot magenta ball because its own red point light and its additive
+  aura lit it. The body (`M_Enemy`, `#6E2046`) now has real specular, the light is faint pink-red
+  (0.35 calm, ~1.1 hunting) and the aura is wide and faint (alpha 0.20 / 0.45), so both tint the
+  grass rather than the creature. Smooth-shaded so the highlight rolls over it.
+* **An urchin, not a saw.** Short blunt cones spread over the sphere by a Fibonacci distribution
+  (`EnemySpikes`), rooted just inside the body. The spikes roll with the rigidbody about Z while
+  the face stays upright, so the front cap is left bare - a spike there would sweep across the
+  eyes forever - and the unseen back cap is skipped. The old nine long blades in one ring were
+  what made it read as a gear.
+* **Slanted almond eyes, no mouth.** `Mesh_EnemyFace` is two textured quads (`Tex_EnemyEye`: an
+  almond rounder at the inner end, pointed at the outer, with a soft edge), mirrored so both
+  point outward, inner ends dropped for the glare. Alpha-blended Unlit driven per instance via
+  `_BaseColor`; the hunting pulse pushes it past the bloom threshold for the white-hot core the
+  painting has. The brow slabs and the toothy grin are gone.
+* **Sparks.** A few tiny red motes drift up off the body, as in the painting.
+
 ### Sky motion
 
 `Feel/SkyLayer.cs` + `Feel/SkyParallax.cs`. Every sky element is a `SkyLayer` child of the

@@ -76,8 +76,8 @@ namespace PullTheWorld
         [SerializeField] ParticleSystem deathVfx;
 
         [Header("Look")]
-        [SerializeField] Color eyeColor = new Color(1f, 0.20f, 0.12f);
-        [SerializeField] Color auraColor = new Color(1f, 0.10f, 0.18f);
+        [SerializeField] Color eyeColor = new Color(1f, 0.28f, 0.30f);   // pink-red, like the painted glare
+        [SerializeField] Color auraColor = new Color(1f, 0.32f, 0.42f);
         [Tooltip("Body scale relative to the collider. A little oversize so it carries on a phone.")]
         [SerializeField] float visualScale = 1.12f;
 
@@ -94,7 +94,6 @@ namespace PullTheWorld
             threat = Mathf.Max(threat, v);
         }
 
-        static readonly int EmissionColor = Shader.PropertyToID("_EmissionColor");
         static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
 
         Rigidbody rb;
@@ -208,33 +207,37 @@ namespace PullTheWorld
                 visual.rotation = Quaternion.Euler(0f, 0f, lean);
             }
 
-            // Eyes: dull ember when calm, hard pulsing glare when hunting, white-hot on a flinch.
+            // Eyes: a steady red glare when calm, a hard pulsing one when hunting, white-hot on a
+            // flinch. The eyes are painted sprites (alpha-blended Unlit), so this drives _BaseColor;
+            // anything over 1.15 blooms, which is what gives the almond its white-hot core.
             if (faceRenderer)
             {
-                float glow = alert ? 4.2f + 2.4f * Mathf.Abs(Mathf.Sin(t * 9f))
-                                   : 1.4f + 0.5f * Mathf.Sin(t * 2.3f);
-                glow += flash * 6f;
+                float glow = alert ? 1.6f + 0.6f * Mathf.Abs(Mathf.Sin(t * 9f))
+                                   : 1.55f + 0.2f * Mathf.Sin(t * 2.3f);   // lit even at rest: the painted eyes glow
+                glow += flash * 2f;
                 faceRenderer.GetPropertyBlock(faceBlock);
-                faceBlock.SetColor(EmissionColor, Color.Lerp(eyeColor, Color.white, flash * 0.6f) * glow);
+                faceBlock.SetColor(BaseColor, Color.Lerp(eyeColor, Color.white, flash * 0.6f) * glow);
                 faceRenderer.SetPropertyBlock(faceBlock);
             }
 
+            // Aura: wide and faint, the painting's soft pink haze, swelling when it hunts.
             if (aura)
             {
-                float size = (alert ? 1.9f + 0.28f * Mathf.Sin(t * 7.1f) : 1.45f + 0.10f * Mathf.Sin(t * 2.6f))
+                float size = (alert ? 2.1f + 0.25f * Mathf.Sin(t * 7.1f) : 1.7f + 0.10f * Mathf.Sin(t * 2.6f))
                            + flash * 0.6f;
                 aura.localScale = new Vector3(size, size, 1f);
                 if (auraRenderer)
                 {
-                    float alpha = (alert ? 0.85f : 0.42f) + flash * 0.4f;
+                    float alpha = (alert ? 0.45f : 0.20f) + flash * 0.3f;
                     auraRenderer.GetPropertyBlock(auraBlock);
                     auraBlock.SetColor(BaseColor, new Color(auraColor.r, auraColor.g, auraColor.b, alpha));
                     auraRenderer.SetPropertyBlock(auraBlock);
                 }
             }
 
+            // The light tints the grass under it; it must not light the body into a pink ball.
             if (eyeLight)
-                eyeLight.intensity = (alert ? 1.6f + 0.7f * Mathf.PerlinNoise(t * 11f, 0.3f) : 0.6f) + flash * 2f;
+                eyeLight.intensity = (alert ? 0.6f + 0.3f * Mathf.PerlinNoise(t * 11f, 0.3f) : 0.22f) + flash * 1.0f;
 
             if (trail)
             {
