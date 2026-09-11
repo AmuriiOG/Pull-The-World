@@ -172,6 +172,9 @@ namespace PullTheWorld.EditorTools
         public const string MOrbGlow = "M_OrbGlow";
         public const string MOrbSpark = "M_OrbSpark";
         public const string MPortalStud = "M_PortalStud";
+        public const string MPortalFloor = "M_PortalFloor";   // the pool of light on the grass at the threshold
+        public const string MArchStone = "M_ArchStone";   // the doorway's cream masonry
+        public const string MArchCarve = "M_ArchCarve";   // its carved diamonds
         public const string MPortalEnergyFar = "M_PortalEnergyFar";
 
         static readonly Dictionary<string, Material> cache = new Dictionary<string, Material>();
@@ -226,7 +229,12 @@ namespace PullTheWorld.EditorTools
             Lit(MFlowerYellow, FlowerYellow, 0.25f);
             Lit(MFlowerPink, FlowerPink, 0.25f);
             Lit(MFlowerCenter, FlowerCenter, 0.3f);
-            Emissive(MPortalStud, Hex("#FFF2D0"), Hex("#FFE7B0"), 1.4f, 0.4f);
+            // The doorway is CREAM, clearly lighter than the island's grey stone: the mockup's arch
+            // samples at (250-255, 234-243, 205-221) against a wall at (172,161,153). The diamonds
+            // are carved, a shade darker than the stone; only the keystone's glows, faintly.
+            Lit(MArchStone, Hex("#F9F1E4"), 0.18f);   // capture jambs were (224,207,188) at #F2E8D8; the painting's are ~(250,238,210)
+            Lit(MArchCarve, Hex("#DCD0BE"), 0.22f);
+            Emissive(MPortalStud, Hex("#FFF2D0"), Hex("#FFE7B0"), 0.45f, 0.4f);
 
             // Enemy: a bruised magenta that is in nobody else's palette, with near-black spikes.
             // Hostile has to read in one glance against grey rock and green grass.
@@ -262,7 +270,14 @@ namespace PullTheWorld.EditorTools
             var whiteTex = MakeSolidTexture("Tex_White", 4, Color.white);
 
             UnlitTextured(MAnchorRing, ringTex, Cyan * 1.5f, additive: true);
-            UnlitTextured(MPortalGlow, glowTex, Warm * 0.36f, additive: true);
+            // Two additive spills. These blend SrcAlpha One, so what gets ADDED is tint (linear) x
+            // alpha x blob: keep that small wherever it overlaps the doorway or the frame, or the
+            // field clips to white (it did). The halo round the arch is faint; the pool on the
+            // grass in front is the strong one - the mockup's grass under the door goes yellow,
+            // (252,234,155) against (184,236,163) beside it, which a warm add of ~(0.4,0.2,0.05)
+            // linear on our grass reproduces.
+            UnlitTextured(MPortalGlow, glowTex, new Color(1f, 0.80f, 0.50f, 0.08f), additive: true);
+            UnlitTextured(MPortalFloor, glowTex, new Color(1f, 0.72f, 0.38f, 0.18f), additive: true);
             UnlitTextured(MEnemyAura, glowTex, new Color(1f, 0.10f, 0.18f, 0.45f), additive: true);
             // Cyan and faint: additive over a pale sky, a brighter trail just reads as white.
             UnlitTextured(MTrail, glowTex, new Color(0.45f, 0.86f, 1f, 0.34f), additive: true);
@@ -413,38 +428,38 @@ namespace PullTheWorld.EditorTools
         /// </summary>
         static void BuildPortalEnergy()
         {
-            var far = LoadOrCreateShader(MPortalEnergyFar, "PTW/PortalEnergy");
-            if (far != null)
+            // Geometry of the ArchFill mesh (see PtwMeshes): x +/-0.40, y 0.02..ArchApex.
+            float top = PtwMeshes.ArchApex, bottom = 0.02f;
+            var centre = new Vector4(0f, (top + bottom) * 0.5f, 0f, 0f);
+            var extents = new Vector4(0.40f, (top - bottom) * 0.5f, 0f, 0f);
+
+            // Mockup interior samples: bottom/centre (253,231,184), top (246,184,95), core (254,237,201).
+            void Field(Material mat, float intensity, float lineStrength)
             {
-                far.SetColor("_CoreColor", Hex("#FFD48A"));
-                far.SetColor("_EdgeColor", Hex("#EFA85E"));
-                far.SetFloat("_Intensity", 0.9f);
-                far.SetVector("_Center", new Vector4(0f, 0.89f, 0f, 0f));
-                far.SetVector("_Extents", new Vector4(0.33f, 0.76f, 0f, 0f));
-                far.SetFloat("_Speed", 0.6f);
-                far.SetFloat("_Swirl", 3f);
-                far.SetFloat("_RingFreq", 8f);
-                far.SetFloat("_Pulse", 0.1f);
-                far.SetFloat("_EdgeSoft", 0.45f);
-                far.renderQueue = (int)RenderQueue.Transparent;
-                EditorUtility.SetDirty(far);
+                mat.SetColor("_CoreColor", Hex("#FFE7B8"));
+                mat.SetColor("_EdgeColor", Hex("#F6B85F"));
+                mat.SetColor("_LineColor", Hex("#FFF8EC"));
+                mat.SetFloat("_Intensity", intensity);
+                mat.SetVector("_Center", centre);
+                mat.SetVector("_Extents", extents);
+                mat.SetVector("_StarOffset", new Vector4(0f, -0.09f, 0f, 0f));
+                mat.SetFloat("_RingSpacing", 0.115f);
+                mat.SetFloat("_RingCount", 5f);
+                mat.SetFloat("_Spokes", 12f);
+                mat.SetFloat("_LineWidth", 0.009f);
+                mat.SetFloat("_LineStrength", lineStrength);
+                mat.SetFloat("_CoreSize", 0.055f);
+                mat.SetFloat("_Pulse", 0.08f);
+                mat.renderQueue = (int)RenderQueue.Transparent;
+                EditorUtility.SetDirty(mat);
             }
+
+            var far = LoadOrCreateShader(MPortalEnergyFar, "PTW/PortalEnergy");
+            if (far != null) Field(far, 0.92f, 0.30f);
 
             var m = LoadOrCreateShader(MPortalEnergy, "PTW/PortalEnergy");
             if (m == null) return;
-            m.SetColor("_CoreColor", Hex("#FFD48A"));
-            m.SetColor("_EdgeColor", Hex("#EFA85E"));
-            m.SetFloat("_Intensity", 0.98f);
-            // Matches the pointed ArchFill mesh: spans y 0.15..1.63, x +/-0.31.
-            m.SetVector("_Center", new Vector4(0f, 0.89f, 0f, 0f));
-            m.SetVector("_Extents", new Vector4(0.33f, 0.76f, 0f, 0f));
-            m.SetFloat("_Speed", 0.85f);
-            m.SetFloat("_Swirl", 3f);
-            m.SetFloat("_RingFreq", 8f);
-            m.SetFloat("_Pulse", 0.16f);
-            m.SetFloat("_EdgeSoft", 0.45f);
-            m.renderQueue = (int)RenderQueue.Transparent;
-            EditorUtility.SetDirty(m);
+            Field(m, 1.0f, 0.42f);
         }
 
         /// <summary>Water in the pastel theme: a clear pool blue, soft foam.</summary>

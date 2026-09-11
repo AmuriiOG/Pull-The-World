@@ -362,35 +362,40 @@ namespace PullTheWorld.EditorTools
         static void BuildPortal()
         {
             var door = Node("ExitPortal_Door");
-            // Cream stones, a warmer base step, and glowing diamond studs (sub 2) like the mockup.
-            MeshNode("Arch", "Mesh_DoorArch", door.transform, PtwArt.MStoneLight, PtwArt.MStoneMid, PtwArt.MPortalStud);
+            // Cream masonry, carved diamonds a shade darker, one faintly glowing keystone diamond.
+            MeshNode("Arch", "Mesh_DoorArch", door.transform, PtwArt.MArchStone, PtwArt.MArchCarve, PtwArt.MPortalStud);
 
             var glow = MeshNode("Glow", "Mesh_ArchFill", door.transform, PtwArt.MPortalEnergy);
             glow.transform.localPosition = new Vector3(0f, 0f, 0f);
             var glowRend = glow.GetComponent<MeshRenderer>();
             glowRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-            // Soft halo billboard so the doorway blooms onto its surroundings. Taller now: the
-            // pointed arch reaches 1.8 blocks.
+            // Soft halo billboard round the doorway, and a pool of light on the grass in front of
+            // it: in the mockup the threshold is the brightest thing on the island and the grass
+            // under the door goes yellow.
+            float apex = PtwMeshes.ArchApex;
             var halo = MeshNode("Halo", "Mesh_QuadXY", door.transform, PtwArt.MPortalGlow);
-            halo.transform.localPosition = new Vector3(0f, 0.9f, -0.24f);
-            halo.transform.localScale = new Vector3(3.0f, 3.4f, 1f);
-            halo.GetComponent<MeshRenderer>().shadowCastingMode =
-                UnityEngine.Rendering.ShadowCastingMode.Off;
+            halo.transform.localPosition = new Vector3(0f, apex * 0.5f, -0.26f);
+            halo.transform.localScale = new Vector3(2.4f, apex * 1.9f, 1f);
+            NoShadows(halo);
+            var pool = MeshNode("FloorGlow", "Mesh_QuadXZ", door.transform, PtwArt.MPortalFloor);
+            pool.transform.localPosition = new Vector3(0f, 0.03f, -0.42f);
+            pool.transform.localScale = new Vector3(1.9f, 1f, 1.15f);
+            NoShadows(pool);
 
             var mouth = Node("Mouth", door.transform);
-            mouth.transform.localPosition = new Vector3(0f, 0.55f, 0f);
+            mouth.transform.localPosition = new Vector3(0f, 0.6f, 0f);
 
             var lightGo = Node("PortalLight", door.transform);
-            lightGo.transform.localPosition = new Vector3(0f, 0.9f, 0.1f);
+            lightGo.transform.localPosition = new Vector3(0f, 0.7f, -0.15f);
             var pl = lightGo.AddComponent<Light>();
             pl.type = LightType.Point;
-            pl.color = PtwArt.Warm;
-            pl.intensity = 1.3f;
-            pl.range = 5f;
+            pl.color = PtwArt.Hex("#FFD98F");
+            pl.intensity = 0.95f;
+            pl.range = 4.5f;
             pl.shadows = LightShadows.None;
 
-            var idle = Motes("IdleVfx", door.transform, PtwArt.Get(PtwArt.MParticleAdd), PtwArt.Warm);
+            var idle = Motes("IdleVfx", door.transform, PtwArt.Get(PtwArt.MParticleAdd), PtwArt.Hex("#FFF1CC"));
             var arrive = Burst("ArriveVfx", door.transform, PtwArt.Get(PtwArt.MParticleAdd), PtwArt.Warm, 34);
 
             var ep = door.AddComponent<ExitPortal>();

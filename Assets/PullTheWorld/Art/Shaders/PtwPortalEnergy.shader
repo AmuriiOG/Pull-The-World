@@ -1,25 +1,32 @@
-// Animated energy field for the exit doorway.
+// The doorway's interior, after the mockups: a golden field that is cream at the bottom and
+// deepens to amber at the top, with a delicate MANDALA drawn over it - thin concentric rings and
+// radial spokes around a bright core - and a soft pale rim where the light meets the frame.
 //
-// The door is the focal point of every screenshot, and a flat emissive plane was selling it
-// short. This swirls, breathes and has a hot core, and being additive it blooms hard through the
-// post stack without needing any extra geometry.
+// Alpha-blended, not additive. Additive light over a bright pastel sky can only go whiter,
+// whatever colour it is given; that is how the first doorway became a blown-out white oval. This
+// paints the gold, keeps the field under the bloom threshold, and lets only the core bloom - the
+// warm spill around the arch is the additive halo quad's job.
 //
-// Mapped from OBJECT space via _Center/_Extents rather than UVs, because the arch fill mesh is a
-// procedural rectangle-plus-fan whose UVs are not a clean 0..1 rect.
+// Mapped from OBJECT space via _Center/_Extents (the fill mesh is a procedural rectangle-plus-fan
+// with no clean UVs). Ring and spoke geometry is in object units so the rings are round on screen.
 Shader "PTW/PortalEnergy"
 {
     Properties
     {
-        _CoreColor  ("Core Colour", Color) = (1, 0.92, 0.62, 1)
-        _EdgeColor  ("Edge Colour", Color) = (1, 0.60, 0.16, 1)
-        _Intensity  ("Intensity", Range(0, 8)) = 2.4
-        _Center     ("Local Centre (xy)", Vector) = (0, 0.72, 0, 0)
-        _Extents    ("Local Extents (xy)", Vector) = (0.32, 0.62, 0, 0)
-        _Speed      ("Swirl Speed", Range(0, 4)) = 0.9
-        _Swirl      ("Swirl Arms", Range(0, 10)) = 3
-        _RingFreq   ("Ring Frequency", Range(0, 24)) = 9
-        _Pulse      ("Pulse Depth", Range(0, 1)) = 0.16
-        _EdgeSoft   ("Edge Softness", Range(0.01, 1)) = 0.42
+        _CoreColor   ("Field Colour, bottom / centre", Color) = (1, 0.90, 0.75, 1)
+        _EdgeColor   ("Field Colour, top", Color) = (0.96, 0.72, 0.37, 1)
+        _LineColor   ("Mandala Line Colour", Color) = (1, 0.97, 0.90, 1)
+        _Intensity   ("Intensity", Range(0, 3)) = 1.0
+        _Center      ("Local Centre (xy)", Vector) = (0, 0.75, 0, 0)
+        _Extents     ("Local Extents (xy)", Vector) = (0.40, 0.73, 0, 0)
+        _StarOffset  ("Core Offset from Centre (xy)", Vector) = (0, -0.09, 0, 0)
+        _RingSpacing ("Ring Spacing (units)", Range(0.02, 0.5)) = 0.115
+        _RingCount   ("Ring Count", Range(1, 12)) = 5
+        _Spokes      ("Spokes", Range(0, 24)) = 12
+        _LineWidth   ("Line Width (units)", Range(0.002, 0.03)) = 0.009
+        _LineStrength("Line Strength", Range(0, 1)) = 0.55
+        _CoreSize    ("Core Radius (units)", Range(0.01, 0.3)) = 0.055
+        _Pulse       ("Pulse Depth", Range(0, 1)) = 0.08
     }
 
     SubShader
@@ -29,9 +36,6 @@ Shader "PTW/PortalEnergy"
         Pass
         {
             Name "PortalEnergy"
-            // Alpha-blended, not additive. Additive light over a bright pastel sky can only go
-            // whiter - the doorway was a blown-out white oval. Painting gold over the sky is the
-            // only way it can read GOLDEN like the mockup; the halo quad around it stays additive.
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
             Cull Off
@@ -50,21 +54,15 @@ Shader "PTW/PortalEnergy"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
-                float2 local      : TEXCOORD0;
+                float2 local      : TEXCOORD0;   // -1..1 across the opening
+                float2 units      : TEXCOORD1;   // object units from the fill centre
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             CBUFFER_START(UnityPerMaterial)
-                float4 _CoreColor;
-                float4 _EdgeColor;
-                float4 _Center;
-                float4 _Extents;
-                float  _Intensity;
-                float  _Speed;
-                float  _Swirl;
-                float  _RingFreq;
-                float  _Pulse;
-                float  _EdgeSoft;
+                float4 _CoreColor, _EdgeColor, _LineColor;
+                float4 _Center, _Extents, _StarOffset;
+                float  _Intensity, _RingSpacing, _RingCount, _Spokes, _LineWidth, _LineStrength, _CoreSize, _Pulse;
             CBUFFER_END
 
             Varyings vert(Attributes IN)
@@ -73,30 +71,53 @@ Shader "PTW/PortalEnergy"
                 UNITY_SETUP_INSTANCE_ID(IN);
                 UNITY_TRANSFER_INSTANCE_ID(IN, OUT);
                 OUT.positionCS = TransformObjectToHClip(IN.positionOS.xyz);
-                OUT.local = (IN.positionOS.xy - _Center.xy) / max(float2(0.001, 0.001), _Extents.xy);
+                OUT.units = IN.positionOS.xy - _Center.xy;
+                OUT.local = OUT.units / max(float2(0.001, 0.001), _Extents.xy);
                 return OUT;
             }
 
             half4 frag(Varyings IN) : SV_Target
             {
                 float2 p = IN.local;
-                float r = length(p);
-                float a = atan2(p.y, p.x);
-                float t = _Time.y * _Speed;
+                float pulse = 1.0 + sin(_Time.y * 1.3) * _Pulse;
 
-                // Two overlapping motions: spiral arms turning, and rings travelling inward.
-                float arms  = sin(a * _Swirl + t * 2.0 + r * 5.0) * 0.5 + 0.5;
-                float rings = sin(r * _RingFreq - t * 3.0) * 0.5 + 0.5;
-                float swirl = lerp(0.72, 1.0, arms * 0.6 + rings * 0.4);
+                // The field: cream low down, amber at the top, paler again along the frame.
+                float v = saturate(p.y * 0.5 + 0.5);
+                half3 col = lerp(_CoreColor.rgb, _EdgeColor.rgb, smoothstep(0.12, 0.95, v));
+                float rim = smoothstep(0.72, 1.0, length(p));
+                col = lerp(col, half3(1.0, 0.96, 0.88), rim * 0.18);
+                // Light pooling at the threshold.
+                col = lerp(col, half3(1.0, 0.94, 0.80), smoothstep(-0.55, -1.0, p.y) * 0.22);
 
-                // Soft falloff to the arch edge so it never shows a hard rim.
-                float body = smoothstep(1.0, 1.0 - _EdgeSoft, r);
+                // The mandala, in object units round the core.
+                float2 q = IN.units - _StarOffset.xy;
+                float d = length(q);
+                float reach = _RingSpacing * (_RingCount + 0.35);
+                float fade = (1.0 - smoothstep(reach * 0.55, reach, d)) * pulse;
 
-                float pulse = 1.0 + sin(_Time.y * 2.3) * _Pulse;
-                float e = body * swirl * pulse;
+                float m = fmod(d, _RingSpacing);
+                float toRing = min(m, _RingSpacing - m);
+                float ring = 1.0 - smoothstep(_LineWidth * 0.5, _LineWidth * 1.4, toRing);
+                ring *= step(_RingSpacing * 0.5, d);                       // no ring inside the core
 
-                half3 col = lerp(_EdgeColor.rgb, _CoreColor.rgb, saturate((1.0 - r) * 1.5));
-                return half4(col * _Intensity * e, saturate(e));
+                float a = atan2(q.y, q.x) + _Time.y * 0.035;                // spokes turn very slowly
+                float sa = a * _Spokes / 6.2831853;
+                float toSpoke = abs(frac(sa + 0.5) - 0.5) * (6.2831853 / max(1.0, _Spokes)) * d;
+                float spoke = 1.0 - smoothstep(_LineWidth * 0.35, _LineWidth * 1.1, toSpoke);
+                spoke *= smoothstep(_RingSpacing * 0.9, _RingSpacing * 1.6, d);
+
+                float lines = saturate(ring * 0.9 + spoke * 0.5) * _LineStrength * fade;
+                col = lerp(col, _LineColor.rgb, lines);
+
+                // The core: a soft disc that is allowed to bloom, with a faint four-point glint.
+                float core = exp(-(d * d) / (2.0 * _CoreSize * _CoreSize));
+                float glint = pow(saturate(1.0 - abs(q.x) / (_CoreSize * 3.2)), 5.0) * pow(saturate(1.0 - abs(q.y) / (_CoreSize * 0.45)), 2.0)
+                            + pow(saturate(1.0 - abs(q.y) / (_CoreSize * 3.2)), 5.0) * pow(saturate(1.0 - abs(q.x) / (_CoreSize * 0.45)), 2.0);
+                float hot = saturate(core * 1.25 + glint * 0.6) * pulse;
+                col = lerp(col, half3(1.0, 0.99, 0.95), hot);
+                col += half3(1.0, 0.96, 0.85) * core * 0.35 * pulse;
+
+                return half4(col * _Intensity, 1.0);
             }
             ENDHLSL
         }

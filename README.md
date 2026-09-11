@@ -374,6 +374,33 @@ its multiply **contact-shadow blob**: it stayed world-flat while the level tilte
 as a dark blue-grey ellipse floating beside a glowing glass ball ("something black on the player").
 The mockup's orb is a light source and casts nothing.
 
+### The doorway
+
+Rebuilt against the paintings on 2026-09-11 (`PtwMeshes.DoorArch`/`ArchFill`, `PtwPortalEnergy.shader`,
+`PtwPrefabs.BuildPortal`). What the reference actually shows, and what was changed to match:
+
+* **An equilateral pointed arch of large cream stones.** Two tall jambs a side, three voussoirs a
+  side *swept along the arc* (`ArcStone`) so the inner and outer curves are smooth, a pointed
+  keystone filling the notch where the arcs meet, hairline joints. The old arch was tilted boxes
+  with a jagged inner edge, three short stones a jamb, and a base step the paintings do not have.
+  Opening 0.80 wide by 1.47 tall (the paintings' opening is a little over half as wide as tall),
+  frame 0.27 thick, no step: the jambs stand on the grass.
+* **Cream, not grey.** The arch samples at (250–255, 234–243, 205–221) in the paintings against a
+  wall at (172,161,153); `M_ArchStone` is cream (`#F2E8D8`), clearly lighter than the island.
+* **Carved diamonds, not lamps.** Two down each jamb, one on each arch side, a larger one on the
+  keystone: flat, a shade darker than the stone (`M_ArchCarve`), and only the keystone's glows a
+  little. The old studs were bright emissive blobs.
+* **A golden mandala inside.** Cream at the threshold (mockup 253,231,184) to amber at the top
+  (246,184,95), five thin concentric rings and twelve slow spokes round a bright core at 45%
+  height, a pale rim where the light meets the frame. Alpha-blended and held under the bloom
+  threshold; only the core blooms. Capture: (253,200,98) at the top, (253,244,193) at the
+  threshold.
+* **Light on the grass.** A faint additive halo round the arch (`M_PortalGlow`) and a separate
+  pool on the grass at the threshold (`M_PortalFloor`), because the grass under the painted door
+  goes yellow (252,234,155). Both are `SrcAlpha One`, so what they add is tint × alpha × blob -
+  the first retint kept full RGB and only lowered alpha, tripled the add, and clipped the doorway
+  to white. Keep that product small wherever a spill overlaps the doorway or the frame.
+
 ### Sky motion
 
 `Feel/SkyLayer.cs` + `Feel/SkyParallax.cs`. Every sky element is a `SkyLayer` child of the

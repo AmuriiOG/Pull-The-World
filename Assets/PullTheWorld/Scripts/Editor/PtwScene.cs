@@ -306,8 +306,8 @@ namespace PullTheWorld.EditorTools
                 var glow = PtwPrefabs.MeshNode("Glow", "Mesh_ArchFill", arch.transform, PtwArt.MPortalEnergyFar);
                 StripCollidersAndShadows(glow, keepMaterials: true);
                 var halo = PtwPrefabs.MeshNode("Halo", "Mesh_QuadXY", arch.transform, PtwArt.MPortalGlow);
-                halo.transform.localPosition = new Vector3(0f, 0.9f, -0.2f);
-                halo.transform.localScale = new Vector3(2.4f, 2.8f, 1f);
+                halo.transform.localPosition = new Vector3(0f, PtwMeshes.ArchApex * 0.5f, -0.2f);
+                halo.transform.localScale = new Vector3(2.2f, PtwMeshes.ArchApex * 1.7f, 1f);
                 StripCollidersAndShadows(halo, keepMaterials: true);
 
                 if (vine)

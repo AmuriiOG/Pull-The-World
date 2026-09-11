@@ -518,7 +518,7 @@ namespace PullTheWorld.Tests
         /// second (a thud, a shake, a flash - the "weird knocking under the music"). Measured along
         /// the contact normal the same seams are under 2 m/s and ignored. Before the fix this run
         /// logged six impacts; a couple are still legitimate (the ball hops a block edge as the
-        /// level tips), hence the bound rather than zero.
+        /// level tips) at strength 0.2-0.45, so the bound is on LOUD landings (0.5+), not on count.
         /// </summary>
         [UnityTest]
         public IEnumerator RollingDoesNotThud()
@@ -532,7 +532,12 @@ namespace PullTheWorld.Tests
             yield return Wait(1.6f);
             player.OnImpact -= Count;
             Debug.Log("PTW_DIAG roll impacts: " + string.Join(", ", hits.ConvertAll(h => h.ToString("F2"))));
-            Assert.LessOrEqual(hits.Count, 3, "Rolling along the grass row registered " + hits.Count + " landings");
+            // Count the LOUD ones. With the magnitude measure every seam was a 0.5-0.9 hit (five or
+            // six of them here); with the closing-speed measure the genuine block-edge hops come in
+            // at 0.2-0.45 and are nearly silent (volume is squared). How many small hops occur
+            // varies with frame pacing, so the bound is on strength, not on count.
+            int loud = hits.FindAll(h => h >= 0.5f).Count;
+            Assert.LessOrEqual(loud, 1, "Rolling along the grass row registered " + loud + " hard landings of " + hits.Count);
         }
 
         /// <summary>The intended solution to level 21: tip towards the door, the rock bowls it.</summary>

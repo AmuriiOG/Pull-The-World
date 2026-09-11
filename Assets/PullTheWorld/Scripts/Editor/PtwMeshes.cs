@@ -243,90 +243,137 @@ namespace PullTheWorld.EditorTools
         // The portal, after the mockup: a tall POINTED (equilateral) arch of cream stone with small
         // diamond studs down the jambs, not a round Roman one. Shared numbers between the arch and
         // the fill pane below so the glow sits exactly inside the masonry.
-        const float ArchSpring = 1.05f;    // where the jambs stop and the arch begins
-        const float ArchR = 0.44f;         // half span to the centre of the stones
-        const float ArchStoneH = 0.30f;    // radial thickness of a stone
-        const float ArchInner = ArchR - 0.13f;                  // inner half width of the opening
-        const float ArchRadius = 2f * ArchR;                    // each arc is centred on the opposite springing
-        const float ArchInnerRadius = ArchRadius - ArchStoneH * 0.5f;
+        // The doorway is an EQUILATERAL pointed arch, like the mockups': the opening is W wide, each
+        // inner arc is centred on the opposite inner springing point with radius W, so the two meet
+        // at the apex 60 degrees round. Proportions measured off the paintings: the opening is a
+        // little over half as wide as it is tall, the frame about a third of the opening, and the
+        // jambs stand straight on the grass - no step.
+        const float ArchInner = 0.40f;                              // inner half width of the opening
+        const float ArchStoneH = 0.27f;                             // frame thickness, all the way round
+        const float ArchR = ArchInner + ArchStoneH * 0.5f;          // half span to the centre of the frame
+        const float ArchSpring = 0.78f;                             // where the jambs stop and the arch begins
+        const float ArchInnerRadius = 2f * ArchInner;               // inner curve radius
+        const float ArchOuterRadius = ArchInnerRadius + ArchStoneH; // outer curve radius
+        const float ArchDepth = 0.40f;
+        const float ArchBottom = 0.02f;                             // the fill starts just above the grass
+        /// <summary>Height of the inside of the arch at the apex; the fill and the halo are sized from it.</summary>
+        public const float ArchApex = ArchSpring + 0.8660254f * ArchInnerRadius;
 
+        /// <summary>
+        /// The arch, after the mockups: two tall cream jambs a side, three voussoirs a side SWEPT
+        /// along the arc (so the inner and outer curves are smooth, not a stack of tilted boxes),
+        /// a pointed keystone filling the notch where the arcs meet, and small carved diamonds -
+        /// flat and stone-coloured, not lamps. Sub 0 stone, sub 1 carved diamonds, sub 2 the
+        /// keystone's diamond, which alone may glow a little.
+        /// </summary>
         static Mesh DoorArch()
         {
             var mb = new MeshBuilder();
-            var stone = new Vector3(0.26f, ArchStoneH, 0.44f);
+            const float joint = 0.012f;                              // hairline between stones
 
-            // Base step.
-            mb.AddChamferBox(1, new Vector3(0f, 0.075f, 0f), new Vector3(1.52f, 0.15f, 0.62f), 0.04f);
-
-            // Jambs: three stones a side, alternating depth a touch so the masonry reads.
-            for (int side = -1; side <= 1; side += 2)
-                for (int i = 0; i < 3; i++)
-                {
-                    float y = 0.3f + i * 0.3f;
-                    float d = stone.z + (i % 2 == 0 ? 0.03f : -0.02f);
-                    mb.AddChamferBox(0, new Vector3(ArchR * side, y, 0f),
-                                     new Vector3(stone.x, stone.y, d), 0.035f);
-                }
-
-            // Pointed arch: two arcs, each centred on the opposite springing point, meeting at the
-            // apex. Four voussoirs per side plus a keystone.
-            const int perSide = 4;
+            // Jambs.
             for (int side = -1; side <= 1; side += 2)
             {
-                var centre = new Vector3(-side * ArchR, ArchSpring, 0f);
-                // Angle from the centre: starts at the springing on this side, ends at the apex.
-                float thStart = side < 0 ? 180f : 0f;
-                float thApex = side < 0 ? 120f : 60f;
+                float h = (ArchSpring - joint) * 0.5f;
+                for (int i = 0; i < 2; i++)
+                {
+                    float y = h * 0.5f + i * (h + joint);
+                    mb.AddChamferBox(0, new Vector3(ArchR * side, y, 0f), new Vector3(ArchStoneH, h, ArchDepth), 0.028f);
+                }
+            }
+
+            // Arch. Each side is swept from its springing (0 or 180 degrees round its centre) to the
+            // 60-degree apex, split into three voussoirs with hairline joints.
+            const int perSide = 3;
+            float midR = ArchInnerRadius + ArchStoneH * 0.5f;
+            float gap = joint / midR * Mathf.Rad2Deg * 0.5f;
+            for (int side = -1; side <= 1; side += 2)
+            {
+                var c = new Vector2(-side * ArchInner, ArchSpring);
+                float th0 = side < 0 ? 180f : 0f;
+                float th1 = side < 0 ? 120f : 60f;
+                float dir = Mathf.Sign(th1 - th0);
                 for (int i = 0; i < perSide; i++)
                 {
-                    float th = Mathf.Lerp(thStart, thApex, (i + 0.5f) / perSide);
-                    float rad = th * Mathf.Deg2Rad;
-                    var pos = centre + new Vector3(Mathf.Cos(rad), Mathf.Sin(rad), 0f) * ArchRadius;
-                    var rot = Quaternion.Euler(0f, 0f, th - 90f);          // local +Y radially outward
-                    float d = stone.z + (i % 2 == 0 ? 0.03f : -0.02f);
-                    mb.AddChamferBox(0, pos, new Vector3(0.24f, stone.y, d), 0.035f, rot);
+                    float a0 = Mathf.Lerp(th0, th1, i / (float)perSide) + dir * (i == 0 ? 0f : gap);
+                    float a1 = Mathf.Lerp(th0, th1, (i + 1) / (float)perSide) - dir * (i == perSide - 1 ? 0f : gap);
+                    ArcStone(mb, 0, c, a0, a1, ArchInnerRadius, ArchOuterRadius, ArchDepth, 6);
                 }
             }
-            float apexY = ArchSpring + Mathf.Sin(60f * Mathf.Deg2Rad) * ArchRadius;
-            mb.AddChamferBox(0, new Vector3(0f, apexY, 0f), new Vector3(0.22f, 0.34f, stone.z + 0.04f), 0.04f,
+
+            // Keystone: the arcs stop where their INNER curves meet, leaving a V-notch between their
+            // outer ends; a diamond-set stone fills it and points down into the doorway a touch, as
+            // the mockup's peak stone does.
+            float keyY = ArchApex + 0.15f;
+            mb.AddChamferBox(0, new Vector3(0f, keyY, 0f), new Vector3(0.30f, 0.30f, ArchDepth + 0.02f), 0.03f,
                              Quaternion.Euler(0f, 0f, 45f));
 
-            // Diamond studs on the front of the jambs and the arch, like the mockup's inlays.
-            float front = -(stone.z * 0.5f + 0.015f);
+            // Carved diamonds: two down each jamb, one on each arch side, a larger one on the keystone.
+            float front = -(ArchDepth * 0.5f + 0.012f);
             for (int side = -1; side <= 1; side += 2)
             {
-                foreach (float y in new[] { 0.42f, 0.78f })
-                    mb.AddChamferBox(2, new Vector3(ArchR * side, y, front), new Vector3(0.07f, 0.07f, 0.03f), 0.012f,
+                foreach (float y in new[] { 0.24f, 0.56f })
+                    mb.AddChamferBox(1, new Vector3(ArchR * side, y, front), new Vector3(0.075f, 0.075f, 0.024f), 0.008f,
                                      Quaternion.Euler(0f, 0f, 45f));
-                var centre = new Vector3(-side * ArchR, ArchSpring, 0f);
-                float th = side < 0 ? 150f : 30f;
-                float rad = th * Mathf.Deg2Rad;
-                var pos = centre + new Vector3(Mathf.Cos(rad), Mathf.Sin(rad), 0f) * ArchRadius;
-                pos.z = front;
-                mb.AddChamferBox(2, pos, new Vector3(0.06f, 0.06f, 0.03f), 0.01f, Quaternion.Euler(0f, 0f, 45f));
+                var c = new Vector2(-side * ArchInner, ArchSpring);
+                float th = (side < 0 ? 150f : 30f) * Mathf.Deg2Rad;
+                var pos = new Vector3(c.x + Mathf.Cos(th) * midR, c.y + Mathf.Sin(th) * midR, front);
+                mb.AddChamferBox(1, pos, new Vector3(0.065f, 0.065f, 0.024f), 0.008f, Quaternion.Euler(0f, 0f, 45f));
             }
+            mb.AddChamferBox(2, new Vector3(0f, keyY, front - 0.01f), new Vector3(0.11f, 0.11f, 0.024f), 0.01f,
+                             Quaternion.Euler(0f, 0f, 45f));
             return mb.ToMesh("DoorArch");
+        }
+
+        /// <summary>
+        /// One curved stone: a rectangular section (rIn..rOut by depth) swept round centre c from
+        /// th0 to th1 degrees, with radial end caps. Flat-shaded quads, like everything else here.
+        /// </summary>
+        static void ArcStone(MeshBuilder mb, int sub, Vector2 c, float th0, float th1,
+                             float rIn, float rOut, float depth, int steps)
+        {
+            float hz = depth * 0.5f;
+            Vector3 P(float deg, float r, float z)
+            {
+                float a = deg * Mathf.Deg2Rad;
+                return new Vector3(c.x + Mathf.Cos(a) * r, c.y + Mathf.Sin(a) * r, z);
+            }
+            Vector3 Radial(float deg) => P(deg, 1f, 0f) - new Vector3(c.x, c.y, 0f);
+
+            for (int i = 0; i < steps; i++)
+            {
+                float a0 = Mathf.Lerp(th0, th1, i / (float)steps);
+                float a1 = Mathf.Lerp(th0, th1, (i + 1) / (float)steps);
+                mb.AddFlatQuad(sub, P(a0, rIn, -hz), P(a0, rOut, -hz), P(a1, rOut, -hz), P(a1, rIn, -hz), Vector3.back);
+                mb.AddFlatQuad(sub, P(a0, rIn, hz), P(a0, rOut, hz), P(a1, rOut, hz), P(a1, rIn, hz), Vector3.forward);
+                Vector3 outward = Radial((a0 + a1) * 0.5f);
+                mb.AddFlatQuad(sub, P(a0, rOut, -hz), P(a1, rOut, -hz), P(a1, rOut, hz), P(a0, rOut, hz), outward);
+                mb.AddFlatQuad(sub, P(a0, rIn, -hz), P(a1, rIn, -hz), P(a1, rIn, hz), P(a0, rIn, hz), -outward);
+            }
+            float dir = Mathf.Sign(th1 - th0);
+            mb.AddFlatQuad(sub, P(th0, rIn, -hz), P(th0, rOut, -hz), P(th0, rOut, hz), P(th0, rIn, hz), Radial(th0 - dir * 90f));
+            mb.AddFlatQuad(sub, P(th1, rIn, -hz), P(th1, rOut, -hz), P(th1, rOut, hz), P(th1, rIn, hz), Radial(th1 + dir * 90f));
         }
 
         /// <summary>Flat glowing pane that fills the pointed doorway. Double sided - the door can face anywhere.</summary>
         static Mesh ArchFill()
         {
             var mb = new MeshBuilder();
-            const float bottom = 0.15f;
+            const float bottom = ArchBottom;
 
-            // Boundary of the opening: left inner arc up to the apex, then the right one down.
+            // Boundary of the opening: left inner arc up to the apex, then the right one down. Each
+            // arc is centred on the OPPOSITE inner springing point (see the constants).
             var rim = new List<Vector3>();
-            const int seg = 10;
+            const int seg = 12;
             for (int i = 0; i <= seg; i++)
             {
-                // Left arc centred at (+R, spring): from the left springing (180 deg) towards the apex.
                 float th = Mathf.Lerp(180f, 180f - ApexAngle(), i / (float)seg) * Mathf.Deg2Rad;
-                rim.Add(new Vector3(ArchR + Mathf.Cos(th) * ArchInnerRadius, ArchSpring + Mathf.Sin(th) * ArchInnerRadius, 0f));
+                rim.Add(new Vector3(ArchInner + Mathf.Cos(th) * ArchInnerRadius, ArchSpring + Mathf.Sin(th) * ArchInnerRadius, 0f));
             }
             for (int i = seg; i >= 0; i--)
             {
                 float th = Mathf.Lerp(0f, ApexAngle(), i / (float)seg) * Mathf.Deg2Rad;
-                rim.Add(new Vector3(-ArchR + Mathf.Cos(th) * ArchInnerRadius, ArchSpring + Mathf.Sin(th) * ArchInnerRadius, 0f));
+                rim.Add(new Vector3(-ArchInner + Mathf.Cos(th) * ArchInnerRadius, ArchSpring + Mathf.Sin(th) * ArchInnerRadius, 0f));
             }
 
             foreach (float z in new[] { 0f, -0.001f })
@@ -346,7 +393,7 @@ namespace PullTheWorld.EditorTools
         }
 
         /// <summary>Angle (from the arc centre) at which the inner arc reaches x = 0, the apex.</summary>
-        static float ApexAngle() => Mathf.Acos(ArchR / ArchInnerRadius) * Mathf.Rad2Deg;
+        static float ApexAngle() => Mathf.Acos(ArchInner / ArchInnerRadius) * Mathf.Rad2Deg;   // 60 for an equilateral arch
 
         // ======================================================================= sky ========
         /// <summary>

@@ -43,7 +43,7 @@ namespace PullTheWorld
         [Header("Feel")]
         [SerializeField] float basePulseSpeed = 1.4f;
         [SerializeField] float basePulseAmount = 0.05f;
-        [SerializeField] float baseLightIntensity = 1.3f;
+        [SerializeField] float baseLightIntensity = 0.95f;
 
         // PTW/PortalEnergy properties, cached as ids so the per-frame update allocates nothing.
         static readonly int CoreColorId = Shader.PropertyToID("_CoreColor");
@@ -142,13 +142,14 @@ namespace PullTheWorld
             if (glowRenderer)
             {
                 glowRenderer.GetPropertyBlock(mpb);
-                // Locked reads as a cold, dim field; unlocked is a warm golden core. The fill is
-                // alpha-blended now (see PtwPortalEnergy.shader), so its colour IS what shows -
-                // keep it gold, not cream, and keep the intensity under the bloom threshold
-                // (1.15): the glow around the door is the additive halo's and the light's job.
-                mpb.SetColor(CoreColorId, locked ? c : Color.Lerp(c, Color.white, 0.30f));
-                mpb.SetColor(EdgeColorId, locked ? c : c * 0.92f);
-                mpb.SetFloat(IntensityId, (locked ? 0.55f : 0.98f) * pulse * (1f + p * 0.12f));
+                // Locked reads as a cold, dim field; unlocked is the mockup's gold. The fill is
+                // alpha-blended (see PtwPortalEnergy.shader), so these ARE the colours that show:
+                // _CoreColor is the field low down and round the core (mockup 253,231,184),
+                // _EdgeColor the amber at the top (246,184,95). Kept under the bloom threshold;
+                // only the shader's core disc blooms, and the spill is the halo's and light's job.
+                mpb.SetColor(CoreColorId, locked ? c : Color.Lerp(c, Color.white, 0.60f));
+                mpb.SetColor(EdgeColorId, c);
+                mpb.SetFloat(IntensityId, (locked ? 0.55f : 1.0f) * pulse * (1f + p * 0.10f));
                 glowRenderer.SetPropertyBlock(mpb);
             }
             if (portalLight)
