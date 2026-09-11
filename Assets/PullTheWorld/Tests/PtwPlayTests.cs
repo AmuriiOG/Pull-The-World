@@ -515,13 +515,43 @@ namespace PullTheWorld.Tests
         [UnityTest]
         public IEnumerator RockCrushesTheEnemy()
         {
-            yield return LoadLevel(20);
+            // Park the orb BEFORE the level settles, not after. Left at its spawn through the
+            // settle, the enemy (four cells away, inside alertRange) hunts it and rolls up against
+            // the rock; when the level then tips, rock and enemy roll downhill already touching -
+            // one gentle OnCollisionEnter at the start, no impact at the wall, no crush. Whether
+            // the enemy got that far in 0.9 s came down to frame pacing (it did in the Editor, not
+            // headless). Parked, the enemy sleeps where the level put it, reaches the wall first,
+            // and the rock arrives at full speed.
+            levels.LoadLevel(20);
+            yield return null;
+            yield return null;
             var enemy = levels.Current.GetComponentInChildren<Enemy>();
             Assert.IsNotNull(enemy);
+            var rock = FirstRock();
             ParkPlayer();
+            yield return Wait(1.2f);
 
-            yield return RotateTo(-50f, 3f);                // door side down
-            yield return WaitUntil(() => enemy == null || !enemy.IsAlive, 4f, "the rock to crush the enemy");
+            // Sampled the whole way, like RockBreaksTheCrate: a failure should say where the rock
+            // and the enemy went, not just that nothing died.
+            var trail = new System.Text.StringBuilder();
+            float t = 0f, nextSample = 0f;
+            rotator.BeginDrive();
+            rotator.Drive(-50f - rotator.AngleTarget);      // door side down
+            rotator.EndDrive(0f);
+            while (t < 7f && enemy && enemy.IsAlive)
+            {
+                if (t >= nextSample)
+                {
+                    nextSample += 0.1f;
+                    var rl = rock ? rotator.WorldRoot.InverseTransformPoint(rock.position) : Vector3.zero;
+                    var el = rotator.WorldRoot.InverseTransformPoint(enemy.transform.position);
+                    float rv = rock ? rock.linearVelocity.magnitude : 0f;
+                    trail.Append($"[{t:F1}s a={rotator.Angle:F0}/{rotator.AngleTarget:F0} R=({rl.x:F2},{rl.y:F2}) v={rv:F1} E=({el.x:F2},{el.y:F2})] ");
+                }
+                t += Time.deltaTime;
+                yield return null;
+            }
+            Debug.Log($"PTW_DIAG crush enemyAlive={(enemy ? enemy.IsAlive : false)} after {t:F2}s; trail " + trail);
 
             Assert.IsTrue(enemy == null || !enemy.IsAlive, "The rock did not kill the enemy");
         }

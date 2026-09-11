@@ -161,6 +161,10 @@ namespace PullTheWorld.EditorTools
             // The rest of the sky: mountains, clouds and far islets, all welded to the camera.
             BuildSkyLayers(cam);
 
+            // The shared parallax shift the layers read (tilt of the level, position of the orb).
+            // On the camera so it exists exactly once and dies with the scene.
+            go.AddComponent<SkyParallax>();
+
             return cam;
         }
 
@@ -169,9 +173,13 @@ namespace PullTheWorld.EditorTools
         /// puffs drifting between and in front of them, and small floating islets with tiny portals
         /// up in the sky. Everything is a SkyLayer child of the camera: placed by viewport fraction
         /// and sized to the frustum, so it composes the same on every level's framing and never
-        /// moves with the world - the static reference the turning island is read against.
-        /// Mountains do not drift; clouds do, slowly, each layer at its own speed, which is the
-        /// only parallax an orthographic camera can offer and all this style needs.
+        /// turns with the world - the reference the turning island is read against.
+        ///
+        /// It does move, though, in two ways that both scale with depth (see SkyLayer):
+        /// clouds DRIFT sideways on their own, the near ones several times faster than the far
+        /// ones, and every layer takes a share of the SkyParallax shift (level tilt, orb
+        /// position) - a tenth for the far ridge, the whole thing for a cloud in front of the
+        /// island. Ridges never drift (a strip cannot wrap) but they do parallax.
         /// </summary>
         static void BuildSkyLayers(Camera cam)
         {
@@ -179,26 +187,31 @@ namespace PullTheWorld.EditorTools
             root.transform.SetParent(cam.transform, false);
 
             // Mountains: far ridge highest and faintest, near ridge lowest and strongest. Their bases
-            // sit below the frame so no bottom edge ever shows.
-            Ridge(root.transform, cam, "MountainsFar", "Mesh_MountainFar", PtwArt.MMountainFar, 84f, -0.1f, 0.74f);
-            Ridge(root.transform, cam, "MountainsMid", "Mesh_MountainMid", PtwArt.MMountainMid, 76f, -0.1f, 0.60f);
-            Ridge(root.transform, cam, "MountainsNear", "Mesh_MountainNear", PtwArt.MMountainNear, 68f, -0.1f, 0.46f);
+            // sit below the frame so no bottom edge ever shows. The 1.4x width leaves room for the
+            // parallax shift on both sides.
+            Ridge(root.transform, cam, "MountainsFar", "Mesh_MountainFar", PtwArt.MMountainFar, 84f, -0.1f, 0.74f, 0.10f);
+            Ridge(root.transform, cam, "MountainsMid", "Mesh_MountainMid", PtwArt.MMountainMid, 76f, -0.1f, 0.60f, 0.18f);
+            Ridge(root.transform, cam, "MountainsNear", "Mesh_MountainNear", PtwArt.MMountainNear, 68f, -0.1f, 0.46f, 0.28f);
 
-            // Clouds. (viewport x, viewport y, width, height, distance, drift). Behind the mountains
-            // in the upper sky, between them in the middle, and two big soft ones in FRONT of the
-            // island's lower half, like the mockup's foreground clouds.
+            // Clouds. (viewport x, viewport y, width, height, distance, drift, parallax, near).
+            // Behind the mountains in the upper sky, between them in the middle, and three thin
+            // ones in FRONT of the island's lower tip, like the mockup's foreground clouds. Smaller
+            // and far fewer than the first pass, which buried the ridges under white cotton; the
+            // drift speeds are now fast enough to SEE (the near ones cross the frame in ~40 s),
+            // and scale with distance so the layers pull apart.
             var clouds = new[]
             {
-                (0.20f, 0.74f, 9.0f, 4.2f, 90f, 0.030f), (0.72f, 0.66f, 11.0f, 5.0f, 88f, 0.022f),
-                (0.48f, 0.58f, 8.0f, 3.6f, 80f, 0.036f), (0.88f, 0.50f, 9.5f, 4.4f, 79f, 0.028f),
-                (0.10f, 0.46f, 10.0f, 4.6f, 72f, 0.040f), (0.62f, 0.40f, 8.5f, 3.8f, 70f, 0.045f),
-                (0.30f, 0.16f, 14.0f, 6.0f, 22f, 0.060f), (0.82f, 0.08f, 13.0f, 5.6f, 24f, 0.050f),
-                (0.55f, 0.24f, 10.0f, 4.4f, 26f, 0.055f),
+                (0.18f, 0.73f, 6.5f, 3.0f, 90f, 0.10f, 0.12f, false), (0.74f, 0.65f, 7.5f, 3.4f, 88f, 0.08f, 0.12f, false),
+                (0.46f, 0.56f, 6.0f, 2.7f, 80f, 0.14f, 0.22f, false), (0.92f, 0.49f, 6.5f, 3.0f, 79f, 0.12f, 0.22f, false),
+                (0.08f, 0.44f, 7.0f, 3.2f, 72f, 0.18f, 0.35f, false), (0.60f, 0.39f, 6.0f, 2.7f, 70f, 0.20f, 0.35f, false),
+                (0.28f, 0.10f, 10.0f, 4.2f, 24f, 0.40f, 1.00f, true), (0.82f, 0.05f, 9.5f, 4.0f, 22f, 0.46f, 1.00f, true),
+                (0.55f, 0.16f, 7.5f, 3.3f, 26f, 0.36f, 0.85f, true),
             };
             int i = 0;
-            foreach (var (x, y, w, h, z, drift) in clouds)
+            foreach (var (x, y, w, h, z, drift, parallax, near) in clouds)
             {
-                var c = PtwPrefabs.MeshNode($"Cloud{i++}", "Mesh_QuadXY", root.transform, PtwArt.MCloud);
+                var c = PtwPrefabs.MeshNode($"Cloud{i++}", "Mesh_QuadXY", root.transform,
+                                            near ? PtwArt.MCloudNear : PtwArt.MCloud);
                 var r = c.GetComponent<MeshRenderer>();
                 r.shadowCastingMode = ShadowCastingMode.Off;
                 r.receiveShadows = false;
@@ -209,13 +222,14 @@ namespace PullTheWorld.EditorTools
                 PtwPrefabs.Wire(layer, "viewportPos", new Vector2(x, y));
                 PtwPrefabs.Wire(layer, "worldSize", new Vector2(w, h));
                 PtwPrefabs.Wire(layer, "driftSpeed", drift);
+                PtwPrefabs.Wire(layer, "parallax", parallax);
             }
 
             BuildSkyIslets(root.transform, cam);
         }
 
         static void Ridge(Transform parent, Camera cam, string name, string mesh, string mat,
-                          float distance, float bottom, float top)
+                          float distance, float bottom, float top, float parallax)
         {
             var go = PtwPrefabs.MeshNode(name, mesh, parent, mat);
             var r = go.GetComponent<MeshRenderer>();
@@ -226,7 +240,8 @@ namespace PullTheWorld.EditorTools
             PtwPrefabs.Wire(layer, "distance", distance);
             PtwPrefabs.Wire(layer, "viewportBottom", bottom);
             PtwPrefabs.Wire(layer, "viewportTop", top);
-            PtwPrefabs.Wire(layer, "widthScale", 1.3f);
+            PtwPrefabs.Wire(layer, "widthScale", 1.4f);
+            PtwPrefabs.Wire(layer, "parallax", parallax);
         }
 
         /// <summary>
@@ -258,6 +273,11 @@ namespace PullTheWorld.EditorTools
                 PtwPrefabs.Wire(layer, "centred", true);
                 PtwPrefabs.Wire(layer, "viewportPos", new Vector2(vx, vy));
                 PtwPrefabs.Wire(layer, "worldSize", new Vector2(scale, scale));
+                // Between the mid clouds and the island in depth, and floating: a slow bob of a
+                // fifth of a block, each islet out of phase with the others (SkyLayer seeds it).
+                PtwPrefabs.Wire(layer, "parallax", 0.5f);
+                PtwPrefabs.Wire(layer, "bobAmplitude", 0.14f);
+                PtwPrefabs.Wire(layer, "bobHz", 0.06f);
 
                 // Inverted pyramid of blocks, built in XY like the real islands.
                 int rows = w >= 5 ? 3 : 2;

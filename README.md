@@ -72,8 +72,10 @@ Things that were deliberately deleted rather than kept behind a flag:
   simulation is doing, and the spin *is* the feedback that gravity is working.
 * **Parallax on the backdrop.** In v1 the parallax factors were pinned to zero on purpose, because
   a scrolling backdrop is the signature of a moving camera. v2 has a genuinely rotating object in
-  the middle of the frame, so a **completely static** backdrop is now the useful reference: if
-  something in shot is definitely not turning, the island definitely is.
+  the middle of the frame, so the backdrop's job is to be the thing that is **definitely not
+  turning**. It is allowed to *translate*, though, and now does — see [Sky motion](#sky-motion):
+  clouds drift at depth-scaled speeds and every layer takes a small share of a shift driven by
+  the level's tilt and the orb's position. Nothing in the sky ever rotates.
 
 v1 is preserved and runnable — see [Going back](#going-back).
 
@@ -355,7 +357,39 @@ to identity: no tonemapping (Neutral and ACES both pull pastels towards grey), s
 light blush vignette, and a warm bloom that only the portal, the orb rim and the studs can reach.
 
 Measured targets from the mockups that the captures are checked against: sky top ≈ (254,214,198),
-stone front face ≈ (214,211,208), grass top ≈ (141,184,106), PLAY button ≈ (121,144,119).
+stone front face ≈ (172,161,153) (the *gameplay* painting's wall — the menu painting's stone is
+lighter, and using that reading first made the island near-white), grass top ≈ (141,184,106),
+portal interior ≈ (254,200,123), thick cloud ≈ (254,229,208) thinning to lilac (220,212,220),
+PLAY button ≈ (121,144,119). Current capture: stone fronts ≈ (181,169,158), portal ≈ (243,196,130).
+
+**The "too white" pass (2026-09-11).** The first pastel build read as a wall of white: opaque white
+cloud quads over half the frame, near-white stone, a portal blown out to a white oval. Four
+changes, all in `PtwArt`/`PtwScene`: stone albedos darkened ~30% in linear to hit the gameplay
+mockup's wall; cloud quads made smaller, fewer, peach-tinted and translucent (0.72 behind the
+ridges, 0.55 in front of the island) with a wide feathered edge, and the backdrop shader's own
+clouds thinned; the near ridges shifted from lilac to the mockup's grey-teal; and the portal fill
+switched from additive to alpha blending — additive light over a bright sky can only go whiter,
+so gold was unreachable — with an amber core kept under the bloom threshold. The orb also lost
+its multiply **contact-shadow blob**: it stayed world-flat while the level tilted, so it ended up
+as a dark blue-grey ellipse floating beside a glowing glass ball ("something black on the player").
+The mockup's orb is a light source and casts nothing.
+
+### Sky motion
+
+`Feel/SkyLayer.cs` + `Feel/SkyParallax.cs`. Every sky element is a `SkyLayer` child of the
+camera, placed by viewport fraction. Three kinds of motion, all translations, all scaled by depth:
+
+* **Drift** — clouds glide sideways on their own and wrap at the frustum edge; far puffs at
+  ~0.1 u/s, the ones in front of the island at ~0.45 u/s (they cross the frame in about 40 s).
+  Ridges cannot wrap, so they never drift.
+* **Parallax** — `SkyParallax` (on the camera) publishes one small shared offset: as the level
+  tips, the sky slides the way the orb is about to roll (1.1 u at a quarter turn for the nearest
+  layer) and sinks a little; as the orb travels from the pivot the sky leans the other way
+  (6% of its offset, capped). Each layer takes a share: far ridge 0.1, mid 0.18, near 0.28,
+  clouds 0.12–0.35 by distance, islets 0.5, the foreground clouds 1.0. Smoothed so the sky lags
+  the island by a beat, like weight.
+* **Bob** — the islets float up and down a fifth of a block at 0.06 Hz, out of phase with each
+  other.
 
 Three things went wrong on the way and are worth knowing about:
 
@@ -411,6 +445,15 @@ thousand samples per frame in the background so a chapter change never hitches. 
 `AudioSource`s crossfade on chapter change; the **Music** setting fades it out and back in; the
 pause screen ducks it. `overrideLoops` has one slot per chapter for an authored track — drop a
 clip in and it replaces the synthesised one.
+
+**Why it sounded out of tune until 2026-09-11.** The pad's vibrato was written as
+`sin(2π · f · (1 + d·sin(ωt)) · t)`. That is not a vibrato: the instantaneous pitch of that
+expression drifts by `f·d·ω·t`, which grows without bound — over a semitone one second into
+the loop and a siren by the end of the 18-second chord cycle. Both the earlier night-theme
+music and the pastel rewrite had it, so both were "off". The vibrato is now applied to the
+phase as the integral of the wobbling frequency,
+`2π · f · (t − (d/ω)(cos(ωt + c) − cos c))`, which is a true ±5-cent wobble. Do not multiply
+a time-varying frequency by `t`; integrate it.
 
 ---
 
@@ -669,9 +712,18 @@ one when none is), or call `AdsManager.SetProvider(...)`. `OnAdClosed` is the an
   velocity as far as the solver is concerned — the player gets pushed out by penetration resolution
   rather than carried. So the platform owns its own kinematic Rigidbody, detaches from the level
   hierarchy at startup, and recomputes its pose from the level's rotation every FixedUpdate.
-* **The portal's interior is a bright oval, not the mockup's golden mandala.** The energy shader
-  has concentric rings but the bloom and the halo still wash them out at gameplay scale; the next
-  pass should lower the fill's intensity further and let the ring pattern read.
+* **Fixed: level 21 ("Bowl It Over") could jam.** The enemy sits inside its alert range of the
+  spawn, hunts the orb the moment the level loads, and ends up next to the rock. Rock and enemy
+  then roll downhill *in contact*: one gentle `OnCollisionEnter` under crush speed, and never
+  another, so when the wall stopped the enemy and the rock slammed into it at 11 m/s nothing
+  noticed. `DynamicProp.OnCollisionStay` now also feeds `Enemy.Crush`, using the contact impulse
+  divided by the rock's mass (the speed the contact took off the rock that step: ~9 m/s for the
+  slam, under 1 m/s for a rock resting on or rolling beside an enemy). `RockCrushesTheEnemy`
+  reproduces the jam deliberately and passes through the squeeze.
+* **Fixed: the portal's interior was a white oval.** The energy fill was additive, and additive
+  light over a bright pastel sky can only go whiter, whatever colour it is given. It is
+  alpha-blended now, amber, and held under the bloom threshold; the additive halo quad around the
+  arch carries the glow. The ring pattern is faint at gameplay scale and could still be pushed.
 * **Art is judged against `Assets/PullTheWorld/Art/Mockup/`, not `PicReference/`.** The
   reference sheets in `PicReference/` describe the earlier night direction and are kept for
   history only; see the Theme section for the current targets and how captures are compared.

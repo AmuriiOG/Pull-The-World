@@ -64,10 +64,15 @@ namespace PullTheWorld.EditorTools
         public static readonly Color GrassTip = Hex("#A2CC78");
         // Cream limestone. Lit face #E8E1D5 on the mockup, mortar lines a shade darker, lower rows
         // in a warm shadow that never goes grey.
-        public static readonly Color Stone = Hex("#E0DDDA");
-        public static readonly Color StoneMid = Hex("#D8D4D0");
-        public static readonly Color StoneDark = Hex("#B3ADA7");
-        public static readonly Color StoneLight = Hex("#EAE7E4");
+        // Stone. Measured off the GAMEPLAY mockup's wall, not the menu's: every front face there
+        // samples within a few points of (172,161,153), a warm mid grey. The first pastel pass
+        // used the menu painting's lighter reading and the island came out near-white (fronts at
+        // ~211,204,198 in capture) - the user's "overkill of white". Under the flat #E8E5E5
+        // ambient these albedos land the fronts at ~176,165,156.
+        public static readonly Color Stone = Hex("#BFB7B0");
+        public static readonly Color StoneMid = Hex("#B8B1AA");
+        public static readonly Color StoneDark = Hex("#988F86");
+        public static readonly Color StoneLight = Hex("#C8C0B9");
         public static readonly Color Dirt = Hex("#B48F6C");
         public static readonly Color Wood = Hex("#BE8F62");
         public static readonly Color WoodDark = Hex("#8A6444");
@@ -88,11 +93,15 @@ namespace PullTheWorld.EditorTools
 
         // Background mountains, three layers of haze towards the sky. Sampled off the mockup:
         // the far ridges are almost the sky's lilac, the near ones a soft teal-grey.
+        // The mockup's ridges go from lilac at the back to grey-teal at the front (near ridges
+        // sample ~(150,165,160)); the first pass had every ridge lilac-blue.
         public static readonly Color MountainFarTop = Hex("#DAD3E6"), MountainFarBottom = Hex("#C9C6DE");
-        public static readonly Color MountainMidTop = Hex("#C3C4DA"), MountainMidBottom = Hex("#ADB2CC");
-        public static readonly Color MountainNearTop = Hex("#AEB5CC"), MountainNearBottom = Hex("#96A0BA");
-        public static readonly Color CloudColor = Hex("#FFF8F3");
-        public static readonly Color CloudShade = Hex("#F3DCE0");
+        public static readonly Color MountainMidTop = Hex("#C0C6D4"), MountainMidBottom = Hex("#A7B2C0");
+        public static readonly Color MountainNearTop = Hex("#A8B4BA"), MountainNearBottom = Hex("#8B9CA2");
+        // Clouds are peach-cream where they are thick (mockup: 254,229,208) and thin out to the
+        // sky's lilac (220,212,220). They were pure white before and covered half the frame.
+        public static readonly Color CloudColor = Hex("#FEE5D0");
+        public static readonly Color CloudShade = Hex("#E6D3DA");
 
         // Flowers: three petal colours from the mockup's grass edge.
         // Not pure white: a lit white petal crossed the bloom threshold and turned into a
@@ -149,6 +158,7 @@ namespace PullTheWorld.EditorTools
         public const string MMountainMid = "M_MountainMid";
         public const string MMountainNear = "M_MountainNear";
         public const string MCloud = "M_Cloud";
+        public const string MCloudNear = "M_CloudNear";   // the ones in front of the island: thinner
         public const string MFoliageWind = "M_FoliageWind";   // tufts, flower stems: sway up from the base
         public const string MVine = "M_Vine";
         public const string MFringe = "M_Fringe";                 // hangs down, sways from the attachment
@@ -208,7 +218,7 @@ namespace PullTheWorld.EditorTools
             // Darkened for the night skies: at the old values the islets floated in the dark like
             // lit models rather than distant scenery.
             // Pastel theme: the far islets are the same cream and green, hazed towards the sky.
-            Lit(MFarStone, Hex("#D6D0C8"), 0.08f);
+            Lit(MFarStone, Hex("#C7BFB7"), 0.08f);
             Lit(MFarGrass, Hex("#A8C68F"), 0.06f);
 
             // Flowers and the portal's diamond studs.
@@ -252,7 +262,7 @@ namespace PullTheWorld.EditorTools
             var whiteTex = MakeSolidTexture("Tex_White", 4, Color.white);
 
             UnlitTextured(MAnchorRing, ringTex, Cyan * 1.5f, additive: true);
-            UnlitTextured(MPortalGlow, glowTex, Warm * 0.45f, additive: true);
+            UnlitTextured(MPortalGlow, glowTex, Warm * 0.36f, additive: true);
             UnlitTextured(MEnemyAura, glowTex, new Color(1f, 0.10f, 0.18f, 0.45f), additive: true);
             UnlitTextured(MTrail, glowTex, new Color(0.6f, 0.92f, 1f, 0.6f), additive: true);
             MultiplyTextured(MBlobShadow, shadowTex);
@@ -272,7 +282,10 @@ namespace PullTheWorld.EditorTools
                           Color.white, additive: false, opaque: true);
             UnlitTextured(MMountainNear, MakeGradientTexture("Tex_MountainNear", 4, 64, MountainNearTop, MountainNearBottom),
                           Color.white, additive: false, opaque: true);
-            UnlitTextured(MCloud, cloudTex, new Color(1f, 1f, 1f, 0.96f), additive: false);
+            // Translucent on purpose: at 0.96 the puffs were opaque white cotton that hid the
+            // ridges; the mockup's clouds let the mountains show through everywhere but their cores.
+            UnlitTextured(MCloud, cloudTex, new Color(1f, 1f, 1f, 0.72f), additive: false);
+            UnlitTextured(MCloudNear, cloudTex, new Color(1f, 1f, 1f, 0.55f), additive: false);
 
             BuildBackdrop();
             BuildPortalEnergy();
@@ -382,8 +395,8 @@ namespace PullTheWorld.EditorTools
             m.SetFloat("_GlowAspect", 1.0f);
             m.SetColor("_CloudColor", CloudColor);
             m.SetColor("_CloudShade", CloudShade);
-            m.SetFloat("_CloudStrength", 0.85f);
-            m.SetFloat("_CloudCover", 0.42f);
+            m.SetFloat("_CloudStrength", 0.55f);
+            m.SetFloat("_CloudCover", 0.36f);
             m.SetFloat("_CloudScale", 2.1f);
             m.SetFloat("_CloudSpeed", 0.007f);
             m.SetVector("_CloudBand", new Vector4(-0.5f, 0.34f, 0f, 0f));
@@ -402,9 +415,9 @@ namespace PullTheWorld.EditorTools
             var far = LoadOrCreateShader(MPortalEnergyFar, "PTW/PortalEnergy");
             if (far != null)
             {
-                far.SetColor("_CoreColor", Hex("#FFE9B8"));
-                far.SetColor("_EdgeColor", Hex("#F4B778"));
-                far.SetFloat("_Intensity", 0.7f);
+                far.SetColor("_CoreColor", Hex("#FFD48A"));
+                far.SetColor("_EdgeColor", Hex("#EFA85E"));
+                far.SetFloat("_Intensity", 0.9f);
                 far.SetVector("_Center", new Vector4(0f, 0.89f, 0f, 0f));
                 far.SetVector("_Extents", new Vector4(0.33f, 0.76f, 0f, 0f));
                 far.SetFloat("_Speed", 0.6f);
@@ -418,9 +431,9 @@ namespace PullTheWorld.EditorTools
 
             var m = LoadOrCreateShader(MPortalEnergy, "PTW/PortalEnergy");
             if (m == null) return;
-            m.SetColor("_CoreColor", Hex("#FFEDC2"));
-            m.SetColor("_EdgeColor", Hex("#F5AE62"));
-            m.SetFloat("_Intensity", 1.0f);
+            m.SetColor("_CoreColor", Hex("#FFD48A"));
+            m.SetColor("_EdgeColor", Hex("#EFA85E"));
+            m.SetFloat("_Intensity", 0.98f);
             // Matches the pointed ArchFill mesh: spans y 0.15..1.63, x +/-0.31.
             m.SetVector("_Center", new Vector4(0f, 0.89f, 0f, 0f));
             m.SetVector("_Extents", new Vector4(0.33f, 0.76f, 0f, 0f));
@@ -773,10 +786,10 @@ namespace PullTheWorld.EditorTools
                         // How high inside this puff we are, for the lighting.
                         top = Mathf.Max(top, Mathf.Clamp01((p.y - centers[i].y) / radii[i] + 0.5f) * k);
                     }
-                    // Flat bottom: clouds sit on their own shadow line. Then a firm-but-soft edge so
-                    // the puffs read as forms rather than as smears.
+                    // Flat bottom: clouds sit on their own shadow line. Then a wide, soft feather:
+                    // the mockup's clouds have no firm edge at all, they dissolve into the sky.
                     if (p.y < -0.3f) a *= Mathf.Clamp01(1f + (p.y + 0.3f) / 0.25f);
-                    a = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((a - 0.18f) / 0.40f));
+                    a = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((a - 0.08f) / 0.66f));
                     Color c = Color.Lerp(CloudShade, CloudColor, Mathf.Clamp01(top * 1.3f));
                     tex.SetPixel(x, y, new Color(c.r, c.g, c.b, a));
                 }

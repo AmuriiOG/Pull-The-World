@@ -37,13 +37,13 @@ namespace PullTheWorld
         [SerializeField] Light portalLight;
         [SerializeField] ParticleSystem idleVfx;
         [SerializeField] ParticleSystem arriveVfx;
-        [SerializeField] Color openColor = new Color(1f, 0.85f, 0.56f);      // warm cream-amber
+        [SerializeField] Color openColor = new Color(1f, 0.74f, 0.38f);      // amber-gold: the mockup interior is (254,200,123)
         [SerializeField] Color lockedColor = new Color(0.80f, 0.77f, 0.88f);  // pale lilac, dormant
 
         [Header("Feel")]
         [SerializeField] float basePulseSpeed = 1.4f;
         [SerializeField] float basePulseAmount = 0.05f;
-        [SerializeField] float baseLightIntensity = 1.6f;
+        [SerializeField] float baseLightIntensity = 1.3f;
 
         // PTW/PortalEnergy properties, cached as ids so the per-frame update allocates nothing.
         static readonly int CoreColorId = Shader.PropertyToID("_CoreColor");
@@ -142,12 +142,13 @@ namespace PullTheWorld
             if (glowRenderer)
             {
                 glowRenderer.GetPropertyBlock(mpb);
-                // Locked reads as a cold, dim field; unlocked is a hot warm core that blooms.
-                mpb.SetColor(CoreColorId, locked ? c : Color.Lerp(c, Color.white, 0.55f));
-                mpb.SetColor(EdgeColorId, c);
-                // 1.35, down from 2.3: the pastel grade has far less headroom than the night one had,
-                // and the doorway was blowing out to a white oval with no rings left in it.
-                mpb.SetFloat(IntensityId, (locked ? 0.45f : 0.75f) * pulse * excite);
+                // Locked reads as a cold, dim field; unlocked is a warm golden core. The fill is
+                // alpha-blended now (see PtwPortalEnergy.shader), so its colour IS what shows -
+                // keep it gold, not cream, and keep the intensity under the bloom threshold
+                // (1.15): the glow around the door is the additive halo's and the light's job.
+                mpb.SetColor(CoreColorId, locked ? c : Color.Lerp(c, Color.white, 0.30f));
+                mpb.SetColor(EdgeColorId, locked ? c : c * 0.92f);
+                mpb.SetFloat(IntensityId, (locked ? 0.55f : 0.98f) * pulse * (1f + p * 0.12f));
                 glowRenderer.SetPropertyBlock(mpb);
             }
             if (portalLight)

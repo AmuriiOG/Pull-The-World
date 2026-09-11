@@ -83,6 +83,25 @@ namespace PullTheWorld
         }
 
         /// <summary>
+        /// The squeeze. Enter alone missed a whole class of kills: a rock and an enemy rolling
+        /// downhill together touch once, gently (Enter, under crush speed), and from then on only
+        /// Stay fires - so when the enemy hit a wall and the rock slammed into it at 11 m/s,
+        /// nothing noticed and level 21 jammed with the rock parked against a live enemy. The
+        /// contact impulse sees the slam: divided by the rock's mass it is the speed this contact
+        /// took off the rock in one step, ~9 m/s for the wall slam, well under 1 m/s for a rock
+        /// resting on or rolling beside an enemy (m*g*dt is 0.7 N s here). Enemy.Crush applies
+        /// its own mass and speed thresholds, so this is the same rule from a second sensor.
+        /// </summary>
+        void OnCollisionStay(Collision c)
+        {
+            var enemy = c.collider.GetComponentInParent<Enemy>();
+            if (!enemy || enemy.gameObject == gameObject) return;
+            if (!rb) rb = GetComponent<Rigidbody>();
+            float takenOff = c.impulse.magnitude / Mathf.Max(0.01f, rb.mass);
+            enemy.Crush(takenOff, rb.mass);
+        }
+
+        /// <summary>
         /// A rock that lands with a squash, a puff and a thud reads as heavy. One that stops dead
         /// reads as a placeholder. v1's Pushable did this and it was lost in the rewrite.
         /// </summary>

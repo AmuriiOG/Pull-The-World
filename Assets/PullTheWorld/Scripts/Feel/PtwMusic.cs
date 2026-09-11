@@ -284,8 +284,17 @@ namespace PullTheWorld
                 int i0 = i;
                 int end = samplesPerStep >= n - i ? n : i + samplesPerStep;
 
-                // Pad: three notes, each a fundamental, two soft partials and a detuned twin, under a
+                // Pad: four notes, each a fundamental, two soft partials and a detuned twin, under a
                 // slow tremolo and a slight vibrato, with a per-chord attack/release envelope.
+                //
+                // The vibrato is applied to the PHASE, as the integral of the wobbling frequency:
+                //   phase = 2*pi*f * (t - (d/w) * (cos(w t + c) - cos(c)))
+                // An earlier version multiplied the frequency by (1 + d sin(w t)) and then by t.
+                // That is not a vibrato: the instantaneous pitch of sin(f*(1+d sin(wt))*t) drifts
+                // by f*d*w*t, which grows without bound - about +/-8% (more than a semitone) one
+                // second into the loop and a full siren by the end. That was the "off" music.
+                const float vibHz = 4.6f, vibDepth = 0.0028f;
+                const float vibW = 2f * Mathf.PI * vibHz;
                 for (; i < end; i++)
                 {
                     float t = i / (float)Rate;
@@ -294,12 +303,12 @@ namespace PullTheWorld
                     float env = Mathf.SmoothStep(0f, 1f, lt / attack)
                               * Mathf.SmoothStep(0f, 1f, (chordLen - lt) / release);
                     float trem = 0.86f + 0.14f * Mathf.Sin(2f * Mathf.PI * 0.31f * t);
-                    float vib = 1f + 0.0028f * Mathf.Sin(2f * Mathf.PI * 4.6f * t + c);
+                    float vibT = t - (vibDepth / vibW) * (Mathf.Cos(vibW * t + c) - Mathf.Cos(c));
                     float pad = 0f;
                     var notes = ch.chords[c];
                     for (int k = 0; k < notes.Length; k++)
                     {
-                        float ph = 2f * Mathf.PI * notes[k] * vib * t;
+                        float ph = 2f * Mathf.PI * notes[k] * vibT;
                         pad += Mathf.Sin(ph) + 0.22f * Mathf.Sin(2f * ph + 0.4f) + 0.05f * Mathf.Sin(3f * ph)
                              + 0.60f * Mathf.Sin(ph * (1f + ch.detune));
                     }

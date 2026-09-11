@@ -386,7 +386,7 @@ namespace PullTheWorld.EditorTools
             var pl = lightGo.AddComponent<Light>();
             pl.type = LightType.Point;
             pl.color = PtwArt.Warm;
-            pl.intensity = 2.0f;
+            pl.intensity = 1.3f;
             pl.range = 5f;
             pl.shadows = LightShadows.None;
 
@@ -662,15 +662,13 @@ namespace PullTheWorld.EditorTools
             ol.range = 2.6f;
             ol.shadows = LightShadows.None;
 
-            // Contact shadow: a soft multiply blob PlayerBody keeps flat and scales with height.
-            var shadow = MeshNode("Shadow", "Mesh_QuadXZ", rig.transform, PtwArt.MBlobShadow);
-            shadow.transform.localPosition = new Vector3(0f, -0.33f, 0f);
-            shadow.transform.localScale = new Vector3(0.95f, 1f, 0.95f);
-            NoShadows(shadow);
-
+            // No contact shadow. The orb used to carry a multiply blob under it, kept world-flat by
+            // PlayerBody; on a tilted level that put a dark blue-grey ellipse beside a glowing
+            // glass ball, which read as "something black on the player". The mockup's orb casts
+            // nothing - it is a light source - so the blob is gone and PlayerBody's contactShadow
+            // stays unwired (it null-checks).
             var pb = rig.AddComponent<PlayerBody>();
             Wire(pb, "visual", visual.transform);
-            Wire(pb, "contactShadow", shadow.transform);
 
             var orb = rig.AddComponent<OrbVisual>();
             Wire(orb, "player", pb);

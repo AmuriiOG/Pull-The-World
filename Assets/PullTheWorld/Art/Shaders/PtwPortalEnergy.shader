@@ -29,7 +29,10 @@ Shader "PTW/PortalEnergy"
         Pass
         {
             Name "PortalEnergy"
-            Blend SrcAlpha One          // additive: reads as light, not paint
+            // Alpha-blended, not additive. Additive light over a bright pastel sky can only go
+            // whiter - the doorway was a blown-out white oval. Painting gold over the sky is the
+            // only way it can read GOLDEN like the mockup; the halo quad around it stays additive.
+            Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
             Cull Off
 
