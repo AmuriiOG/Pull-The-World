@@ -99,7 +99,8 @@ namespace PullTheWorld
                 dust.Emit(Mathf.Max(1, Mathf.RoundToInt(dustAtFullImpact * strength)));
             }
 
-            PtwAudio.Play(PtwSfx.Impact, Mathf.Lerp(0.25f, 1f, strength),
+            // Squared: a small bump over a block edge is a whisper, a real drop is the full thud.
+            PtwAudio.Play(PtwSfx.Impact, Mathf.Lerp(0.10f, 1f, strength * strength),
                           Mathf.Lerp(1.15f, 0.85f, strength));   // heavier hits sound lower
             Haptics.Impact(strength);
             if (rotator) rotator.AddShake(shakeAtFullImpact * strength);

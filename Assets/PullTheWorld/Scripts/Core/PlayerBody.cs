@@ -347,7 +347,10 @@ namespace PullTheWorld
         {
             if (!alive || pose != Pose.Live) return;
 
-            float speed = c.relativeVelocity.magnitude;
+            // Closing speed along the contact normal, not the relative velocity's magnitude - see
+            // Impacts. Feedback only: this decides what counts as a landing (squash, sound, flash);
+            // the body's motion is not touched.
+            float speed = Impacts.ClosingSpeed(c);
             if (speed < minImpactSpeed) return;
 
             float strength = Mathf.Clamp01(speed / Mathf.Max(0.01f, impactReference));

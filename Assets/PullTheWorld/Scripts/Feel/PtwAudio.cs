@@ -105,12 +105,14 @@ namespace PullTheWorld
                 }
                 default:
                 {
-                    // Wind: smoothed noise, low-passed by averaging, breathing slowly. 4 s, crossfaded
-                    // at the seam inside MakeLoop.
+                    // Wind: low-passed noise breathing slowly, over a steady, very quiet 55 Hz
+                    // floor. 4 s, crossfaded at the seam inside MakeLoop. (The floor used to pulse
+                    // at 0.5 Hz, which on speakers was a soft bump every two seconds - one more
+                    // thing that sounded like something knocking.)
                     const float len = 4f;
                     return MakeLoop("ptw_ambience", len, t =>
                         Noise(t) * (0.55f + 0.45f * Sine(0.25f, t)) * 0.16f
-                        + Sine(55f, t) * 0.03f * (0.5f + 0.5f * Sine(0.5f, t)));
+                        + Sine(55f, t) * 0.012f);
                 }
             }
         }
@@ -273,12 +275,17 @@ namespace PullTheWorld
             return Sine(hz, lt) * Env(lt, decay) * 0.35f;
         }
 
-        // Deterministic value noise, smoothed a little so it reads as a soft hiss not a buzz.
+        // Deterministic white noise through a one-pole low-pass (~1.7 kHz), so it reads as a soft
+        // breath of air. It used to be Perlin noise sampled 7000 lattice cells per second, which is
+        // not white: gradient noise carries most of its energy at the lattice frequency, so the
+        // "wind" under the music was a faint 7 kHz whistle rather than a hiss.
         static float noiseState;
         static float Noise(float t)
         {
-            float raw = Mathf.PerlinNoise(t * 7000f, 0.37f) * 2f - 1f;
-            noiseState = Mathf.Lerp(noiseState, raw, 0.6f);
+            uint h = (uint)Mathf.RoundToInt(t * Rate) * 2654435761u;
+            h ^= h >> 15; h *= 2246822519u; h ^= h >> 13; h *= 3266489917u; h ^= h >> 16;
+            float raw = h / (float)uint.MaxValue * 2f - 1f;
+            noiseState = Mathf.Lerp(noiseState, raw, 0.22f);
             return noiseState;
         }
 

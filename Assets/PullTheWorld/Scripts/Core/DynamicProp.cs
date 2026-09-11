@@ -107,7 +107,9 @@ namespace PullTheWorld
         /// </summary>
         void OnCollisionEnter(Collision c)
         {
-            float speed = c.relativeVelocity.magnitude;
+            // Closing speed along the normal (see Impacts): a rock rolling along a row of blocks
+            // used to thud at every seam.
+            float speed = Impacts.ClosingSpeed(c);
 
             // The rock is the tool. Rock-vs-enemy is its own rigidbody pair so Enter fires here
             // reliably. (Breakables are NOT reported from here: they sit on the level's compound

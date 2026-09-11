@@ -688,7 +688,7 @@ namespace PullTheWorld.EditorTools
             var tr = trailGo.AddComponent<TrailRenderer>();
             tr.time = 0.28f;
             tr.minVertexDistance = 0.04f;
-            tr.widthCurve = AnimationCurve.Linear(0f, 0.36f, 1f, 0.02f);
+            tr.widthCurve = AnimationCurve.Linear(0f, 0.26f, 1f, 0.02f);
             tr.numCapVertices = 4;
             tr.numCornerVertices = 4;
             tr.alignment = LineAlignment.View;

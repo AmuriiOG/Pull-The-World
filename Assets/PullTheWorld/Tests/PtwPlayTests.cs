@@ -511,6 +511,30 @@ namespace PullTheWorld.Tests
             Assert.IsFalse(player.IsAlive, "Touching an enemy did not kill the player");
         }
 
+        /// <summary>
+        /// A ball rolling along a flat row of blocks must not register landings. The level is a
+        /// compound body of one collider per block, so every seam raises OnCollisionEnter;
+        /// measured by relative-velocity MAGNITUDE that was a 3-6 m/s "impact" about five times a
+        /// second (a thud, a shake, a flash - the "weird knocking under the music"). Measured along
+        /// the contact normal the same seams are under 2 m/s and ignored. Before the fix this run
+        /// logged six impacts; a couple are still legitimate (the ball hops a block edge as the
+        /// level tips), hence the bound rather than zero.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator RollingDoesNotThud()
+        {
+            yield return LoadLevel(0);
+            yield return Wait(0.5f);
+            var hits = new System.Collections.Generic.List<float>();
+            void Count(float strength, Vector3 _) => hits.Add(strength);
+            player.OnImpact += Count;
+            yield return DragTo(-22f);
+            yield return Wait(1.6f);
+            player.OnImpact -= Count;
+            Debug.Log("PTW_DIAG roll impacts: " + string.Join(", ", hits.ConvertAll(h => h.ToString("F2"))));
+            Assert.LessOrEqual(hits.Count, 3, "Rolling along the grass row registered " + hits.Count + " landings");
+        }
+
         /// <summary>The intended solution to level 21: tip towards the door, the rock bowls it.</summary>
         [UnityTest]
         public IEnumerator RockCrushesTheEnemy()

@@ -60,8 +60,8 @@ namespace PullTheWorld
 
         void HandleImpact(float strength, Vector3 point)
         {
-            boost = Mathf.Max(boost, 0.6f + strength * 0.9f);
-            if (sparkles) sparkles.Emit(Mathf.RoundToInt(4 + strength * 10f));
+            boost = Mathf.Max(boost, 0.25f + strength * 0.55f);
+            if (sparkles) sparkles.Emit(Mathf.RoundToInt(3 + strength * 8f));
         }
 
         void LateUpdate()
@@ -78,7 +78,11 @@ namespace PullTheWorld
             if (visual && !ending) visual.rotation = Quaternion.identity;
 
             float breathe = 0.5f + 0.5f * Mathf.Sin(t * breatheHz * Mathf.PI * 2f);
-            float glow = boost + k * 0.9f;
+            // The speed glow is a hint, not a headlight. At k*0.9 plus an impact boost of up to 1.5
+            // the additive core, halo and rim all crossed the bloom threshold together and the orb
+            // was a white flare whenever it moved; the mockup's orb at speed is still a pale glass
+            // ball with a brighter rim.
+            float glow = boost + k * 0.35f;
 
             if (glass)
             {
@@ -90,13 +94,13 @@ namespace PullTheWorld
 
             if (core)
             {
-                float s = 1f + breathe * 0.12f + glow * 0.35f;
+                float s = 1f + breathe * 0.12f + glow * 0.2f;
                 core.localScale = coreBase * s;
                 core.localRotation = Quaternion.Euler(0f, 0f, Mathf.Sin(t * 0.7f) * 8f);
                 if (coreRenderer)
                 {
                     coreRenderer.GetPropertyBlock(coreBlock);
-                    coreBlock.SetColor(BaseColorId, coreColor * (0.85f + breathe * 0.25f + glow * 0.5f));
+                    coreBlock.SetColor(BaseColorId, coreColor * (0.80f + breathe * 0.15f + glow * 0.25f));
                     coreRenderer.SetPropertyBlock(coreBlock);
                 }
             }
@@ -111,23 +115,23 @@ namespace PullTheWorld
 
             if (halo)
             {
-                halo.localScale = haloBase * (1f + breathe * 0.08f + glow * 0.3f);
+                halo.localScale = haloBase * (1f + breathe * 0.08f + glow * 0.2f);
                 if (haloRenderer)
                 {
                     haloRenderer.GetPropertyBlock(haloBlock);
                     var c = haloColor;
-                    c.a = 0.45f + breathe * 0.12f + glow * 0.35f;
+                    c.a = 0.38f + breathe * 0.10f + glow * 0.20f;
                     haloBlock.SetColor(BaseColorId, c);
                     haloRenderer.SetPropertyBlock(haloBlock);
                 }
             }
 
-            if (orbLight) orbLight.intensity = 0.8f + breathe * 0.2f + glow * 0.9f;
+            if (orbLight) orbLight.intensity = 0.8f + breathe * 0.2f + glow * 0.5f;
 
             if (sparkles)
             {
                 var em = sparkles.emission;
-                em.rateOverTime = 4f + k * 14f;
+                em.rateOverTime = 4f + k * 8f;
             }
 
             // The idle whisper: a tiny chime now and then, only when still and alive.

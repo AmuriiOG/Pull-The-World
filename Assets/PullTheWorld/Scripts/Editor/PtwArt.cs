@@ -264,7 +264,8 @@ namespace PullTheWorld.EditorTools
             UnlitTextured(MAnchorRing, ringTex, Cyan * 1.5f, additive: true);
             UnlitTextured(MPortalGlow, glowTex, Warm * 0.36f, additive: true);
             UnlitTextured(MEnemyAura, glowTex, new Color(1f, 0.10f, 0.18f, 0.45f), additive: true);
-            UnlitTextured(MTrail, glowTex, new Color(0.6f, 0.92f, 1f, 0.6f), additive: true);
+            // Cyan and faint: additive over a pale sky, a brighter trail just reads as white.
+            UnlitTextured(MTrail, glowTex, new Color(0.45f, 0.86f, 1f, 0.34f), additive: true);
             MultiplyTextured(MBlobShadow, shadowTex);
             UnlitTextured(MParticleAdd, blobTex, Color.white, additive: true);
             UnlitTextured(MParticleSoft, blobTex, Color.white, additive: false);

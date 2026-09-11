@@ -712,6 +712,19 @@ one when none is), or call `AdsManager.SetProvider(...)`. `OnAdClosed` is the an
   velocity as far as the solver is concerned — the player gets pushed out by penetration resolution
   rather than carried. So the platform owns its own kinematic Rigidbody, detaches from the level
   hierarchy at startup, and recomputes its pose from the level's rotation every FixedUpdate.
+* **Fixed: a knocking sound under the music while rolling, and a white orb at speed.** Both had
+  one cause. The level is a compound body with one box collider per block, so a ball rolling
+  along a flat row raises `OnCollisionEnter` at every seam, and both `PlayerBody` and
+  `DynamicProp` measured an impact by `relativeVelocity.magnitude`, which includes the rolling
+  speed. Each seam was a 3-6 m/s "landing" about five times a second: a full thud, a world shake,
+  a haptic tap and an impact flash on the orb (which, stacked on the speed glow, took the core,
+  halo and rim over the bloom threshold together). `Impacts.ClosingSpeed` now measures the
+  relative velocity along the contact normal - 0.7-1.8 m/s at a seam, full value on a real
+  landing. The impact sound volume is squared so small bumps whisper, and the orb's speed glow,
+  impact boost, halo and trail are all toned down. `RollingDoesNotThud` guards the regression.
+  The wind ambience was also Perlin noise sampled 7000 lattice cells a second, which is a faint
+  7 kHz whistle rather than a hiss, over a 55 Hz floor that pulsed every two seconds; it is
+  low-passed white noise over a steady floor now.
 * **Fixed: level 21 ("Bowl It Over") could jam.** The enemy sits inside its alert range of the
   spawn, hunts the orb the moment the level loads, and ends up next to the rock. Rock and enemy
   then roll downhill *in contact*: one gentle `OnCollisionEnter` under crush speed, and never
