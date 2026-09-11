@@ -264,7 +264,8 @@ namespace PullTheWorld.EditorTools
         /// along the arc (so the inner and outer curves are smooth, not a stack of tilted boxes),
         /// a pointed keystone filling the notch where the arcs meet, and small carved diamonds -
         /// flat and stone-coloured, not lamps. Sub 0 stone, sub 1 carved diamonds, sub 2 the
-        /// keystone's diamond, which alone may glow a little.
+        /// keystone's diamond, which alone may glow a little, sub 3 the faces that look into the
+        /// doorway (they take a warm material, as if the light inside fell on them).
         /// </summary>
         static Mesh DoorArch()
         {
@@ -297,7 +298,24 @@ namespace PullTheWorld.EditorTools
                 {
                     float a0 = Mathf.Lerp(th0, th1, i / (float)perSide) + dir * (i == 0 ? 0f : gap);
                     float a1 = Mathf.Lerp(th0, th1, (i + 1) / (float)perSide) - dir * (i == perSide - 1 ? 0f : gap);
-                    ArcStone(mb, 0, c, a0, a1, ArchInnerRadius, ArchOuterRadius, ArchDepth, 6);
+                    ArcStone(mb, 0, 3, c, a0, a1, ArchInnerRadius, ArchOuterRadius, ArchDepth, 0.028f, 6);
+                }
+            }
+
+            // The jambs' faces that look into the doorway, and the chamfer beside them on the front:
+            // thin plates in the inner-face submesh, a hair inside the box so they do not fight it.
+            {
+                float hz = ArchDepth * 0.5f, ch = 0.028f, eps = 0.002f;
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    float x = side * (ArchInner + eps);
+                    mb.AddFlatQuad(3, new Vector3(x, 0f, -hz + ch), new Vector3(x, ArchSpring - joint, -hz + ch),
+                                      new Vector3(x, ArchSpring - joint, hz - ch), new Vector3(x, 0f, hz - ch),
+                                   new Vector3(-side, 0f, 0f));
+                    float x1 = side * (ArchInner + ch + eps);
+                    mb.AddFlatQuad(3, new Vector3(x, 0f, -hz + ch), new Vector3(x1, 0f, -hz - eps),
+                                      new Vector3(x1, ArchSpring - joint, -hz - eps), new Vector3(x, ArchSpring - joint, -hz + ch),
+                                   new Vector3(-side, 0f, -1f));
                 }
             }
 
@@ -326,13 +344,28 @@ namespace PullTheWorld.EditorTools
         }
 
         /// <summary>
-        /// One curved stone: a rectangular section (rIn..rOut by depth) swept round centre c from
-        /// th0 to th1 degrees, with radial end caps. Flat-shaded quads, like everything else here.
+        /// One curved stone: a CHAMFERED rectangular section (rIn..rOut by depth, corners cut by
+        /// <paramref name="chamfer"/>) swept round centre c from th0 to th1 degrees, with end caps.
+        /// The chamfer is what gives the voussoirs the same edge highlights as the chamfered boxes
+        /// everywhere else - without it they read as flat paper. The inner wall and the two
+        /// chamfers beside it go to <paramref name="innerSub"/>, so the faces that look into the
+        /// doorway can carry the warm material that says "light is falling on this stone".
         /// </summary>
-        static void ArcStone(MeshBuilder mb, int sub, Vector2 c, float th0, float th1,
-                             float rIn, float rOut, float depth, int steps)
+        static void ArcStone(MeshBuilder mb, int sub, int innerSub, Vector2 c, float th0, float th1,
+                             float rIn, float rOut, float depth, float chamfer, int steps)
         {
             float hz = depth * 0.5f;
+            float ch = Mathf.Min(chamfer, Mathf.Min(rOut - rIn, depth) * 0.3f);
+            // Profile in (r, z), anticlockwise, starting at the front face's inner end.
+            var prof = new (float r, float z)[]
+            {
+                (rIn + ch, -hz), (rOut - ch, -hz),      // 0: front face
+                (rOut, -hz + ch), (rOut, hz - ch),      // 1: front-outer chamfer, 2: outer wall
+                (rOut - ch, hz), (rIn + ch, hz),        // 3: back-outer chamfer, 4: back face
+                (rIn, hz - ch), (rIn, -hz + ch),        // 5: back-inner chamfer, 6: inner wall, 7: front-inner chamfer
+            };
+            int n = prof.Length;
+
             Vector3 P(float deg, float r, float z)
             {
                 float a = deg * Mathf.Deg2Rad;
@@ -344,15 +377,29 @@ namespace PullTheWorld.EditorTools
             {
                 float a0 = Mathf.Lerp(th0, th1, i / (float)steps);
                 float a1 = Mathf.Lerp(th0, th1, (i + 1) / (float)steps);
-                mb.AddFlatQuad(sub, P(a0, rIn, -hz), P(a0, rOut, -hz), P(a1, rOut, -hz), P(a1, rIn, -hz), Vector3.back);
-                mb.AddFlatQuad(sub, P(a0, rIn, hz), P(a0, rOut, hz), P(a1, rOut, hz), P(a1, rIn, hz), Vector3.forward);
-                Vector3 outward = Radial((a0 + a1) * 0.5f);
-                mb.AddFlatQuad(sub, P(a0, rOut, -hz), P(a1, rOut, -hz), P(a1, rOut, hz), P(a0, rOut, hz), outward);
-                mb.AddFlatQuad(sub, P(a0, rIn, -hz), P(a1, rIn, -hz), P(a1, rIn, hz), P(a0, rIn, hz), -outward);
+                Vector3 rad = Radial((a0 + a1) * 0.5f);
+                for (int e = 0; e < n; e++)
+                {
+                    var p0 = prof[e];
+                    var p1 = prof[(e + 1) % n];
+                    // Outward normal of an anticlockwise edge (dr, dz) is (dz, -dr).
+                    Vector3 hint = rad * (p1.z - p0.z) + Vector3.forward * -(p1.r - p0.r);
+                    int s = e >= 5 ? innerSub : sub;
+                    mb.AddFlatQuad(s, P(a0, p0.r, p0.z), P(a0, p1.r, p1.z), P(a1, p1.r, p1.z), P(a1, p0.r, p0.z), hint);
+                }
             }
+
             float dir = Mathf.Sign(th1 - th0);
-            mb.AddFlatQuad(sub, P(th0, rIn, -hz), P(th0, rOut, -hz), P(th0, rOut, hz), P(th0, rIn, hz), Radial(th0 - dir * 90f));
-            mb.AddFlatQuad(sub, P(th1, rIn, -hz), P(th1, rOut, -hz), P(th1, rOut, hz), P(th1, rIn, hz), Radial(th1 + dir * 90f));
+            foreach (var (th, hint) in new[] { (th0, Radial(th0 - dir * 90f)), (th1, Radial(th1 + dir * 90f)) })
+            {
+                var centre = P(th, (rIn + rOut) * 0.5f, 0f);
+                for (int e = 0; e < n; e++)
+                {
+                    var p0 = prof[e];
+                    var p1 = prof[(e + 1) % n];
+                    mb.AddFlatTri(sub, centre, P(th, p0.r, p0.z), P(th, p1.r, p1.z), hint);
+                }
+            }
         }
 
         /// <summary>Flat glowing pane that fills the pointed doorway. Double sided - the door can face anywhere.</summary>

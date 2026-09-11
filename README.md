@@ -401,6 +401,30 @@ Rebuilt against the paintings on 2026-09-11 (`PtwMeshes.DoorArch`/`ArchFill`, `P
   the first retint kept full RGB and only lowered alpha, tripled the add, and clipped the doorway
   to white. Keep that product small wherever a spill overlaps the doorway or the frame.
 
+**Depth pass (2026-09-12).** The user's read after the rebuild: right shape and colours, but "a
+flat 2D yellow shape" where the painting is "a deep gateway emitting light". What closed that gap,
+without touching the design or proportions:
+
+* **The interior is layered, back to front.** Field (amber deepening into the upper corners, so
+  the opening reads as a hollow) → two octaves of slowly drifting haze (body, not paint) → the
+  mandala, soft-edged and thinned by the haze → a *golden* wide glow from the core that dissolves
+  the rings where the light is strongest, which is what puts them inside the light rather than on
+  top of it → the small white core with a four-point glint. Only the core crosses the bloom
+  threshold. A first attempt with a white glow of the same width read as a flat disc and swallowed
+  the lower half; the glow has to stay golden and only the core may go white.
+* **The stone has edges again.** The voussoirs are swept with a chamfered profile (`ArcStone`
+  takes a chamfer), the masonry material has a soft specular sheen, and the faces that look into
+  the doorway - the arch's inner wall and its chamfers, plus plates on the jambs' inner faces - are
+  a fourth submesh with `M_ArchInner`, cream stone with the portal's warmth as emission. That is
+  the "glow along the inner edge of the arch".
+* **Real light spill.** The point light moved inside the doorway (intensity 1.4, range 5), so it
+  falls on the inner faces, the threshold and the blocks either side: the wall block next to the
+  door samples (189,177,166) against (181,169,158) further along, and the grass a block away lifts
+  from (138,172,93) to (160,186,95). The pool quad was reduced to keep the sill from clipping.
+* **Sparkles.** Two emitters of warm four-point glints (`M_PortalSpark`, the orb's star texture in
+  cream-gold): small ones twinkling inside the doorway, a few larger ones drifting in front of the
+  frame.
+
 ### Sky motion
 
 `Feel/SkyLayer.cs` + `Feel/SkyParallax.cs`. Every sky element is a `SkyLayer` child of the

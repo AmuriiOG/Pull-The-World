@@ -43,7 +43,7 @@ namespace PullTheWorld
         [Header("Feel")]
         [SerializeField] float basePulseSpeed = 1.4f;
         [SerializeField] float basePulseAmount = 0.05f;
-        [SerializeField] float baseLightIntensity = 0.95f;
+        [SerializeField] float baseLightIntensity = 1.4f;
 
         // PTW/PortalEnergy properties, cached as ids so the per-frame update allocates nothing.
         static readonly int CoreColorId = Shader.PropertyToID("_CoreColor");

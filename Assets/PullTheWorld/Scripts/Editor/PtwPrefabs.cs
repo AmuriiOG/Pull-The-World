@@ -362,8 +362,9 @@ namespace PullTheWorld.EditorTools
         static void BuildPortal()
         {
             var door = Node("ExitPortal_Door");
-            // Cream masonry, carved diamonds a shade darker, one faintly glowing keystone diamond.
-            MeshNode("Arch", "Mesh_DoorArch", door.transform, PtwArt.MArchStone, PtwArt.MArchCarve, PtwArt.MPortalStud);
+            // Cream masonry, carved diamonds a shade darker, one faintly glowing keystone diamond,
+            // and warm inner faces where the doorway's light falls on the stone.
+            MeshNode("Arch", "Mesh_DoorArch", door.transform, PtwArt.MArchStone, PtwArt.MArchCarve, PtwArt.MPortalStud, PtwArt.MArchInner);
 
             var glow = MeshNode("Glow", "Mesh_ArchFill", door.transform, PtwArt.MPortalEnergy);
             glow.transform.localPosition = new Vector3(0f, 0f, 0f);
@@ -376,7 +377,7 @@ namespace PullTheWorld.EditorTools
             float apex = PtwMeshes.ArchApex;
             var halo = MeshNode("Halo", "Mesh_QuadXY", door.transform, PtwArt.MPortalGlow);
             halo.transform.localPosition = new Vector3(0f, apex * 0.5f, -0.26f);
-            halo.transform.localScale = new Vector3(2.4f, apex * 1.9f, 1f);
+            halo.transform.localScale = new Vector3(3.0f, apex * 2.1f, 1f);   // wide: it has to reach the next block
             NoShadows(halo);
             var pool = MeshNode("FloorGlow", "Mesh_QuadXZ", door.transform, PtwArt.MPortalFloor);
             pool.transform.localPosition = new Vector3(0f, 0.03f, -0.42f);
@@ -386,16 +387,25 @@ namespace PullTheWorld.EditorTools
             var mouth = Node("Mouth", door.transform);
             mouth.transform.localPosition = new Vector3(0f, 0.6f, 0f);
 
+            // The light sits INSIDE the doorway, so it falls on the inner faces of the arch, the
+            // grass at the threshold and the blocks either side. This is the real spill; the
+            // additive quads only soften it.
             var lightGo = Node("PortalLight", door.transform);
-            lightGo.transform.localPosition = new Vector3(0f, 0.7f, -0.15f);
+            lightGo.transform.localPosition = new Vector3(0f, 0.75f, 0.0f);
             var pl = lightGo.AddComponent<Light>();
             pl.type = LightType.Point;
-            pl.color = PtwArt.Hex("#FFD98F");
-            pl.intensity = 0.95f;
-            pl.range = 4.5f;
+            pl.color = PtwArt.Hex("#FFE0A8");
+            pl.intensity = 1.4f;
+            pl.range = 5.0f;
             pl.shadows = LightShadows.None;
 
             var idle = Motes("IdleVfx", door.transform, PtwArt.Get(PtwArt.MParticleAdd), PtwArt.Hex("#FFF1CC"));
+            // Magic: small warm glints twinkling inside the doorway, and a few larger ones that
+            // drift out in front of the frame, like the painting's scattered sparkles.
+            PortalSparkles("Glints", door.transform, PtwArt.Get(PtwArt.MPortalSpark), apex,
+                           0.03f, 0.08f, 7f, new Vector3(0.62f, 1.1f, 0.1f), -0.05f);
+            PortalSparkles("GlintsBig", door.transform, PtwArt.Get(PtwArt.MPortalSpark), apex,
+                           0.09f, 0.15f, 1.3f, new Vector3(1.0f, 1.4f, 0.4f), -0.25f);
             var arrive = Burst("ArriveVfx", door.transform, PtwArt.Get(PtwArt.MParticleAdd), PtwArt.Warm, 34);
 
             var ep = door.AddComponent<ExitPortal>();
@@ -721,6 +731,37 @@ namespace PullTheWorld.EditorTools
         }
 
         /// <summary>Tiny star sparkles drifting around the orb. Local space so they travel with it.</summary>
+        /// <summary>Warm four-point glints that fade in, twinkle and fade out, spawned in a box across the doorway.</summary>
+        static ParticleSystem PortalSparkles(string name, Transform parent, Material mat, float apex,
+                                             float minSize, float maxSize, float rate, Vector3 box, float z)
+        {
+            var ps = BaseSystem(name, parent, mat, false);
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(1.3f, 2.4f);
+            main.startSize = new ParticleSystem.MinMaxCurve(minSize, maxSize);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.03f, 0.10f);
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.97f, 0.88f, 0.95f), new Color(1f, 0.86f, 0.62f, 0.95f));
+            main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+            main.gravityModifier = -0.025f;                // they rise, slowly
+            main.loop = true;
+            main.playOnAwake = true;
+            main.maxParticles = 30;
+            var em = ps.emission; em.enabled = true; em.rateOverTime = rate;
+            var sh = ps.shape;
+            sh.enabled = true;
+            sh.shapeType = ParticleSystemShapeType.Box;
+            sh.scale = box;
+            sh.position = new Vector3(0f, apex * 0.5f, z);
+            var col = ps.colorOverLifetime; col.enabled = true; col.color = FadeInOut(Color.white);
+            var sz = ps.sizeOverLifetime;
+            sz.enabled = true;
+            sz.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+                new Keyframe(0f, 0.1f), new Keyframe(0.25f, 1f), new Keyframe(0.5f, 0.35f),
+                new Keyframe(0.75f, 0.9f), new Keyframe(1f, 0.05f)));
+            var rot = ps.rotationOverLifetime; rot.enabled = true; rot.z = new ParticleSystem.MinMaxCurve(0.2f, 0.7f);
+            return ps;
+        }
+
         static ParticleSystem Sparkles(string name, Transform parent, Material mat)
         {
             var ps = BaseSystem(name, parent, mat, false);

@@ -299,7 +299,7 @@ namespace PullTheWorld.EditorTools
                 }
 
                 // A tiny portal in the middle of the top row.
-                var arch = PtwPrefabs.MeshNode("Arch", "Mesh_DoorArch", islet.transform, PtwArt.MFarStone, PtwArt.MFarStone, PtwArt.MPortalStud);
+                var arch = PtwPrefabs.MeshNode("Arch", "Mesh_DoorArch", islet.transform, PtwArt.MFarStone, PtwArt.MFarStone, PtwArt.MPortalStud, PtwArt.MFarStone);
                 arch.transform.localPosition = new Vector3(0f, 0f, 0f);
                 arch.transform.localScale = Vector3.one * 0.8f;
                 StripCollidersAndShadows(arch, keepMaterials: true);

@@ -175,6 +175,8 @@ namespace PullTheWorld.EditorTools
         public const string MPortalFloor = "M_PortalFloor";   // the pool of light on the grass at the threshold
         public const string MArchStone = "M_ArchStone";   // the doorway's cream masonry
         public const string MArchCarve = "M_ArchCarve";   // its carved diamonds
+        public const string MArchInner = "M_ArchInner";   // its faces that look into the doorway
+        public const string MPortalSpark = "M_PortalSpark"; // warm four-point glints in the doorway
         public const string MPortalEnergyFar = "M_PortalEnergyFar";
 
         static readonly Dictionary<string, Material> cache = new Dictionary<string, Material>();
@@ -232,9 +234,14 @@ namespace PullTheWorld.EditorTools
             // The doorway is CREAM, clearly lighter than the island's grey stone: the mockup's arch
             // samples at (250-255, 234-243, 205-221) against a wall at (172,161,153). The diamonds
             // are carved, a shade darker than the stone; only the keystone's glows, faintly.
-            Lit(MArchStone, Hex("#F9F1E4"), 0.18f);   // capture jambs were (224,207,188) at #F2E8D8; the painting's are ~(250,238,210)
+            // A soft specular sheen on the masonry: with the flat ambient the chamfers were the only
+            // thing giving the stones form, and the painting's stone has a gentle satin surface.
+            Lit(MArchStone, Hex("#F9F1E4"), 0.32f, 0f, specular: true);   // capture jambs were (224,207,188) at #F2E8D8; the painting's are ~(250,238,210)
             Lit(MArchCarve, Hex("#DCD0BE"), 0.22f);
             Emissive(MPortalStud, Hex("#FFF2D0"), Hex("#FFE7B0"), 0.45f, 0.4f);
+            // The faces that look into the doorway: cream stone with the portal's warmth falling on
+            // it. Emission, not a light, so it is stable and free; kept well under bloom.
+            Emissive(MArchInner, Hex("#F7E9D2"), Hex("#FFC66E"), 0.55f, 0.3f);
 
             // Enemy: a bruised magenta that is in nobody else's palette, with near-black spikes.
             // Hostile has to read in one glance against grey rock and green grass.
@@ -277,7 +284,8 @@ namespace PullTheWorld.EditorTools
             // (252,234,155) against (184,236,163) beside it, which a warm add of ~(0.4,0.2,0.05)
             // linear on our grass reproduces.
             UnlitTextured(MPortalGlow, glowTex, new Color(1f, 0.80f, 0.50f, 0.08f), additive: true);
-            UnlitTextured(MPortalFloor, glowTex, new Color(1f, 0.72f, 0.38f, 0.18f), additive: true);
+            UnlitTextured(MPortalFloor, glowTex, new Color(1f, 0.72f, 0.38f, 0.14f), additive: true);
+            UnlitTextured(MPortalSpark, starTex, new Color(1f, 0.93f, 0.78f, 1f), additive: true);
             UnlitTextured(MEnemyAura, glowTex, new Color(1f, 0.10f, 0.18f, 0.45f), additive: true);
             // Cyan and faint: additive over a pale sky, a brighter trail just reads as white.
             UnlitTextured(MTrail, glowTex, new Color(0.45f, 0.86f, 1f, 0.34f), additive: true);
@@ -448,7 +456,8 @@ namespace PullTheWorld.EditorTools
                 mat.SetFloat("_Spokes", 12f);
                 mat.SetFloat("_LineWidth", 0.009f);
                 mat.SetFloat("_LineStrength", lineStrength);
-                mat.SetFloat("_CoreSize", 0.055f);
+                mat.SetFloat("_CoreSize", 0.06f);
+                mat.SetFloat("_GlowRadius", 0.30f);
                 mat.SetFloat("_Pulse", 0.08f);
                 mat.renderQueue = (int)RenderQueue.Transparent;
                 EditorUtility.SetDirty(mat);
