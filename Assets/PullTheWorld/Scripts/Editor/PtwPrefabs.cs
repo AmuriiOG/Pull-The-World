@@ -205,17 +205,29 @@ namespace PullTheWorld.EditorTools
         {
             float h = PtwMeshes.BlockH;
 
+            // The grass block carries its own turf details, off by default: a fringe of blades
+            // hanging over the front edge, a few blades standing on the cap, and a flower. The
+            // level builder switches them on per block with a seeded RNG, so no two blocks match
+            // and the island never reads as a green slab.
             var g = MeshNode("Block_Grass", "Mesh_BlockGrass", null, PtwArt.MStone, PtwArt.MGrass);
             AddTileBox(g, new Vector3(0f, -h * 0.5f, 0f), new Vector3(1f, h, 1f));
+            TurfDetails(g);
             Save(g, Blocks);
 
             var gh = MeshNode("Block_Grass_Half", "Mesh_BlockGrassHalf", null, PtwArt.MStone, PtwArt.MGrass);
             AddTileBox(gh, new Vector3(0f, -h * 0.25f, 0f), new Vector3(1f, h * 0.5f, 1f));
+            TurfDetails(gh);
             Save(gh, Blocks);
 
             var s = MeshNode("Block_Stone", "Mesh_BlockStone", null, PtwArt.MStone);
             AddTileBox(s, new Vector3(0f, -h * 0.5f, 0f), new Vector3(1f, h, 1f));
             Save(s, Blocks);
+
+            // A slightly darker twin the builder mixes in at random, so a wall of stone has the
+            // gentle block-to-block variation of the mockup instead of one flat value.
+            var sm = MeshNode("Block_Stone_Mid", "Mesh_BlockStone", null, PtwArt.MStoneMid);
+            AddTileBox(sm, new Vector3(0f, -h * 0.5f, 0f), new Vector3(1f, h, 1f));
+            Save(sm, Blocks);
 
             var sd = MeshNode("Block_Stone_Dark", "Mesh_BlockStone", null, PtwArt.MStoneDark);
             AddTileBox(sd, new Vector3(0f, -h * 0.5f, 0f), new Vector3(1f, h, 1f));
@@ -248,12 +260,41 @@ namespace PullTheWorld.EditorTools
             Save(r, Blocks);
         }
 
+        /// <summary>Fringe, tufts and a flower under a grass block, all inactive until the builder picks them.</summary>
+        static void TurfDetails(GameObject block)
+        {
+            var fringe = MeshNode("Fringe", "Mesh_GrassFringe", block.transform, PtwArt.MFringe);
+            NoShadows(fringe);
+            fringe.SetActive(false);
+            var tufts = MeshNode("Tufts", "Mesh_GrassTufts", block.transform, PtwArt.MFoliageWind);
+            NoShadows(tufts);
+            tufts.SetActive(false);
+            var flower = MeshNode("Flower", "Mesh_Flower", block.transform,
+                                  PtwArt.MFoliageWind, PtwArt.MFlowerWhite, PtwArt.MFlowerCenter);
+            flower.transform.localPosition = new Vector3(0.25f, 0f, -0.2f);
+            NoShadows(flower);
+            flower.SetActive(false);
+        }
+
         // ========================================================================= props =====
         static void BuildProps()
         {
             Save(MeshNode("Prop_Tree", "Mesh_Tree", null, PtwArt.MWoodDark, PtwArt.MFoliage), Props);
             Save(MeshNode("Prop_TreeSmall", "Mesh_TreeSmall", null, PtwArt.MWoodDark, PtwArt.MFoliage), Props);
             Save(MeshNode("Prop_Bush", "Mesh_Bush", null, PtwArt.MWoodDark, PtwArt.MFoliageDark), Props);
+
+            // Hanging vines and loose flowers, placed by the level builder at island edges and on
+            // grass tops. Vines pivot at their attachment; the wind material sways the free end.
+            var vine = MeshNode("Prop_Vine", "Mesh_Vine", null, PtwArt.MVine);
+            NoShadows(vine);
+            Save(vine, Props);
+            var vineShort = MeshNode("Prop_VineShort", "Mesh_VineShort", null, PtwArt.MVine);
+            NoShadows(vineShort);
+            Save(vineShort, Props);
+            var flower = MeshNode("Prop_Flower", "Mesh_Flower", null,
+                                  PtwArt.MFoliageWind, PtwArt.MFlowerWhite, PtwArt.MFlowerCenter);
+            NoShadows(flower);
+            Save(flower, Props);
             Save(MeshNode("Prop_RockDeco", "Mesh_RockDeco", null, PtwArt.MRock), Props);
             Save(MeshNode("Prop_Fence", "Mesh_Fence", null, PtwArt.MWood), Props);
 
@@ -321,29 +362,31 @@ namespace PullTheWorld.EditorTools
         static void BuildPortal()
         {
             var door = Node("ExitPortal_Door");
-            MeshNode("Arch", "Mesh_DoorArch", door.transform, PtwArt.MStone, PtwArt.MStoneDark);
+            // Cream stones, a warmer base step, and glowing diamond studs (sub 2) like the mockup.
+            MeshNode("Arch", "Mesh_DoorArch", door.transform, PtwArt.MStoneLight, PtwArt.MStoneMid, PtwArt.MPortalStud);
 
             var glow = MeshNode("Glow", "Mesh_ArchFill", door.transform, PtwArt.MPortalEnergy);
             glow.transform.localPosition = new Vector3(0f, 0f, 0f);
             var glowRend = glow.GetComponent<MeshRenderer>();
             glowRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
-            // Soft halo billboard so the doorway blooms onto its surroundings.
+            // Soft halo billboard so the doorway blooms onto its surroundings. Taller now: the
+            // pointed arch reaches 1.8 blocks.
             var halo = MeshNode("Halo", "Mesh_QuadXY", door.transform, PtwArt.MPortalGlow);
-            halo.transform.localPosition = new Vector3(0f, 0.62f, -0.24f);
-            halo.transform.localScale = new Vector3(2.6f, 2.8f, 1f);
+            halo.transform.localPosition = new Vector3(0f, 0.9f, -0.24f);
+            halo.transform.localScale = new Vector3(3.0f, 3.4f, 1f);
             halo.GetComponent<MeshRenderer>().shadowCastingMode =
                 UnityEngine.Rendering.ShadowCastingMode.Off;
 
             var mouth = Node("Mouth", door.transform);
-            mouth.transform.localPosition = new Vector3(0f, 0.45f, 0f);
+            mouth.transform.localPosition = new Vector3(0f, 0.55f, 0f);
 
             var lightGo = Node("PortalLight", door.transform);
-            lightGo.transform.localPosition = new Vector3(0f, 0.7f, 0.1f);
+            lightGo.transform.localPosition = new Vector3(0f, 0.9f, 0.1f);
             var pl = lightGo.AddComponent<Light>();
             pl.type = LightType.Point;
             pl.color = PtwArt.Warm;
-            pl.intensity = 2.2f;
+            pl.intensity = 2.0f;
             pl.range = 5f;
             pl.shadows = LightShadows.None;
 
@@ -583,30 +626,71 @@ namespace PullTheWorld.EditorTools
             // some life without the ball becoming a pinball.
             sc.sharedMaterial = EnsurePhysicsMaterial("PM_Player", 0.30f, 0.34f, 0.06f);
 
+            // ---- The orb. Everything under Visual is VISUAL ONLY; the body above is untouched. ----
+            // A glass sphere (its own shader: fresnel rim, iridescent band, fixed glass highlight),
+            // a four-point star core, an orbit ring, a soft halo, sparkles, a cyan point light and
+            // a contact shadow. OrbVisual keeps it upright, breathes it and reacts to speed and
+            // impacts. PlayerBody still owns the uniform impact pulse via the Visual's scale.
             var visual = Node("Visual", rig.transform);
-            MeshNode("Ball", "Mesh_PlayerBall", visual.transform, PtwArt.MPlayer);
-            MeshNode("Face", "Mesh_PlayerFace", visual.transform, PtwArt.MPlayerEye);
+            var glass = MeshNode("Glass", "Mesh_OrbSphere", visual.transform, PtwArt.MOrbGlass);
+            var glassRend = glass.GetComponent<MeshRenderer>();
+            glassRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            glassRend.receiveShadows = false;
 
-            // No fake blob shadow. v1 needed one because its camera was steeply isometric and a
-            // flat XZ quad read clearly under the character. This camera is almost front-on
-            // (13 degrees), so a horizontal quad is seen edge-on and is effectively invisible.
-            // A real shadow from the directional key light does the job properly here, and the
-            // chamfered blocks give it something to fall across.
+            var core = MeshNode("Core", "Mesh_QuadXY", visual.transform, PtwArt.MOrbCore);
+            core.transform.localScale = Vector3.one * 0.42f;
+            NoShadows(core);
+
+            var ring = MeshNode("Ring", "Mesh_OrbRing", visual.transform, PtwArt.MOrbRing);
+            ring.transform.localScale = Vector3.one * 1.12f;
+            ring.transform.localRotation = Quaternion.Euler(64f, 0f, 18f);
+            NoShadows(ring);
+
+            var halo = MeshNode("Halo", "Mesh_QuadXY", visual.transform, PtwArt.MOrbGlow);
+            halo.transform.localPosition = new Vector3(0f, 0f, 0.06f);
+            halo.transform.localScale = Vector3.one * 1.55f;
+            NoShadows(halo);
+
+            var sparkles = Sparkles("Sparkles", visual.transform, PtwArt.Get(PtwArt.MOrbSpark));
+
+            var lightGo = Node("OrbLight", visual.transform);
+            lightGo.transform.localPosition = new Vector3(0f, 0.05f, -0.2f);
+            var ol = lightGo.AddComponent<Light>();
+            ol.type = LightType.Point;
+            ol.color = PtwArt.Cyan;
+            ol.intensity = 0.9f;
+            ol.range = 2.6f;
+            ol.shadows = LightShadows.None;
+
+            // Contact shadow: a soft multiply blob PlayerBody keeps flat and scales with height.
+            var shadow = MeshNode("Shadow", "Mesh_QuadXZ", rig.transform, PtwArt.MBlobShadow);
+            shadow.transform.localPosition = new Vector3(0f, -0.33f, 0f);
+            shadow.transform.localScale = new Vector3(0.95f, 1f, 0.95f);
+            NoShadows(shadow);
 
             var pb = rig.AddComponent<PlayerBody>();
             Wire(pb, "visual", visual.transform);
+            Wire(pb, "contactShadow", shadow.transform);
 
-            // Charm and speed, both VISUAL ONLY: a blink and wide eyes in the air, and a soft
-            // streak once the ball is really moving. Neither touches the body or its settings.
-            var faceAnim = rig.AddComponent<BallFace>();
-            Wire(faceAnim, "player", pb);
-            Wire(faceAnim, "face", visual.transform.Find("Face"));
+            var orb = rig.AddComponent<OrbVisual>();
+            Wire(orb, "player", pb);
+            Wire(orb, "visual", visual.transform);
+            Wire(orb, "glass", glassRend);
+            Wire(orb, "core", core.transform);
+            Wire(orb, "ring", ring.transform);
+            Wire(orb, "halo", halo.transform);
+            Wire(orb, "haloRenderer", halo.GetComponent<MeshRenderer>());
+            Wire(orb, "coreRenderer", core.GetComponent<MeshRenderer>());
+            Wire(orb, "sparkles", sparkles);
+            Wire(orb, "orbLight", ol);
 
-            var trailGo = Node("Trail", rig.transform);           // sibling of Visual: does not roll
+            // A soft cyan streak once the orb is really moving. On a non-rolling sibling so the roll
+            // does not wobble it; cleared on teleports.
+            var trailGo = Node("Trail", rig.transform);
             var tr = trailGo.AddComponent<TrailRenderer>();
-            tr.time = 0.22f;
+            tr.time = 0.28f;
             tr.minVertexDistance = 0.04f;
-            tr.widthCurve = AnimationCurve.Linear(0f, 0.30f, 1f, 0.02f);
+            tr.widthCurve = AnimationCurve.Linear(0f, 0.36f, 1f, 0.02f);
             tr.numCapVertices = 4;
             tr.numCornerVertices = 4;
             tr.alignment = LineAlignment.View;
@@ -616,13 +700,50 @@ namespace PullTheWorld.EditorTools
             tr.receiveShadows = false;
             tr.emitting = false;
             var tg = new Gradient();
-            tg.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(new Color(0.75f, 0.85f, 1f), 1f) },
-                       new[] { new GradientAlphaKey(0.55f, 0f), new GradientAlphaKey(0f, 1f) });
+            tg.SetKeys(new[] { new GradientColorKey(new Color(0.85f, 0.98f, 1f), 0f), new GradientColorKey(new Color(0.55f, 0.85f, 1f), 1f) },
+                       new[] { new GradientAlphaKey(0.6f, 0f), new GradientAlphaKey(0f, 1f) });
             tr.colorGradient = tg;
             var bt = trailGo.AddComponent<BallTrail>();
             Wire(bt, "player", pb);
 
             Save(rig, Play);
+        }
+
+        static void NoShadows(GameObject go)
+        {
+            var r = go.GetComponent<Renderer>();
+            if (!r) return;
+            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            r.receiveShadows = false;
+        }
+
+        /// <summary>Tiny star sparkles drifting around the orb. Local space so they travel with it.</summary>
+        static ParticleSystem Sparkles(string name, Transform parent, Material mat)
+        {
+            var ps = BaseSystem(name, parent, mat, false);
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(1.2f, 2.2f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.11f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.04f, 0.12f);
+            main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 1f, 1f, 0.9f), new Color(0.75f, 0.95f, 1f, 0.9f));
+            main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+            main.gravityModifier = -0.02f;
+            main.loop = true;
+            main.playOnAwake = true;
+            main.maxParticles = 24;
+            var em = ps.emission; em.enabled = true; em.rateOverTime = 5f;
+            var sh = ps.shape;
+            sh.enabled = true;
+            sh.shapeType = ParticleSystemShapeType.Sphere;
+            sh.radius = 0.5f;
+            var col = ps.colorOverLifetime; col.enabled = true; col.color = FadeInOut(Color.white);
+            var sz = ps.sizeOverLifetime;
+            sz.enabled = true;
+            sz.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+                new Keyframe(0f, 0.2f), new Keyframe(0.3f, 1f), new Keyframe(0.6f, 0.45f),
+                new Keyframe(0.8f, 0.9f), new Keyframe(1f, 0.1f)));
+            var rot = ps.rotationOverLifetime; rot.enabled = true; rot.z = new ParticleSystem.MinMaxCurve(0.4f, 1.2f);
+            return ps;
         }
 
         // ======================================================================= helpers =====
@@ -723,6 +844,7 @@ namespace PullTheWorld.EditorTools
                 case float f: prop.floatValue = f; break;
                 case int i: prop.intValue = i; break;
                 case string s: prop.stringValue = s; break;
+                case Vector2 v2: prop.vector2Value = v2; break;
                 case Vector3 v: prop.vector3Value = v; break;
                 case Color c: prop.colorValue = c; break;
                 case Object o: prop.objectReferenceValue = o; break;

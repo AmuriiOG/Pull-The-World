@@ -44,40 +44,63 @@ namespace PullTheWorld.EditorTools
         // #97A3B3, and the v1 values landed nearer #5A6875 on screen once Neutral tonemapping and
         // the vignette had taken their cut - the whole frame read as dusk. These sit high enough
         // to come out at the target.
-        public static readonly Color BgTop = Hex("#C6D3E1");
-        public static readonly Color BgBottom = Hex("#A9B8C8");
+        // ---- The pastel-dawn palette, sampled from the two mockups in Art/Mockup. ----
+        // Sky: peach at the top through blush to a lilac horizon. Sun: pale cream. Everything on
+        // the island is lit warm and sits high in value; the only saturated things in frame are the
+        // grass, the orb's cyan and the portal's amber, which is exactly the mockup's hierarchy.
+        // Authored a step MORE saturated than the mockup reads: the grade (bloom tint, white
+        // balance, vignette) and the pastel ambient all pull towards grey, and the first capture
+        // came out mauve. These land on the mockup's peach/blush/lilac on screen.
+        public static readonly Color BgTop = Hex("#FBDCC6");
+        public static readonly Color BgMid = Hex("#F2CBD6");
+        public static readonly Color BgBottom = Hex("#E6DCEF");
+        public static readonly Color SunColor = Hex("#FFF0C4");
+        public static readonly Color HaloColor = Hex("#FFD6B4");
 
-        // Olive-leaning, not Kelly green. The first render came out far too saturated; the v1
-        // value then over-corrected into a dark bottle green that killed all the colour in the
-        // frame. This is PALETTE.md's measured lit value rather than another guess.
-        public static readonly Color Grass = Hex("#648C42");
-        public static readonly Color GrassDark = Hex("#5C7A3E");
-        // Stone was the one material both independent samples initially got wrong (averaging
-        // across the bright and dark concept cards dragged it ~27 points too dark). Re-measured
-        // on the LEVEL 1 card alone: lit #A6ABB6, mid #7C8087, shadow #494D52.
-        public static readonly Color Stone = Hex("#8D97A8");
-        public static readonly Color StoneMid = Hex("#7A8496");
-        public static readonly Color StoneDark = Hex("#5E6879");
-        public static readonly Color StoneLight = Hex("#A4AEC0");
-        public static readonly Color Dirt = Hex("#8A6B4A");
-        public static readonly Color Wood = Hex("#B08052");
-        public static readonly Color WoodDark = Hex("#7A5433");
+        // Fresh spring green, lighter and warmer than the olive of the night theme. The cap in the
+        // mockup is almost a single flat value with a slightly darker fringe.
+        public static readonly Color Grass = Hex("#8AB069");
+        public static readonly Color GrassDark = Hex("#729D57");
+        public static readonly Color GrassTip = Hex("#A2CC78");
+        // Cream limestone. Lit face #E8E1D5 on the mockup, mortar lines a shade darker, lower rows
+        // in a warm shadow that never goes grey.
+        public static readonly Color Stone = Hex("#E0DDDA");
+        public static readonly Color StoneMid = Hex("#D8D4D0");
+        public static readonly Color StoneDark = Hex("#B3ADA7");
+        public static readonly Color StoneLight = Hex("#EAE7E4");
+        public static readonly Color Dirt = Hex("#B48F6C");
+        public static readonly Color Wood = Hex("#BE8F62");
+        public static readonly Color WoodDark = Hex("#8A6444");
         public static readonly Color PlayerBody = Hex("#F2F4F8");
         public static readonly Color PlayerShade = Hex("#D2D8E0");
-        // The anchor ring has two populations that must not be averaged: a narrow hot emissive rim
-        // and a much larger area of soft spill. Averaging them yields a dull ring. Tune to the RIM
-        // and let bloom manufacture the spill - the ring must stay the brightest cyan on screen.
-        public static readonly Color Cyan = Hex("#86DFFC");
-        public static readonly Color CyanDeep = Hex("#1B7FC0");
-        public static readonly Color Warm = Hex("#FFC94F");
-        public static readonly Color WarmDeep = Hex("#E8A03D");
-        public static readonly Color Fire = Hex("#EF6B1F");
-        public static readonly Color Foliage = Hex("#3E7530");
-        public static readonly Color FoliageDark = Hex("#2A5522");
-        public static readonly Color RockGrey = Hex("#8A9099");
-        public static readonly Color Metal = Hex("#6B747E");
-        public static readonly Color SpikeSteel = Hex("#AAB2BB");
-        public static readonly Color ShadowTint = new Color(0.20f, 0.25f, 0.33f, 1f);
+        // The orb's cyan and the portal's amber are the two "light" colours of the theme.
+        public static readonly Color Cyan = Hex("#7FE6FF");
+        public static readonly Color CyanDeep = Hex("#3FB6DC");
+        public static readonly Color Warm = Hex("#FFD98F");
+        public static readonly Color WarmDeep = Hex("#F5B15E");
+        public static readonly Color Fire = Hex("#FF8A3D");
+        public static readonly Color Foliage = Hex("#6AA64B");
+        public static readonly Color FoliageDark = Hex("#4F8B3C");
+        public static readonly Color RockGrey = Hex("#B9B6B0");
+        public static readonly Color Metal = Hex("#A3A8AE");
+        public static readonly Color SpikeSteel = Hex("#C9CDD2");
+        public static readonly Color ShadowTint = new Color(0.62f, 0.55f, 0.62f, 1f);
+
+        // Background mountains, three layers of haze towards the sky. Sampled off the mockup:
+        // the far ridges are almost the sky's lilac, the near ones a soft teal-grey.
+        public static readonly Color MountainFarTop = Hex("#DAD3E6"), MountainFarBottom = Hex("#C9C6DE");
+        public static readonly Color MountainMidTop = Hex("#C3C4DA"), MountainMidBottom = Hex("#ADB2CC");
+        public static readonly Color MountainNearTop = Hex("#AEB5CC"), MountainNearBottom = Hex("#96A0BA");
+        public static readonly Color CloudColor = Hex("#FFF8F3");
+        public static readonly Color CloudShade = Hex("#F3DCE0");
+
+        // Flowers: three petal colours from the mockup's grass edge.
+        // Not pure white: a lit white petal crossed the bloom threshold and turned into a
+        // fist-sized halo on the grass. Ivory stays under it.
+        public static readonly Color FlowerWhite = Hex("#EEE3D0");
+        public static readonly Color FlowerYellow = Hex("#FFE07A");
+        public static readonly Color FlowerPink = Hex("#FFB7C9");
+        public static readonly Color FlowerCenter = Hex("#FFC847");
 
         // ------------------------------------------------------------------ material ids ----
         public const string MGrass = "M_Grass";
@@ -121,6 +144,25 @@ namespace PullTheWorld.EditorTools
         public const string MOcean = "M_Ocean";
         public const string MFarStone = "M_FarStone";
         public const string MFarGrass = "M_FarGrass";
+        // Pastel theme additions.
+        public const string MMountainFar = "M_MountainFar";
+        public const string MMountainMid = "M_MountainMid";
+        public const string MMountainNear = "M_MountainNear";
+        public const string MCloud = "M_Cloud";
+        public const string MFoliageWind = "M_FoliageWind";   // tufts, flower stems: sway up from the base
+        public const string MVine = "M_Vine";
+        public const string MFringe = "M_Fringe";                 // hangs down, sways from the attachment
+        public const string MFlowerWhite = "M_FlowerWhite";
+        public const string MFlowerYellow = "M_FlowerYellow";
+        public const string MFlowerPink = "M_FlowerPink";
+        public const string MFlowerCenter = "M_FlowerCenter";
+        public const string MOrbGlass = "M_OrbGlass";
+        public const string MOrbCore = "M_OrbCore";
+        public const string MOrbRing = "M_OrbRing";
+        public const string MOrbGlow = "M_OrbGlow";
+        public const string MOrbSpark = "M_OrbSpark";
+        public const string MPortalStud = "M_PortalStud";
+        public const string MPortalEnergyFar = "M_PortalEnergyFar";
 
         static readonly Dictionary<string, Material> cache = new Dictionary<string, Material>();
 
@@ -165,8 +207,16 @@ namespace PullTheWorld.EditorTools
             // the moving world is judged against.
             // Darkened for the night skies: at the old values the islets floated in the dark like
             // lit models rather than distant scenery.
-            Lit(MFarStone, Hex("#4E5A6C"), 0.08f);
-            Lit(MFarGrass, Hex("#3F4D44"), 0.06f);
+            // Pastel theme: the far islets are the same cream and green, hazed towards the sky.
+            Lit(MFarStone, Hex("#D6D0C8"), 0.08f);
+            Lit(MFarGrass, Hex("#A8C68F"), 0.06f);
+
+            // Flowers and the portal's diamond studs.
+            Lit(MFlowerWhite, FlowerWhite, 0.25f);
+            Lit(MFlowerYellow, FlowerYellow, 0.25f);
+            Lit(MFlowerPink, FlowerPink, 0.25f);
+            Lit(MFlowerCenter, FlowerCenter, 0.3f);
+            Emissive(MPortalStud, Hex("#FFF2D0"), Hex("#FFE7B0"), 1.4f, 0.4f);
 
             // Enemy: a bruised magenta that is in nobody else's palette, with near-black spikes.
             // Hostile has to read in one glance against grey rock and green grass.
@@ -175,20 +225,21 @@ namespace PullTheWorld.EditorTools
             Lit(MEnemy, Hex("#6B1A40"), 0.42f);
             Lit(MEnemySpike, Hex("#1C0B16"), 0.50f);
             Lit(MEnemyTeeth, Hex("#EDE6D6"), 0.35f);
-            // Spring pad cap: the one hot orange thing on the island, so "that throws you" reads at once.
-            Lit(MBounce, Hex("#FF7A45"), 0.50f);
+            // Spring pad cap: soft coral, the one warm-saturated thing on the island, so "that
+            // throws you" reads at once without fighting the pastel.
+            Lit(MBounce, Hex("#FF9E86"), 0.50f);
 
             // The key has to out-read every rock in the level from across the screen, so it gets a
             // real emissive rather than just a bright albedo. Kept below the door's amber so the
             // goal still wins the frame.
-            Emissive(MKey, Hex("#FFD96B"), Hex("#FFC03A"), 1.9f, 0.42f);
+            Emissive(MKey, Hex("#FFE08A"), Hex("#FFD060"), 1.7f, 0.42f);
 
-            Emissive(MGlowWarm, Warm, Warm, 3.2f, 0.3f);
-            Emissive(MGlowCyan, Cyan, Cyan, 2.6f, 0.3f);
-            Emissive(MGlowFire, Fire, Fire, 4.5f, 0.2f);
+            Emissive(MGlowWarm, Warm, Warm, 2.6f, 0.3f);
+            Emissive(MGlowCyan, Cyan, Cyan, 2.4f, 0.3f);
+            Emissive(MGlowFire, Fire, Fire, 3.8f, 0.2f);
             // Enemy eyes. Enemy.cs drives the emission per instance; this is only the resting look.
             Emissive(MGlowEvil, Hex("#FF2E1E"), Hex("#FF3A22"), 2.0f, 0.3f);
-            Emissive(MPlateOn, Hex("#D9615A"), Hex("#D9615A"), 1.2f, 0.3f);
+            Emissive(MPlateOn, Hex("#F08A7A"), Hex("#F08A7A"), 1.1f, 0.3f);
 
             // Screen furniture and effects.
             var ringTex = MakeRingTexture("Tex_AnchorRing", 256);
@@ -196,57 +247,183 @@ namespace PullTheWorld.EditorTools
             var glowTex = MakeBlobTexture("Tex_PortalGlow", 128, 1.6f);
             var bgTex = MakeGradientTexture("Tex_Background", 8, 256, BgTop, BgBottom);
             var shadowTex = MakeContactShadowTexture("Tex_ContactShadow", 128);
+            var starTex = MakeStarTexture("Tex_Star", 128);
+            var cloudTex = MakeCloudTexture("Tex_Cloud", 512, 7);
+            var whiteTex = MakeSolidTexture("Tex_White", 4, Color.white);
 
             UnlitTextured(MAnchorRing, ringTex, Cyan * 1.5f, additive: true);
-            UnlitTextured(MPortalGlow, glowTex, Warm * 1.4f, additive: true);
+            UnlitTextured(MPortalGlow, glowTex, Warm * 0.45f, additive: true);
             UnlitTextured(MEnemyAura, glowTex, new Color(1f, 0.10f, 0.18f, 0.45f), additive: true);
-            UnlitTextured(MTrail, glowTex, new Color(1f, 1f, 1f, 0.6f), additive: true);
+            UnlitTextured(MTrail, glowTex, new Color(0.6f, 0.92f, 1f, 0.6f), additive: true);
             MultiplyTextured(MBlobShadow, shadowTex);
             UnlitTextured(MParticleAdd, blobTex, Color.white, additive: true);
             UnlitTextured(MParticleSoft, blobTex, Color.white, additive: false);
 
+            // The orb's parts. The glass is its own shader; the rest are additive sprites.
+            UnlitTextured(MOrbCore, starTex, new Color(1f, 1f, 1f, 1f), additive: true);
+            UnlitTextured(MOrbSpark, starTex, new Color(0.85f, 0.97f, 1f, 1f), additive: true);
+            UnlitTextured(MOrbRing, whiteTex, new Color(0.72f, 0.95f, 1f, 0.55f), additive: true);
+            UnlitTextured(MOrbGlow, glowTex, new Color(0.50f, 0.88f, 1f, 0.8f), additive: true);
+
+            // Sky layers: hazed ridge gradients (UV.y 0 at the base, 1 at the ridge) and cloud puffs.
+            UnlitTextured(MMountainFar, MakeGradientTexture("Tex_MountainFar", 4, 64, MountainFarTop, MountainFarBottom),
+                          Color.white, additive: false, opaque: true);
+            UnlitTextured(MMountainMid, MakeGradientTexture("Tex_MountainMid", 4, 64, MountainMidTop, MountainMidBottom),
+                          Color.white, additive: false, opaque: true);
+            UnlitTextured(MMountainNear, MakeGradientTexture("Tex_MountainNear", 4, 64, MountainNearTop, MountainNearBottom),
+                          Color.white, additive: false, opaque: true);
+            UnlitTextured(MCloud, cloudTex, new Color(1f, 1f, 1f, 0.96f), additive: false);
+
             BuildBackdrop();
             BuildPortalEnergy();
             BuildWater();
+            BuildFoliage();
+            BuildOrb();
 
             // The pool's translucent body. The side-on camera sees this face, not the surface
-            // tile, so it carries the colour: shallow blue, ~55% opaque, faintly glossy.
-            LitTransparent(MWaterBody, new Color(0.19f, 0.56f, 0.80f, 0.56f), 0.55f);
+            // tile, so it carries the colour: a pastel pool blue, ~55% opaque, faintly glossy.
+            LitTransparent(MWaterBody, new Color(0.55f, 0.83f, 0.93f, 0.55f), 0.55f);
 
             AssetDatabase.SaveAssets();
         }
 
-        /// <summary>Animated sky: gradient + a pool of light behind the islands + drifting cloud.</summary>
+        /// <summary>Wind-swaying vegetation, two configurations of the one shader.</summary>
+        static void BuildFoliage()
+        {
+            var up = LoadOrCreateShader(MFoliageWind, "PTW/Foliage");
+            if (up != null)
+            {
+                up.SetColor("_BaseColor", GrassDark);
+                up.SetColor("_TipColor", GrassTip);
+                up.SetFloat("_WindAmount", 0.045f);
+                up.SetFloat("_WindSpeed", 1.4f);
+                up.SetFloat("_PivotY", 0f);
+                up.SetFloat("_WeightSign", 1f);
+                up.SetFloat("_Length", 0.32f);
+                up.SetFloat("_Wrap", 0.5f);
+                EditorUtility.SetDirty(up);
+            }
+
+            var down = LoadOrCreateShader(MVine, "PTW/Foliage");
+            if (down != null)
+            {
+                down.SetColor("_BaseColor", Hex("#6BA34C"));
+                down.SetColor("_TipColor", Hex("#92C86A"));
+                down.SetFloat("_WindAmount", 0.07f);
+                down.SetFloat("_WindSpeed", 1.1f);
+                down.SetFloat("_PivotY", 0f);
+                down.SetFloat("_WeightSign", -1f);
+                down.SetFloat("_Length", 1.3f);
+                down.SetFloat("_Wrap", 0.5f);
+                EditorUtility.SetDirty(down);
+            }
+
+            // The turf overhang along every grass edge. Its own material: lighter than the vines and
+            // lit almost flat (high wrap), because blades hanging off a ledge face away from the key
+            // light and, on the vine material, drew a dark saw-tooth line under every cap.
+            var fringe = LoadOrCreateShader(MFringe, "PTW/Foliage");
+            if (fringe != null)
+            {
+                fringe.SetColor("_BaseColor", Hex("#7DB65A"));
+                fringe.SetColor("_TipColor", Hex("#9ACB70"));
+                fringe.SetFloat("_WindAmount", 0.03f);
+                fringe.SetFloat("_WindSpeed", 1.2f);
+                fringe.SetFloat("_PivotY", 0f);
+                fringe.SetFloat("_WeightSign", -1f);
+                fringe.SetFloat("_Length", 0.35f);
+                fringe.SetFloat("_Wrap", 0.85f);
+                EditorUtility.SetDirty(fringe);
+            }
+        }
+
+        /// <summary>The glass body of the orb. See PtwOrb.shader for what each term does.</summary>
+        static void BuildOrb()
+        {
+            var m = LoadOrCreateShader(MOrbGlass, "PTW/Orb");
+            if (m == null) return;
+            // More body than the first pass: at alpha 0.16 the glass vanished against cream stone
+            // and only the ring and star were left. The mockup's orb is clearly a pale cyan sphere.
+            m.SetColor("_BodyColor", new Color(0.80f, 0.96f, 1f, 0.32f));
+            m.SetColor("_RimColor", Hex("#6FE3FF"));
+            m.SetFloat("_RimPower", 2.4f);
+            m.SetFloat("_RimStrength", 2.2f);
+            m.SetColor("_IridA", Hex("#F7B0E8"));
+            m.SetColor("_IridB", Hex("#8FF0FF"));
+            m.SetFloat("_IridStrength", 0.85f);
+            m.SetVector("_SpecDir", new Vector4(-0.55f, 0.7f, -0.45f, 0f));
+            m.SetFloat("_SpecPower", 48f);
+            m.SetFloat("_SpecStrength", 1.0f);
+            m.SetColor("_HazeColor", Hex("#BFEFFF"));
+            m.SetFloat("_HazeStrength", 0.24f);
+            m.renderQueue = (int)RenderQueue.Transparent + 2;   // over the water, under the UI
+            EditorUtility.SetDirty(m);
+        }
+
+        /// <summary>
+        /// The pastel dawn sky: three-stop gradient, a pale sun upper right, drifting cloud puffs.
+        /// The sun sits where the mockup's does - about 73% across and 13% down the frame, which
+        /// on the 1.35x overscanned quad is (0.17, 0.27) in quad space.
+        /// </summary>
         static void BuildBackdrop()
         {
             var m = LoadOrCreateShader(MBackground, "PTW/Backdrop");
             if (m == null) return;
             m.SetColor("_TopColor", BgTop);
+            m.SetColor("_MidColor", BgMid);
             m.SetColor("_BottomColor", BgBottom);
-            m.SetColor("_GlowColor", Hex("#F0F6FF"));
-            m.SetFloat("_GlowStrength", 0.62f);
-            m.SetVector("_GlowCenter", new Vector4(0f, 0.04f, 0f, 0f));
-            m.SetFloat("_GlowRadius", 0.66f);
-            m.SetFloat("_GlowAspect", 1.4f);
-            m.SetFloat("_CloudStrength", 0.115f);
-            m.SetFloat("_CloudScale", 1.7f);
-            m.SetFloat("_CloudSpeed", 0.006f);
-            m.SetFloat("_EdgeDarken", 0.09f);
+            m.SetFloat("_MidPoint", 0.5f);
+            m.SetColor("_GlowColor", SunColor);
+            m.SetColor("_HaloColor", HaloColor);
+            m.SetVector("_GlowCenter", new Vector4(0.17f, 0.27f, 0f, 0f));
+            m.SetFloat("_SunRadius", 0.058f);
+            m.SetFloat("_SunSoft", 0.02f);
+            m.SetFloat("_GlowRadius", 0.5f);
+            m.SetFloat("_GlowStrength", 0.36f);
+            m.SetFloat("_GlowAspect", 1.0f);
+            m.SetColor("_CloudColor", CloudColor);
+            m.SetColor("_CloudShade", CloudShade);
+            m.SetFloat("_CloudStrength", 0.85f);
+            m.SetFloat("_CloudCover", 0.42f);
+            m.SetFloat("_CloudScale", 2.1f);
+            m.SetFloat("_CloudSpeed", 0.007f);
+            m.SetVector("_CloudBand", new Vector4(-0.5f, 0.34f, 0f, 0f));
+            m.SetFloat("_EdgeDarken", 0f);
             m.renderQueue = (int)RenderQueue.Background;
             EditorUtility.SetDirty(m);
         }
 
-        /// <summary>Swirling additive energy for the doorway.</summary>
+        /// <summary>
+        /// Swirling additive energy for the doorway: warm cream core, amber edge, like the mockup.
+        /// Intensity is modest so the rings stay visible - the first pass blew out to a white oval.
+        /// (ExitPortal drives the runtime intensity; the far islets use the dimmer copy below.)
+        /// </summary>
         static void BuildPortalEnergy()
         {
+            var far = LoadOrCreateShader(MPortalEnergyFar, "PTW/PortalEnergy");
+            if (far != null)
+            {
+                far.SetColor("_CoreColor", Hex("#FFE9B8"));
+                far.SetColor("_EdgeColor", Hex("#F4B778"));
+                far.SetFloat("_Intensity", 0.7f);
+                far.SetVector("_Center", new Vector4(0f, 0.89f, 0f, 0f));
+                far.SetVector("_Extents", new Vector4(0.33f, 0.76f, 0f, 0f));
+                far.SetFloat("_Speed", 0.6f);
+                far.SetFloat("_Swirl", 3f);
+                far.SetFloat("_RingFreq", 8f);
+                far.SetFloat("_Pulse", 0.1f);
+                far.SetFloat("_EdgeSoft", 0.45f);
+                far.renderQueue = (int)RenderQueue.Transparent;
+                EditorUtility.SetDirty(far);
+            }
+
             var m = LoadOrCreateShader(MPortalEnergy, "PTW/PortalEnergy");
             if (m == null) return;
-            m.SetColor("_CoreColor", Hex("#FFF1B8"));
-            m.SetColor("_EdgeColor", WarmDeep);
-            m.SetFloat("_Intensity", 2.3f);
-            // Matches the ArchFill mesh: spans y 0.15..1.36, x +/-0.31.
-            m.SetVector("_Center", new Vector4(0f, 0.755f, 0f, 0f));
-            m.SetVector("_Extents", new Vector4(0.33f, 0.63f, 0f, 0f));
+            m.SetColor("_CoreColor", Hex("#FFEDC2"));
+            m.SetColor("_EdgeColor", Hex("#F5AE62"));
+            m.SetFloat("_Intensity", 1.0f);
+            // Matches the pointed ArchFill mesh: spans y 0.15..1.63, x +/-0.31.
+            m.SetVector("_Center", new Vector4(0f, 0.89f, 0f, 0f));
+            m.SetVector("_Extents", new Vector4(0.33f, 0.76f, 0f, 0f));
             m.SetFloat("_Speed", 0.85f);
             m.SetFloat("_Swirl", 3f);
             m.SetFloat("_RingFreq", 8f);
@@ -256,14 +433,14 @@ namespace PullTheWorld.EditorTools
             EditorUtility.SetDirty(m);
         }
 
-        /// <summary>Water tuned to the measured reference: body #1372A3, lit #1F9CC5, foam #8BEDFA.</summary>
+        /// <summary>Water in the pastel theme: a clear pool blue, soft foam.</summary>
         static void BuildWater()
         {
             var m = LoadOrCreateShader(MWater, "PTW/Water");
             if (m == null) return;
-            m.SetColor("_ShallowColor", Hex("#1F9CC5"));
-            m.SetColor("_DeepColor", Hex("#0B3F63"));
-            m.SetColor("_FoamColor", Hex("#CFF6FE"));
+            m.SetColor("_ShallowColor", Hex("#8BD3E6"));
+            m.SetColor("_DeepColor", Hex("#3F8FB8"));
+            m.SetColor("_FoamColor", Hex("#F2FCFF"));
             m.SetColor("_SpecColor2", Hex("#FFFFFF"));
             m.SetFloat("_DepthFade", 0.34f);
             m.SetFloat("_Opacity", 0.78f);
@@ -522,6 +699,98 @@ namespace PullTheWorld.EditorTools
                     a = Mathf.Pow(a, power);
                     tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
                 }
+            tex.Apply(false, false);
+            return SaveTexture(tex, id);
+        }
+
+        /// <summary>A four-point star with a soft glow: the orb's core and its sparkles.</summary>
+        public static Texture2D MakeStarTexture(string id, int size)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false, false)
+            {
+                name = id,
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear
+            };
+            float half = size * 0.5f;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float px = (x + 0.5f - half) / half, py = (y + 0.5f - half) / half;
+                    float d = Mathf.Sqrt(px * px + py * py);
+                    // Arms: thin along one axis, long along the other, both ways.
+                    float armH = Mathf.Exp(-Mathf.Pow(py / 0.055f, 2f)) * Mathf.Exp(-Mathf.Pow(px / 0.62f, 2f));
+                    float armV = Mathf.Exp(-Mathf.Pow(px / 0.055f, 2f)) * Mathf.Exp(-Mathf.Pow(py / 0.62f, 2f));
+                    // Shorter diagonal arms for sparkle.
+                    float u = (px + py) * 0.7071f, w = (px - py) * 0.7071f;
+                    float armD = (Mathf.Exp(-Mathf.Pow(w / 0.04f, 2f)) * Mathf.Exp(-Mathf.Pow(u / 0.30f, 2f))
+                                + Mathf.Exp(-Mathf.Pow(u / 0.04f, 2f)) * Mathf.Exp(-Mathf.Pow(w / 0.30f, 2f))) * 0.55f;
+                    float core = Mathf.Exp(-Mathf.Pow(d / 0.14f, 2f));
+                    float glow = Mathf.Pow(Mathf.Clamp01(1f - d), 3f) * 0.45f;
+                    float a = Mathf.Clamp01(Mathf.Max(Mathf.Max(armH, armV), Mathf.Max(armD, core)) + glow);
+                    tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                }
+            tex.Apply(false, false);
+            return SaveTexture(tex, id);
+        }
+
+        /// <summary>
+        /// A cloud puff: the union of soft discs strung along a flattened ellipse, lit cream on top
+        /// and blushed underneath so it has volume without any lighting.
+        /// </summary>
+        public static Texture2D MakeCloudTexture(string id, int size, int seed)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false, false)
+            {
+                name = id,
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear
+            };
+            var rnd = new System.Random(seed);
+            const int puffs = 9;
+            var centers = new Vector2[puffs];
+            var radii = new float[puffs];
+            for (int i = 0; i < puffs; i++)
+            {
+                float t = (i + 0.5f) / puffs;
+                centers[i] = new Vector2(Mathf.Lerp(-0.62f, 0.62f, t) + ((float)rnd.NextDouble() - 0.5f) * 0.12f,
+                                         -0.12f + Mathf.Sin(t * Mathf.PI) * 0.22f + ((float)rnd.NextDouble() - 0.5f) * 0.14f);
+                radii[i] = 0.22f + (float)rnd.NextDouble() * 0.16f + Mathf.Sin(t * Mathf.PI) * 0.12f;
+            }
+
+            float half = size * 0.5f;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    var p = new Vector2((x + 0.5f - half) / half, (y + 0.5f - half) / half);
+                    float a = 0f, top = 0f;
+                    for (int i = 0; i < puffs; i++)
+                    {
+                        float d = Vector2.Distance(p, centers[i]) / radii[i];
+                        float k = Mathf.Clamp01(1f - d);
+                        k = k * k * (3f - 2f * k);
+                        a = Mathf.Max(a, k);
+                        // How high inside this puff we are, for the lighting.
+                        top = Mathf.Max(top, Mathf.Clamp01((p.y - centers[i].y) / radii[i] + 0.5f) * k);
+                    }
+                    // Flat bottom: clouds sit on their own shadow line. Then a firm-but-soft edge so
+                    // the puffs read as forms rather than as smears.
+                    if (p.y < -0.3f) a *= Mathf.Clamp01(1f + (p.y + 0.3f) / 0.25f);
+                    a = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((a - 0.18f) / 0.40f));
+                    Color c = Color.Lerp(CloudShade, CloudColor, Mathf.Clamp01(top * 1.3f));
+                    tex.SetPixel(x, y, new Color(c.r, c.g, c.b, a));
+                }
+            tex.Apply(false, false);
+            return SaveTexture(tex, id);
+        }
+
+        public static Texture2D MakeSolidTexture(string id, int size, Color color)
+        {
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false, false)
+            {
+                name = id, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear
+            };
+            for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) tex.SetPixel(x, y, color);
             tex.Apply(false, false);
             return SaveTexture(tex, id);
         }

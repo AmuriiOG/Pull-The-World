@@ -29,8 +29,10 @@ namespace PullTheWorld.EditorTools
         public const string FontSemiPath = "Assets/PullTheWorld/Art/Fonts/Poppins-SemiBold SDF.asset";
 
         // Measured: a white-albedo surface in shadow sits at #697CA5, so that IS the ambient.
-        static readonly Color AmbientColor = PtwArt.Hex("#5E6E8C");
-        static readonly Color KeyColor = PtwArt.Hex("#DCE6FF");   // moonlight: the skies are night, so the key must be too
+        // Pastel dawn: a warm cream sun and a bright, slightly lilac ambient. Shadows on the
+        // mockup never go grey - a shaded cream face is still cream.
+        static readonly Color AmbientColor = PtwArt.Hex("#E8E5E5");   // near-neutral and high: the mockup is lit almost flat, its stone is grey not pink
+        static readonly Color KeyColor = PtwArt.Hex("#FFF4E6");
 
         // ==================================================================== entry point ====
         public static void Build()
@@ -87,7 +89,7 @@ namespace PullTheWorld.EditorTools
             PtwPrefabs.Wire(levels, "sky", cam.GetComponentInChildren<SkyTheme>());
             levels.EditorSetLevels(PtwLevels.LoadAll());
 
-            BuildBackdropScenery();
+            // (The far scenery now lives in the sky, built with the camera - see BuildSkyLayers.)
             var (burst, roll) = BuildDust();
 
             var feedback = systems.AddComponent<ImpactFeedback>();
@@ -151,12 +153,157 @@ namespace PullTheWorld.EditorTools
             var sky = bg.AddComponent<SkyTheme>();
             PtwPrefabs.Wire(sky, "target", bgr);
 
-            // Fireflies: a few slow motes drifting in the sky, tinted per chapter by SkyTheme.
-            // Parented to the camera like the backdrop so they are always in frame; simulated in
-            // world space so a reframe does not drag them.
+            // Pollen: a few slow motes drifting in the air, the colour of the sun (SkyTheme tints
+            // them). Parented to the camera like the backdrop so they are always in frame;
+            // simulated in world space so a reframe does not drag them.
             PtwPrefabs.Wire(sky, "fireflies", MakeFireflies(go.transform));
 
+            // The rest of the sky: mountains, clouds and far islets, all welded to the camera.
+            BuildSkyLayers(cam);
+
             return cam;
+        }
+
+        /// <summary>
+        /// The mockup's atmosphere, in layers from the back: three hazed mountain ridges, cloud
+        /// puffs drifting between and in front of them, and small floating islets with tiny portals
+        /// up in the sky. Everything is a SkyLayer child of the camera: placed by viewport fraction
+        /// and sized to the frustum, so it composes the same on every level's framing and never
+        /// moves with the world - the static reference the turning island is read against.
+        /// Mountains do not drift; clouds do, slowly, each layer at its own speed, which is the
+        /// only parallax an orthographic camera can offer and all this style needs.
+        /// </summary>
+        static void BuildSkyLayers(Camera cam)
+        {
+            var root = new GameObject("Sky");
+            root.transform.SetParent(cam.transform, false);
+
+            // Mountains: far ridge highest and faintest, near ridge lowest and strongest. Their bases
+            // sit below the frame so no bottom edge ever shows.
+            Ridge(root.transform, cam, "MountainsFar", "Mesh_MountainFar", PtwArt.MMountainFar, 84f, -0.1f, 0.74f);
+            Ridge(root.transform, cam, "MountainsMid", "Mesh_MountainMid", PtwArt.MMountainMid, 76f, -0.1f, 0.60f);
+            Ridge(root.transform, cam, "MountainsNear", "Mesh_MountainNear", PtwArt.MMountainNear, 68f, -0.1f, 0.46f);
+
+            // Clouds. (viewport x, viewport y, width, height, distance, drift). Behind the mountains
+            // in the upper sky, between them in the middle, and two big soft ones in FRONT of the
+            // island's lower half, like the mockup's foreground clouds.
+            var clouds = new[]
+            {
+                (0.20f, 0.74f, 9.0f, 4.2f, 90f, 0.030f), (0.72f, 0.66f, 11.0f, 5.0f, 88f, 0.022f),
+                (0.48f, 0.58f, 8.0f, 3.6f, 80f, 0.036f), (0.88f, 0.50f, 9.5f, 4.4f, 79f, 0.028f),
+                (0.10f, 0.46f, 10.0f, 4.6f, 72f, 0.040f), (0.62f, 0.40f, 8.5f, 3.8f, 70f, 0.045f),
+                (0.30f, 0.16f, 14.0f, 6.0f, 22f, 0.060f), (0.82f, 0.08f, 13.0f, 5.6f, 24f, 0.050f),
+                (0.55f, 0.24f, 10.0f, 4.4f, 26f, 0.055f),
+            };
+            int i = 0;
+            foreach (var (x, y, w, h, z, drift) in clouds)
+            {
+                var c = PtwPrefabs.MeshNode($"Cloud{i++}", "Mesh_QuadXY", root.transform, PtwArt.MCloud);
+                var r = c.GetComponent<MeshRenderer>();
+                r.shadowCastingMode = ShadowCastingMode.Off;
+                r.receiveShadows = false;
+                var layer = c.AddComponent<SkyLayer>();
+                PtwPrefabs.Wire(layer, "targetCamera", cam);
+                PtwPrefabs.Wire(layer, "distance", z);
+                PtwPrefabs.Wire(layer, "centred", true);
+                PtwPrefabs.Wire(layer, "viewportPos", new Vector2(x, y));
+                PtwPrefabs.Wire(layer, "worldSize", new Vector2(w, h));
+                PtwPrefabs.Wire(layer, "driftSpeed", drift);
+            }
+
+            BuildSkyIslets(root.transform, cam);
+        }
+
+        static void Ridge(Transform parent, Camera cam, string name, string mesh, string mat,
+                          float distance, float bottom, float top)
+        {
+            var go = PtwPrefabs.MeshNode(name, mesh, parent, mat);
+            var r = go.GetComponent<MeshRenderer>();
+            r.shadowCastingMode = ShadowCastingMode.Off;
+            r.receiveShadows = false;
+            var layer = go.AddComponent<SkyLayer>();
+            PtwPrefabs.Wire(layer, "targetCamera", cam);
+            PtwPrefabs.Wire(layer, "distance", distance);
+            PtwPrefabs.Wire(layer, "viewportBottom", bottom);
+            PtwPrefabs.Wire(layer, "viewportTop", top);
+            PtwPrefabs.Wire(layer, "widthScale", 1.3f);
+        }
+
+        /// <summary>
+        /// Small floating islands up in the sky, each with a grass cap, a fringe, a vine or two and
+        /// a tiny glowing portal - the mockup's far islands. Camera-relative, above the island, so
+        /// they never overlap the play area or the HUD on any level's framing.
+        /// </summary>
+        static void BuildSkyIslets(Transform parent, Camera cam)
+        {
+            var grass = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Blocks + "/Block_Grass.prefab");
+            var stone = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Blocks + "/Block_Stone.prefab");
+            var vine = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Props + "/Prop_Vine.prefab");
+            var flower = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Props + "/Prop_Flower.prefab");
+            if (!grass || !stone) return;
+
+            var rnd = new System.Random(4242);
+            // (viewport x, viewport y, width in blocks, scale, distance)
+            var spots = new[]
+            {
+                (0.22f, 0.71f, 3, 0.36f, 46f), (0.60f, 0.64f, 5, 0.42f, 44f), (0.86f, 0.72f, 3, 0.30f, 48f),
+            };
+            foreach (var (vx, vy, w, scale, z) in spots)
+            {
+                var islet = new GameObject("Islet");
+                islet.transform.SetParent(parent, false);
+                var layer = islet.AddComponent<SkyLayer>();
+                PtwPrefabs.Wire(layer, "targetCamera", cam);
+                PtwPrefabs.Wire(layer, "distance", z);
+                PtwPrefabs.Wire(layer, "centred", true);
+                PtwPrefabs.Wire(layer, "viewportPos", new Vector2(vx, vy));
+                PtwPrefabs.Wire(layer, "worldSize", new Vector2(scale, scale));
+
+                // Inverted pyramid of blocks, built in XY like the real islands.
+                int rows = w >= 5 ? 3 : 2;
+                for (int r = 0; r < rows; r++)
+                {
+                    int count = w - r * 2;
+                    for (int c = 0; c < count; c++)
+                    {
+                        var src = r == 0 ? grass : stone;
+                        var b = (GameObject)PrefabUtility.InstantiatePrefab(src, islet.transform);
+                        b.transform.localPosition = new Vector3(c - (count - 1) * 0.5f, -r * PtwMeshes.BlockH, 0f);
+                        StripCollidersAndShadows(b);
+                        if (r == 0)
+                        {
+                            var fringe = b.transform.Find("Fringe"); if (fringe) fringe.gameObject.SetActive(true);
+                            var tufts = b.transform.Find("Tufts"); if (tufts) tufts.gameObject.SetActive(rnd.NextDouble() < 0.6);
+                        }
+                    }
+                }
+
+                // A tiny portal in the middle of the top row.
+                var arch = PtwPrefabs.MeshNode("Arch", "Mesh_DoorArch", islet.transform, PtwArt.MFarStone, PtwArt.MFarStone, PtwArt.MPortalStud);
+                arch.transform.localPosition = new Vector3(0f, 0f, 0f);
+                arch.transform.localScale = Vector3.one * 0.8f;
+                StripCollidersAndShadows(arch, keepMaterials: true);
+                var glow = PtwPrefabs.MeshNode("Glow", "Mesh_ArchFill", arch.transform, PtwArt.MPortalEnergyFar);
+                StripCollidersAndShadows(glow, keepMaterials: true);
+                var halo = PtwPrefabs.MeshNode("Halo", "Mesh_QuadXY", arch.transform, PtwArt.MPortalGlow);
+                halo.transform.localPosition = new Vector3(0f, 0.9f, -0.2f);
+                halo.transform.localScale = new Vector3(2.4f, 2.8f, 1f);
+                StripCollidersAndShadows(halo, keepMaterials: true);
+
+                if (vine)
+                {
+                    int side = rnd.NextDouble() < 0.5 ? -1 : 1;
+                    var v = (GameObject)PrefabUtility.InstantiatePrefab(vine, islet.transform);
+                    v.transform.localPosition = new Vector3(side * ((w - 1) * 0.5f + 0.56f), -0.05f, -0.2f);
+                    StripCollidersAndShadows(v, keepMaterials: true);
+                }
+                if (flower)
+                {
+                    var f = (GameObject)PrefabUtility.InstantiatePrefab(flower, islet.transform);
+                    f.transform.localPosition = new Vector3(-(w - 1) * 0.5f + 0.2f, 0f, -0.3f);
+                    StripCollidersAndShadows(f, keepMaterials: true);
+                }
+            }
         }
 
         static ParticleSystem MakeFireflies(Transform cameraTransform)
@@ -174,11 +321,11 @@ namespace PullTheWorld.EditorTools
             main.maxParticles = 40;
             main.startLifetime = new ParticleSystem.MinMaxCurve(6f, 11f);
             main.startSpeed = new ParticleSystem.MinMaxCurve(0.08f, 0.22f);
-            main.startSize = new ParticleSystem.MinMaxCurve(0.07f, 0.17f);
-            main.startColor = new Color(0.8f, 0.85f, 1f, 1f);
+            main.startSize = new ParticleSystem.MinMaxCurve(0.05f, 0.12f);
+            main.startColor = new Color(1f, 0.95f, 0.8f, 1f);
             main.gravityModifier = -0.004f;                             // drift up, barely
 
-            var em = ps.emission; em.enabled = true; em.rateOverTime = 4.5f;
+            var em = ps.emission; em.enabled = true; em.rateOverTime = 3f;
             var sh = ps.shape;
             sh.enabled = true;
             sh.shapeType = ParticleSystemShapeType.Box;
@@ -228,9 +375,9 @@ namespace PullTheWorld.EditorTools
             var key = keyGo.AddComponent<Light>();
             key.type = LightType.Directional;
             key.color = KeyColor;
-            key.intensity = 1.35f;
+            key.intensity = 0.2f;    // top faces only ~6% brighter than fronts in the mockup; the ambient carries the frame
             key.shadows = LightShadows.Soft;
-            key.shadowStrength = 0.78f;
+            key.shadowStrength = 0.42f;          // soft, like the mockup's; the ambient fills the rest
             key.shadowBias = 0.04f;
             key.shadowNormalBias = 0.28f;
             var keyData = keyGo.AddComponent<UniversalAdditionalLightData>();
@@ -244,8 +391,8 @@ namespace PullTheWorld.EditorTools
             fillGo.transform.rotation = Quaternion.Euler(20f, -130f, 0f);
             var fill = fillGo.AddComponent<Light>();
             fill.type = LightType.Directional;
-            fill.color = PtwArt.Hex("#8FA6D0");
-            fill.intensity = 0.42f;
+            fill.color = PtwArt.Hex("#F2C8D3");   // blush fill from the sky's pink
+            fill.intensity = 0.12f;
             fill.shadows = LightShadows.None;
             fillGo.AddComponent<UniversalAdditionalLightData>().usePipelineSettings = true;
 
@@ -256,7 +403,7 @@ namespace PullTheWorld.EditorTools
             RenderSettings.ambientIntensity = 1f;
             RenderSettings.defaultReflectionMode = DefaultReflectionMode.Custom;
             RenderSettings.customReflectionTexture = null;
-            RenderSettings.reflectionIntensity = 0.35f;
+            RenderSettings.reflectionIntensity = 0.2f;
             RenderSettings.skybox = null;
             RenderSettings.fog = false;
         }
@@ -264,9 +411,42 @@ namespace PullTheWorld.EditorTools
         // ================================================================ post processing =====
         static void BuildVolume()
         {
+            var profile = EnsureProfile();
+
+            var go = new GameObject("~PostProcessVolume");
+            var vol = go.AddComponent<Volume>();
+            vol.isGlobal = true;
+            vol.priority = 0f;
+            vol.sharedProfile = profile;
+        }
+
+        /// <summary>
+        /// The pastel grade, as a profile asset that is ALSO the pipeline's default volume (see
+        /// ConfigureUrp). Both matter, and the second one was missed for a long time:
+        ///
+        ///  * VolumeProfile.Add() creates the component as a loose ScriptableObject. Unless it is
+        ///    made a sub-asset with AddObjectToAsset it serialises as {fileID: 0}, and in the NEXT
+        ///    Unity session the profile is six nulls. Every headless capture and every device
+        ///    build was therefore graded by the URP template's SampleSceneProfile instead -
+        ///    Neutral tonemapping, a black vignette at 0.2 and a bloom threshold of 1.0. That is
+        ///    where the "mauve, grey, dark corners, blown-out flowers" of the first theme passes
+        ///    came from, and why nothing set here ever seemed to change them.
+        ///  * The URP asset's own default volume profile sits under this one, so anything it
+        ///    sets that this profile does not override still leaks through. Pointing it at this
+        ///    same asset makes the grade the only grade.
+        ///
+        /// The grade itself is close to identity: the palette is authored in the mockup's colours,
+        /// so the frame should show them, not reinterpret them. No tonemapping (the frame is LDR
+        /// and Neutral/ACES both pull pastels towards grey), a whisper of saturation and warmth,
+        /// a light blush vignette instead of a dark one, and a warm-tinted bloom that only the
+        /// portal, the orb rim and the studs can reach.
+        /// </summary>
+        static VolumeProfile EnsureProfile()
+        {
             var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(ProfilePath);
             if (profile == null)
             {
+                PtwPaths.EnsureFolder(System.IO.Path.GetDirectoryName(ProfilePath));
                 profile = ScriptableObject.CreateInstance<VolumeProfile>();
                 AssetDatabase.CreateAsset(profile, ProfilePath);
             }
@@ -274,57 +454,74 @@ namespace PullTheWorld.EditorTools
             {
                 foreach (var c in new List<VolumeComponent>(profile.components))
                 {
+                    if (c == null) continue;
                     profile.Remove(c.GetType());
                     UnityEngine.Object.DestroyImmediate(c, true);
                 }
+                profile.components.RemoveAll(c => c == null);
             }
 
             var tone = profile.Add<Tonemapping>(true);
-            tone.mode.overrideState = true;
-            tone.mode.value = TonemappingMode.ACES;   // punchier than Neutral, which flattened the grade
+            tone.mode.value = TonemappingMode.None;
 
             var bloom = profile.Add<Bloom>(true);
-            // Threshold well above 1.0 so ONLY emissives bloom, which is what the style bible asks
-            // for: "bloom on emissives only - anchor ring, door glow, fire". At 0.95 it was also
-            // catching brightly lit SURFACES; with the island tilted, the grass cap's top face
-            // turns towards the key light (dot 0.88 against 0.74 upright) and was close to
-            // clipping. The emissives all sit at 1.9-4.5 intensity, so they still bloom from here.
-            bloom.threshold.overrideState = true; bloom.threshold.value = 1.15f;
-            bloom.intensity.overrideState = true; bloom.intensity.value = 1.15f;
-            bloom.scatter.overrideState = true; bloom.scatter.value = 0.62f;
-            bloom.tint.overrideState = true; bloom.tint.value = Color.white;
-            bloom.highQualityFiltering.overrideState = true;
+            // 1.15: a sunlit ivory face lands just over 1.0 and must not bloom (a white flower once
+            // became a halo); the portal (0.9 + light), the orb rim (2.2) and the studs (1.4) do.
+            bloom.threshold.value = 1.15f;
+            bloom.intensity.value = 0.85f;
+            bloom.scatter.value = 0.72f;
+            bloom.tint.value = PtwArt.Hex("#FFF0DC");
             bloom.highQualityFiltering.value = false;   // mobile budget
+            // Cap what a single pixel may contribute. A rogue NaN or infinity used to hit the
+            // default 65472 and bloom into a block-sized white disc (the grass tufts did exactly
+            // that). Twelve keeps every intended glow intact.
+            bloom.clamp.value = 12f;
+            bloom.dirtIntensity.value = 0f;
 
             var color = profile.Add<ColorAdjustments>(true);
-            color.postExposure.overrideState = true; color.postExposure.value = 0.22f;
-            // Restrained: the first pass ran contrast 9 / saturation 4 and crushed the backdrop
-            // into a slate grey while pushing the grass to a candy green.
-            color.contrast.overrideState = true; color.contrast.value = 20f;
-            color.saturation.overrideState = true; color.saturation.value = 16f;
+            color.postExposure.value = 0f;
+            color.contrast.value = 0f;
+            color.colorFilter.value = Color.white;
+            color.hueShift.value = 0f;
+            color.saturation.value = 6f;
+
+            var wb = profile.Add<WhiteBalance>(true);
+            wb.temperature.value = 2f;
+            wb.tint.value = 0f;
 
             var vig = profile.Add<Vignette>(true);
-            // A tall portrait frame puts a lot of screen inside the vignette falloff, so this has
-            // to stay very light or the whole backdrop goes dark.
-            vig.intensity.overrideState = true; vig.intensity.value = 0.28f;
-            vig.smoothness.overrideState = true; vig.smoothness.value = 0.6f;
-            vig.color.overrideState = true; vig.color.value = PtwArt.Hex("#05080E");
+            // Light and blush-coloured: the mockup's corners soften towards the sky's pink rather
+            // than darkening. A dark vignette would put a frame of dusk around a dawn.
+            vig.color.value = PtwArt.Hex("#F0CDD3");
+            vig.center.value = new Vector2(0.5f, 0.5f);
+            vig.intensity.value = 0.12f;
+            vig.smoothness.value = 0.75f;
+            vig.rounded.value = false;
 
-            // Cool shadows, warm highlights. With a night sky this is what stops the frame reading
-            // as "grey blocks in the dark": shadow sides go blue, the lit grass and the ivory ball
-            // go warm, and the door's amber sits inside that scheme rather than on top of it.
+            // Highlights only, towards peach; balance keeps it off the mid-tones.
             var split = profile.Add<SplitToning>(true);
-            split.shadows.overrideState = true; split.shadows.value = PtwArt.Hex("#2C3F6E");
-            split.highlights.overrideState = true; split.highlights.value = PtwArt.Hex("#FFD6A3");
-            split.balance.overrideState = true; split.balance.value = -8f;
+            split.shadows.value = new Color(0.5f, 0.5f, 0.5f);
+            split.highlights.value = new Color(0.5f, 0.5f, 0.5f);   // neutral: the palette is authored, toning only washed it
+            split.balance.value = 40f;
 
+            // Explicitly neutral, so a template profile underneath can never add these back.
+            var grain = profile.Add<FilmGrain>(true);
+            grain.intensity.value = 0f;
+            var ca = profile.Add<ChromaticAberration>(true);
+            ca.intensity.value = 0f;
+            var blur = profile.Add<MotionBlur>(true);
+            blur.intensity.value = 0f;
+
+            // The step that makes all of the above real across sessions.
+            foreach (var c in profile.components)
+                if (c != null && !AssetDatabase.Contains(c))
+                {
+                    c.name = c.GetType().Name;
+                    AssetDatabase.AddObjectToAsset(c, profile);
+                }
             EditorUtility.SetDirty(profile);
-
-            var go = new GameObject("~PostProcessVolume");
-            var vol = go.AddComponent<Volume>();
-            vol.isGlobal = true;
-            vol.priority = 0f;
-            vol.sharedProfile = profile;
+            AssetDatabase.SaveAssets();
+            return profile;
         }
 
         // ==================================================================== URP settings ====
@@ -338,6 +535,9 @@ namespace PullTheWorld.EditorTools
 
                 var so = new SerializedObject(asset);
                 SetProp(so, "m_SupportsHDR", true);              // bloom needs headroom
+                // The pipeline's default volume is OUR grade, not the URP template's sample profile
+                // (Neutral tonemapping, black vignette) that shipped in Assets/Settings. See EnsureProfile.
+                SetProp(so, "m_VolumeProfile", EnsureProfile());
                 // The water shader reads both: depth for the shallow/deep gradient and the
                 // shoreline foam line, opaque colour for refraction. Without these it falls back
                 // to looking like flat blue card.
@@ -376,6 +576,7 @@ namespace PullTheWorld.EditorTools
                 case bool b: p.boolValue = b; break;
                 case int i: p.intValue = i; break;
                 case float f: p.floatValue = f; break;
+                case UnityEngine.Object o: p.objectReferenceValue = o; break;
             }
         }
 
@@ -527,7 +728,7 @@ namespace PullTheWorld.EditorTools
             }
         }
 
-        static void StripCollidersAndShadows(GameObject go)
+        static void StripCollidersAndShadows(GameObject go, bool keepMaterials = false)
         {
             foreach (var c in go.GetComponentsInChildren<Collider>(true))
                 UnityEngine.Object.DestroyImmediate(c, true);
@@ -539,13 +740,16 @@ namespace PullTheWorld.EditorTools
             {
                 r.shadowCastingMode = ShadowCastingMode.Off;
                 r.receiveShadows = false;
+                if (keepMaterials) continue;
 
-                // Swap to hazed materials so distance reads without needing fog.
+                // Swap to hazed materials so distance reads without needing fog. Vegetation keeps
+                // its wind material (already a soft green) so far islets still sway.
                 if (far == null || farGrass == null) continue;
                 var mats = r.sharedMaterials;
                 for (int i = 0; i < mats.Length; i++)
                 {
                     string n = mats[i] ? mats[i].name : "";
+                    if (n.Contains("Vine") || n.Contains("FoliageWind") || n.Contains("Flower")) continue;
                     mats[i] = n.Contains("Grass") || n.Contains("Foliage") ? farGrass : far;
                 }
                 r.sharedMaterials = mats;
@@ -614,7 +818,7 @@ namespace PullTheWorld.EditorTools
             main.startLifetime = 0.42f;
             main.startSize = size;
             main.startSpeed = 1.1f;
-            main.startColor = new Color(0.93f, 0.94f, 0.90f, 0.30f);
+            main.startColor = new Color(1f, 0.97f, 0.92f, 0.32f);   // cream dust, not grey
             main.gravityModifier = 0.35f;
 
             var em = ps.emission; em.enabled = false;
@@ -704,35 +908,33 @@ namespace PullTheWorld.EditorTools
 
             var shadowBold = MakeTmpShadowMaterial(bold, "TMP_PoppinsBold_Shadow");
             var shadowSemi = MakeTmpShadowMaterial(semi, "TMP_PoppinsSemi_Shadow");
+            // The title's look from the mockup: sage letters with a soft cream halo.
+            var titleMat = MakeTmpOutlineMaterial(bold, "TMP_PoppinsBold_Title", PtwArt.Hex("#FBF3E8"), 0.14f);
 
             // ================================================================== HUD =========
+            // No scrims: the pastel sky is light, so the HUD is dark-on-light like the mockup -
+            // sage type, cream discs - and needs nothing under it.
             var hudPanel = Panel(canvasGo.transform, "HudPanel", out var hudGroup, popFrom: 1f);
 
-            // Scrims first, so the level number and buttons always have something to sit on.
-            // White text over a mid blue-grey sky has almost no contrast on its own.
-            AddScrim(hudPanel.transform, "ScrimTop", true, 470f);
-            AddScrim(hudPanel.transform, "ScrimBottom", false, 300f);
-
-            var levelLabel = Text(hudPanel.transform, "LevelLabel", "LEVEL 1", bold, 44f,
-                                  new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(48f, -60f),
-                                  new Vector2(420f, 60f), TextAlignmentOptions.TopLeft,
-                                  Color.white, shadowBold);
-            levelLabel.characterSpacing = 6f;
+            var levelLabel = Text(hudPanel.transform, "LevelLabel", "LEVEL 1", semi, 46f,
+                                  new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(48f, -58f),
+                                  new Vector2(420f, 64f), TextAlignmentOptions.TopLeft,
+                                  UiInk, null);
+            levelLabel.characterSpacing = 8f;
             levelLabel.gameObject.AddComponent<Punch>();   // punched on every level load
 
-            // The level's name under its number. Levels have had titles since v1 and nothing
-            // showed them; a name is a cheap way to make each one feel authored rather than
-            // generated, which they all are.
-            var levelTitle = Text(hudPanel.transform, "LevelTitle", "TIP IT OVER", semi, 28f,
-                                  new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(50f, -112f),
-                                  new Vector2(560f, 40f), TextAlignmentOptions.TopLeft,
-                                  new Color(1f, 1f, 1f, 0.66f), shadowSemi);
-            levelTitle.characterSpacing = 9f;
+            // The level's name under its number, small and widely tracked like the mockup's
+            // "FIND THE PORTAL".
+            var levelTitle = Text(hudPanel.transform, "LevelTitle", "TIP IT OVER", semi, 24f,
+                                  new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(50f, -118f),
+                                  new Vector2(560f, 36f), TextAlignmentOptions.TopLeft,
+                                  UiInkSoft, null);
+            levelTitle.characterSpacing = 12f;
 
             var restartBtn = RoundButton(hudPanel.transform, "RestartButton", new Vector2(1f, 1f),
-                                         new Vector2(-44f, -52f), 96f, MakeRestartSprite());
+                                         new Vector2(-156f, -52f), 96f, MakeRestartSprite());
             var pauseBtn = RoundButton(hudPanel.transform, "PauseButton", new Vector2(1f, 1f),
-                                       new Vector2(-156f, -52f), 96f, MakeGearSprite());
+                                       new Vector2(-44f, -52f), 96f, MakePauseSprite());
 
             // Key counter. Hidden unless the level actually needs keys - a permanent 0/0 on screen
             // is exactly the sort of clutter the brief asked to avoid.
@@ -759,7 +961,7 @@ namespace PullTheWorld.EditorTools
             var keyLabel = Text(keyGroup.transform, "KeyLabel", "0/1", bold, 40f,
                                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                                 new Vector2(26f, 0f), new Vector2(140f, 60f),
-                                TextAlignmentOptions.Left, Color.white, shadowBold);
+                                TextAlignmentOptions.Left, UiInk, null);
 
             // ========================================================== onboarding =========
             var onboardGo = new GameObject("Onboarding", typeof(RectTransform));
@@ -773,23 +975,47 @@ namespace PullTheWorld.EditorTools
             var rgRt = rotGroupGo.GetComponent<RectTransform>();
             rgRt.anchorMin = rgRt.anchorMax = new Vector2(0.5f, 0.5f);
             rgRt.pivot = new Vector2(0.5f, 0.5f);
-            rgRt.anchoredPosition = Vector2.zero;
+            // The gesture lives at the BOTTOM of the screen like the mockup's "TILT TO GUIDE": the
+            // pivot sits low, and the finger's arc (radius 235, centred straight below the pivot)
+            // lands over the arrow.
+            rgRt.anchoredPosition = new Vector2(0f, -560f);
             rgRt.sizeDelta = new Vector2(10f, 10f);
             var rotGroup = rotGroupGo.GetComponent<CanvasGroup>();
             rotGroup.alpha = 0f;
             rotGroup.blocksRaycasts = false;
             rotGroup.interactable = false;
 
+            // A thin two-headed arc for the direction, and the words under it.
+            var arc = new GameObject("Arc", typeof(RectTransform), typeof(Image));
+            arc.transform.SetParent(rotGroupGo.transform, false);
+            var aRt = arc.GetComponent<RectTransform>();
+            aRt.anchorMin = aRt.anchorMax = new Vector2(0.5f, 0.5f);
+            aRt.pivot = new Vector2(0.5f, 0.5f);
+            // The sprite's arc bows down from ITS centre to radius 0.82 * 260 px, so centring it on
+            // the pivot puts the arc exactly under the finger's sweep (radius 235).
+            aRt.anchoredPosition = Vector2.zero;
+            aRt.sizeDelta = new Vector2(560f, 560f);
+            var aImg = arc.GetComponent<Image>();
+            aImg.sprite = MakeArcArrowSprite();
+            aImg.color = UiInk;
+            aImg.raycastTarget = false;
+
+            var tilt = Text(rotGroupGo.transform, "TiltLabel", "TILT TO GUIDE", semi, 30f,
+                            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -305f),
+                            new Vector2(600f, 44f), TextAlignmentOptions.Center, UiInk, null);
+            tilt.characterSpacing = 14f;
+
             var finger = new GameObject("Finger", typeof(RectTransform), typeof(Image));
             finger.transform.SetParent(rotGroupGo.transform, false);
             var fRt = finger.GetComponent<RectTransform>();
             fRt.anchorMin = fRt.anchorMax = new Vector2(0.5f, 0.5f);
             fRt.pivot = new Vector2(0.5f, 0.5f);
-            fRt.sizeDelta = new Vector2(84f, 84f);
+            fRt.sizeDelta = new Vector2(56f, 56f);
             var fImg = finger.GetComponent<Image>();
             fImg.sprite = MakeCircleSprite();
-            fImg.color = new Color(1f, 1f, 1f, 0.92f);
+            fImg.color = new Color(1f, 0.99f, 0.96f, 0.95f);
             fImg.raycastTarget = false;
+            Gloss(finger, 0.9f, 0.12f, -3f);
 
             // Point hint: a ring parked on a world object. Positioned in SCREEN space by
             // OnboardingHint every frame, because its target is bolted to a rotating level.
@@ -809,7 +1035,7 @@ namespace PullTheWorld.EditorTools
             ringRt.sizeDelta = new Vector2(150f, 150f);
             var ringImg = ring.GetComponent<Image>();
             ringImg.sprite = MakeRingSprite();
-            ringImg.color = new Color(0.53f, 0.87f, 0.99f, 0.95f);
+            ringImg.color = new Color(1f, 0.97f, 0.90f, 0.95f);   // cream, like the portal light
             ringImg.raycastTarget = false;
 
             var onboarding = onboardGo.AddComponent<OnboardingHint>();
@@ -820,75 +1046,70 @@ namespace PullTheWorld.EditorTools
             PtwPrefabs.Wire(onboarding, "worldCamera", cam);
 
             // ============================================================ main menu =========
+            // No dim: the mockup's menu is the sky and the island with the type sitting on them.
             var menuPanel = Panel(canvasGo.transform, "MainMenuPanel", out var menuGroup);
-            Dim(menuPanel.transform, "Dim", new Color(0.05f, 0.08f, 0.12f, 0.5f));
 
-            var title = Text(menuPanel.transform, "Title", "PULL\nTHE WORLD", bold, 118f,
-                             new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                             new Vector2(0f, 520f), new Vector2(1000f, 340f),
-                             TextAlignmentOptions.Center, Color.white, shadowBold);
-            title.characterSpacing = 2f;
-            title.lineSpacing = -14f;
-
-            var tagline = Text(menuPanel.transform, "Tagline", "TURN THE WORLD. LET IT FALL.",
-                               semi, 34f, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                               new Vector2(0f, 300f), new Vector2(940f, 60f),
-                               TextAlignmentOptions.Center,
-                               new Color(1f, 1f, 1f, 0.72f), shadowSemi);
-            tagline.characterSpacing = 8f;
+            // "PULL" larger than "THE WORLD", sage with a cream halo, high in the frame.
+            var title = Text(menuPanel.transform, "Title", "<size=132>PULL</size>\n<size=100>THE WORLD</size>",
+                             bold, 100f, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                             new Vector2(0f, 620f), new Vector2(1000f, 380f),
+                             TextAlignmentOptions.Center, UiSage, titleMat);
+            title.characterSpacing = 1f;
+            title.lineSpacing = -26f;
+            title.richText = true;
 
             // PLAY breathes. The pulse lives on a wrapper so it does not fight the press-juice
-            // on the button itself - two components driving one localScale would tear.
+            // on the button itself - two components driving one localScale would tear. It sits
+            // well below the island like the mockup's, with room to breathe around it.
             var playWrap = new GameObject("PlayPulse", typeof(RectTransform));
             playWrap.transform.SetParent(menuPanel.transform, false);
             var pwRt = playWrap.GetComponent<RectTransform>();
             pwRt.anchorMin = pwRt.anchorMax = new Vector2(0.5f, 0.5f);
             pwRt.pivot = new Vector2(0.5f, 0.5f);
-            pwRt.anchoredPosition = new Vector2(0f, -120f);
-            pwRt.sizeDelta = new Vector2(560f, 160f);
+            pwRt.anchoredPosition = new Vector2(0f, -400f);
+            pwRt.sizeDelta = new Vector2(600f, 176f);
             playWrap.AddComponent<UiPulse>();
 
-            var playBtn = PillButton(playWrap.transform, "PlayButton", "PLAY", bold, 62f,
-                                     Vector2.zero, new Vector2(560f, 160f),
-                                     PtwArt.Hex("#5AC26A"), shadowBold);
+            var playBtn = PillButton(playWrap.transform, "PlayButton", "PLAY", bold, 68f,
+                                     Vector2.zero, new Vector2(600f, 176f),
+                                     UiGreen, shadowBold, UiCream);
 
-            var progressLabel = Text(menuPanel.transform, "ProgressLabel", "0 / 10", semi, 38f,
+            var progressLabel = Text(menuPanel.transform, "ProgressLabel", "LEVEL 1", bold, 44f,
                                      new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                                     new Vector2(0f, -270f), new Vector2(500f, 60f),
-                                     TextAlignmentOptions.Center,
-                                     new Color(1f, 1f, 1f, 0.8f), shadowSemi);
+                                     new Vector2(0f, -540f), new Vector2(600f, 60f),
+                                     TextAlignmentOptions.Center, UiSage, null);
             progressLabel.characterSpacing = 6f;
 
-            // Level picker entry. Small and under the progress line: it is a convenience, not the
-            // main verb, and a first-time player should still just hit PLAY.
-            var levelsBtn = PillButton(menuPanel.transform, "LevelsButton", "LEVELS", semi, 36f,
-                                       new Vector2(0f, -352f), new Vector2(340f, 92f),
-                                       PtwArt.Hex("#3E6FB8"), shadowSemi);
+            // Level picker entry. Small, cream, under the progress line: a convenience, not the
+            // main verb - a first-time player should still just hit PLAY.
+            var levelsBtn = PillButton(menuPanel.transform, "LevelsButton", "LEVELS", semi, 32f,
+                                       new Vector2(0f, -640f), new Vector2(300f, 84f),
+                                       UiCream, null, UiSage);
 
             var menuSettingsBtn = RoundButton(menuPanel.transform, "SettingsButton",
-                                              new Vector2(0.5f, 0.5f), new Vector2(0f, -480f),
-                                              108f, MakeGearSprite());
+                                              new Vector2(0.5f, 0.5f), new Vector2(0f, -780f),
+                                              116f, MakeGearSprite());
 
             // ======================================================= level complete =========
             var donePanel = Panel(canvasGo.transform, "LevelCompletePanel", out var doneGroup);
-            Dim(donePanel.transform, "Dim", new Color(0.05f, 0.08f, 0.12f, 0.62f));
+            Dim(donePanel.transform, "Dim", UiHaze);
 
             var doneTitle = Text(donePanel.transform, "CompleteTitle", "LEVEL COMPLETE", bold, 76f,
                                  new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                                  new Vector2(0f, 470f), new Vector2(1000f, 200f),
-                                 TextAlignmentOptions.Center, Color.white, shadowBold);
+                                 TextAlignmentOptions.Center, UiSage, titleMat);
             doneTitle.characterSpacing = 4f;
             doneTitle.enableWordWrapping = true;
 
-            var doneSub = Text(donePanel.transform, "CompleteSubtitle", "LEVEL 1 OF 18", semi, 38f,
+            var doneSub = Text(donePanel.transform, "CompleteSubtitle", "LEVEL 1 OF 18", semi, 36f,
                                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                                new Vector2(0f, 350f), new Vector2(800f, 60f),
-                               TextAlignmentOptions.Center, new Color(1f, 1f, 1f, 0.78f), shadowSemi);
-            doneSub.characterSpacing = 8f;
+                               TextAlignmentOptions.Center, UiInk, null);
+            doneSub.characterSpacing = 10f;
 
             var continueBtn = PillButton(donePanel.transform, "ContinueButton", "CONTINUE",
                                          bold, 54f, new Vector2(0f, -430f), new Vector2(620f, 150f),
-                                         PtwArt.Hex("#5AC26A"), shadowBold);
+                                         UiGreen, shadowBold, UiCream);
 
             // Confetti lives in the WORLD, parented to the camera just inside the UI plane, so it
             // draws in front of the panel. A ParticleSystem under a ScreenSpaceCamera canvas
@@ -897,7 +1118,7 @@ namespace PullTheWorld.EditorTools
 
             // ============================================================== settings =========
             var setPanel = Panel(canvasGo.transform, "SettingsPanel", out var setGroup);
-            Dim(setPanel.transform, "Dim", new Color(0.04f, 0.07f, 0.10f, 0.6f));
+            Dim(setPanel.transform, "Dim", UiHaze);
 
             var card = new GameObject("Card", typeof(RectTransform), typeof(Image));
             card.transform.SetParent(setPanel.transform, false);
@@ -910,9 +1131,8 @@ namespace PullTheWorld.EditorTools
             cardRt.sizeDelta = new Vector2(880f, 1080f);
             var cardImg = card.GetComponent<Image>();
             cardImg.sprite = MakePanelSprite();
-            // Lifted from #1B2733: over the dimmed menu that read as a black hole, not a card.
-            cardImg.color = PtwArt.Hex("#2A3C51");
-            Gloss(card, 0.80f, 0.55f, -10f);
+            cardImg.color = UiCard;                     // cream card on the haze, like paper
+            Gloss(card, 0.95f, 0.10f, -14f);
 
             // A faint rim behind the card so its edge is defined against the dim rather than
             // dissolving into it.
@@ -924,13 +1144,13 @@ namespace PullTheWorld.EditorTools
             rimRt.offsetMax = new Vector2(6f, 6f);
             var rimImg = rim.GetComponent<Image>();
             rimImg.sprite = MakePanelSprite();
-            rimImg.color = new Color(1f, 1f, 1f, 0.07f);
+            rimImg.color = new Color(0.36f, 0.48f, 0.42f, 0.10f);
             rimImg.raycastTarget = false;
             rim.transform.SetAsFirstSibling();
 
             Text(card.transform, "SettingsTitle", "SETTINGS", bold, 60f,
                  new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 430f),
-                 new Vector2(700f, 90f), TextAlignmentOptions.Center, Color.white, shadowBold)
+                 new Vector2(700f, 90f), TextAlignmentOptions.Center, UiSage, null)
                 .characterSpacing = 8f;
 
             var soundToggle = ToggleRow(card.transform, "SoundToggle", "SOUND", semi, 250f, shadowSemi);
@@ -941,17 +1161,17 @@ namespace PullTheWorld.EditorTools
             // it a two-tap confirm; the label text is swapped to say so.
             var restartAllBtn = PillButton(card.transform, "RestartAllButton", "RESTART ALL LEVELS",
                                            bold, 36f, new Vector2(0f, -175f), new Vector2(660f, 118f),
-                                           PtwArt.Hex("#9B4343"), shadowBold);
+                                           PtwArt.Hex("#D3928A"), shadowBold, UiCream);
 
             // Development convenience: opens every level in the picker so a build can be tested
             // from any point. UiRoot hides it when showDevUnlock is off - flip that for release.
             var unlockAllBtn = PillButton(card.transform, "UnlockAllButton", "UNLOCK ALL LEVELS  (DEV)",
                                           semi, 30f, new Vector2(0f, -292f), new Vector2(660f, 100f),
-                                          PtwArt.Hex("#3E8A8A"), shadowSemi);
+                                          PtwArt.Hex("#9BBDB2"), shadowSemi, UiCream);
 
             var closeBtn = PillButton(card.transform, "CloseButton", "CLOSE", bold, 48f,
                                       new Vector2(0f, -445f), new Vector2(520f, 132f),
-                                      PtwArt.Hex("#55708E"), shadowBold);
+                                      UiGreen, shadowBold, UiCream);
 
             // ================================================================= flash =========
             var flashGo = new GameObject("Flash", typeof(RectTransform), typeof(Image));
@@ -966,10 +1186,10 @@ namespace PullTheWorld.EditorTools
             // columns of 150 px tiles fits 35 levels without scrolling; past ~45 it will need a
             // ScrollRect.
             var pickPanel = Panel(canvasGo.transform, "LevelSelectPanel", out var pickGroup);
-            Dim(pickPanel.transform, "Dim", new Color(0.05f, 0.08f, 0.12f, 0.78f));
+            Dim(pickPanel.transform, "Dim", new Color(UiHaze.r, UiHaze.g, UiHaze.b, 0.82f));
             var pickTitle = Text(pickPanel.transform, "Title", "LEVELS", bold, 72f,
                                  new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 740f),
-                                 new Vector2(800f, 100f), TextAlignmentOptions.Center, Color.white, shadowBold);
+                                 new Vector2(800f, 100f), TextAlignmentOptions.Center, UiSage, null);
             pickTitle.characterSpacing = 8f;
 
             // The grid scrolls: fifty levels do not fit a phone, and the count keeps growing. The
@@ -1012,19 +1232,19 @@ namespace PullTheWorld.EditorTools
             grid.childAlignment = TextAnchor.UpperCenter;
 
             var tile = PillButton(gridGo.transform, "TileTemplate", "1", bold, 52f, Vector2.zero,
-                                  new Vector2(150f, 150f), PtwArt.Hex("#3E6FB8"), shadowBold);
+                                  new Vector2(150f, 150f), UiGreen, shadowBold, UiCream);
             tile.gameObject.SetActive(false);
 
             var closePickBtn = PillButton(pickPanel.transform, "CloseLevelsButton", "CLOSE", bold, 48f,
                                           new Vector2(0f, -760f), new Vector2(420f, 120f),
-                                          PtwArt.Hex("#3E6FB8"), shadowBold);
+                                          UiCream, null, UiSage);
 
             // ================================================================= skip (ad) =======
             // Lives in the HUD, hidden. UiRoot shows it only after AdsManager.SkipAfterFails deaths
             // on one level: an offer to a stuck player, never a toll.
             var skipBtn = PillButton(hudPanel.transform, "SkipButton", "STUCK?  SKIP LEVEL  ▶", semi, 34f,
                                      new Vector2(0f, -790f), new Vector2(620f, 100f),
-                                     PtwArt.Hex("#B8873E"), shadowSemi);
+                                     PtwArt.Hex("#E4BC84"), shadowSemi, UiCream);
             skipBtn.gameObject.AddComponent<Punch>();
             skipBtn.gameObject.SetActive(false);
 
@@ -1040,12 +1260,11 @@ namespace PullTheWorld.EditorTools
             cardGroup.interactable = false;
             var chapterNumber = Text(cardGo.transform, "ChapterNumber", "CHAPTER I", bold, 64f,
                                      new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 580f),
-                                     new Vector2(900f, 90f), TextAlignmentOptions.Center, Color.white, shadowBold);
+                                     new Vector2(900f, 90f), TextAlignmentOptions.Center, UiSage, titleMat);
             chapterNumber.characterSpacing = 10f;
-            var chapterName = Text(cardGo.transform, "ChapterName", "DUSK", semi, 40f,
+            var chapterName = Text(cardGo.transform, "ChapterName", "DAWN", semi, 36f,
                                    new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 516f),
-                                   new Vector2(900f, 60f), TextAlignmentOptions.Center,
-                                   new Color(1f, 1f, 1f, 0.75f), shadowSemi);
+                                   new Vector2(900f, 60f), TextAlignmentOptions.Center, UiInk, null);
             chapterName.characterSpacing = 14f;
 
             // The gem that flies from a pickup to the counter. Hidden until UiRoot animates it.
@@ -1119,27 +1338,38 @@ namespace PullTheWorld.EditorTools
         /// None of this touches TMP text: TextMeshPro does not go through VertexHelper, so mesh
         /// effects silently do nothing on it. Text legibility is the shadow material's job.
         /// </summary>
-        static void Gloss(GameObject go, float bottom = 0.62f, float outlineAlpha = 0.45f,
+        // The UI palette, from the mockups: sage type, cream surfaces, a muted green for the one
+        // button that matters, and a warm haze instead of a dark dim behind popups.
+        static readonly Color UiSage = PtwArt.Hex("#4F7A5E");     // titles, PLAY-adjacent labels
+        static readonly Color UiInk = PtwArt.Hex("#5A716D");      // HUD and body text
+        static readonly Color UiInkSoft = PtwArt.Hex("#748985");  // secondary text
+        static readonly Color UiGreen = PtwArt.Hex("#7FA37A");    // PLAY, CONTINUE, toggles on
+        static readonly Color UiCream = PtwArt.Hex("#F8F2E6");    // discs, small pills, labels on green
+        static readonly Color UiCard = PtwArt.Hex("#FBF6EE");     // popup cards
+        static readonly Color UiHaze = new Color(0.99f, 0.91f, 0.89f, 0.42f);   // a blush veil, not a grey one
+
+        static void Gloss(GameObject go, float bottom = 0.86f, float outlineAlpha = 0.14f,
                           float shadowY = -6f)
         {
             var grad = go.AddComponent<UnityEngine.UI.Extensions.Gradient>();
             grad.GradientDir = UnityEngine.UI.Extensions.GradientDir.Vertical;
             grad.OverwriteAllColor = false;
             grad.Vertex1 = Color.white;
-            grad.Vertex2 = new Color(bottom, bottom, Mathf.Min(1f, bottom + 0.04f), 1f);
+            grad.Vertex2 = new Color(bottom, bottom, Mathf.Min(1f, bottom + 0.02f), 1f);
 
             // Built-in Outline, not the package's NicerOutline: in this Unity version NicerOutline
             // compiles as an empty stub (its real body is behind an #else for older Unity) and
-            // has no members at all.
+            // has no members at all. Warm-dark rather than black: black edges on pastel read as
+            // stickers.
             var outline = go.AddComponent<Outline>();
-            outline.effectColor = new Color(0f, 0f, 0f, outlineAlpha);
-            outline.effectDistance = new Vector2(2f, -2f);
+            outline.effectColor = new Color(0.30f, 0.26f, 0.28f, outlineAlpha);
+            outline.effectDistance = new Vector2(1.5f, -1.5f);
             outline.useGraphicAlpha = true;
 
             if (Mathf.Abs(shadowY) > 0.01f)
             {
                 var shadow = go.AddComponent<Shadow>();
-                shadow.effectColor = new Color(0f, 0f, 0f, 0.38f);
+                shadow.effectColor = new Color(0.30f, 0.24f, 0.30f, 0.20f);
                 shadow.effectDistance = new Vector2(0f, shadowY);
                 shadow.useGraphicAlpha = true;
             }
@@ -1189,20 +1419,19 @@ namespace PullTheWorld.EditorTools
 
             var img = go.GetComponent<Image>();
             img.sprite = MakeDiscSprite();
-            // Brighter than the 0.16 it was: on a night sky a faint disc vanished. The outline
-            // from Gloss() is what actually defines it now.
-            img.color = new Color(1f, 1f, 1f, 0.24f);
-            Gloss(go, 0.7f, 0.5f, -4f);
+            // A translucent cream disc with a sage icon, like the mockup's restart and pause.
+            img.color = new Color(1f, 0.99f, 0.97f, 0.86f);
+            Gloss(go, 0.9f, 0.10f, -3f);
 
             var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
             iconGo.transform.SetParent(go.transform, false);
             var irt = iconGo.GetComponent<RectTransform>();
             irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 0.5f);
             irt.pivot = new Vector2(0.5f, 0.5f);
-            irt.sizeDelta = new Vector2(size * 0.55f, size * 0.55f);
+            irt.sizeDelta = new Vector2(size * 0.52f, size * 0.52f);
             var iimg = iconGo.GetComponent<Image>();
             iimg.sprite = icon;
-            iimg.color = Color.white;
+            iimg.color = UiSage;
             iimg.raycastTarget = false;
 
             go.AddComponent<UiButtonJuice>();
@@ -1211,7 +1440,7 @@ namespace PullTheWorld.EditorTools
 
         static Button PillButton(Transform parent, string name, string label, TMP_FontAsset font,
                                  float fontSize, Vector2 pos, Vector2 size, Color tint,
-                                 Material shadowMat)
+                                 Material shadowMat, Color? labelColor = null)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(parent, false);
@@ -1230,7 +1459,7 @@ namespace PullTheWorld.EditorTools
 
             var t = Text(go.transform, "Label", label, font, fontSize,
                          new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero,
-                         size, TextAlignmentOptions.Center, Color.white, shadowMat);
+                         size, TextAlignmentOptions.Center, labelColor ?? Color.white, shadowMat);
             t.characterSpacing = 6f;
 
             var btn = go.GetComponent<Button>();
@@ -1260,7 +1489,7 @@ namespace PullTheWorld.EditorTools
             Text(row.transform, "Label", label, font, 42f,
                  new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(20f, 0f),
                  new Vector2(400f, 80f), TextAlignmentOptions.Left,
-                 new Color(1f, 1f, 1f, 0.9f), shadowMat).characterSpacing = 6f;
+                 UiInk, null).characterSpacing = 6f;
 
             // Track
             var track = new GameObject("Track", typeof(RectTransform), typeof(Image));
@@ -1272,8 +1501,8 @@ namespace PullTheWorld.EditorTools
             trRt.sizeDelta = new Vector2(150f, 74f);
             var trImg = track.GetComponent<Image>();
             trImg.sprite = MakePillSprite();
-            trImg.color = PtwArt.Hex("#2E3E4E");
-            Gloss(track, 0.72f, 0.45f, 0f);
+            trImg.color = PtwArt.Hex("#DDD4C7");   // off: warm grey-cream
+            Gloss(track, 0.9f, 0.12f, 0f);
 
             // ON is a green FILL over the whole track, not a knob that slides.
             //
@@ -1288,7 +1517,7 @@ namespace PullTheWorld.EditorTools
             Stretch(fill.GetComponent<RectTransform>());
             var fillImg = fill.GetComponent<Image>();
             fillImg.sprite = MakePillSprite();
-            fillImg.color = PtwArt.Hex("#4FBF6A");
+            fillImg.color = UiGreen;
             fillImg.raycastTarget = false;
 
             var pip = new GameObject("Pip", typeof(RectTransform), typeof(Image));
@@ -1405,6 +1634,83 @@ namespace PullTheWorld.EditorTools
                 Mathf.Clamp01(1f - Mathf.Abs(d - 0.74f) / 0.1f));
         }
 
+        /// <summary>
+        /// A TMP material with a coloured outline and a very soft underlay: the mockup title's
+        /// sage-on-cream halo. Shared as an asset like the shadow material.
+        /// </summary>
+        static Material MakeTmpOutlineMaterial(TMP_FontAsset font, string id, Color outline, float width)
+        {
+            if (font == null || font.material == null) return null;
+            string path = $"{PtwArt.MatDir}/{id}.mat";
+            var m = new Material(font.material) { name = id };
+            m.EnableKeyword("OUTLINE_ON");
+            m.SetColor("_OutlineColor", outline);
+            m.SetFloat("_OutlineWidth", width);
+            m.EnableKeyword("UNDERLAY_ON");
+            m.SetColor("_UnderlayColor", new Color(outline.r, outline.g, outline.b, 0.55f));
+            m.SetFloat("_UnderlayOffsetX", 0f);
+            m.SetFloat("_UnderlayOffsetY", -0.35f);
+            m.SetFloat("_UnderlayDilate", 0.35f);
+            m.SetFloat("_UnderlaySoftness", 0.55f);
+
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (existing != null)
+            {
+                EditorUtility.CopySerialized(m, existing);
+                UnityEngine.Object.DestroyImmediate(m);
+                EditorUtility.SetDirty(existing);
+                return existing;
+            }
+            PtwPaths.EnsureFolder(PtwArt.MatDir);
+            AssetDatabase.CreateAsset(m, path);
+            return m;
+        }
+
+        static Sprite pauseSprite;
+        /// <summary>Two rounded bars: the pause glyph, drawn so it can never be tofu.</summary>
+        static Sprite MakePauseSprite()
+        {
+            if (pauseSprite) return pauseSprite;
+            return pauseSprite = PaintSpriteXY("Tex_Pause", 128, p =>
+            {
+                float d1 = RoundedBox(p - new Vector2(-0.30f, 0f), new Vector2(0.17f, 0.62f), 0.14f);
+                float d2 = RoundedBox(p - new Vector2(0.30f, 0f), new Vector2(0.17f, 0.62f), 0.14f);
+                return Mathf.Clamp01(-Mathf.Min(d1, d2) / 0.04f);
+            });
+        }
+
+        static Sprite arcArrowSprite;
+        /// <summary>
+        /// A thin arc with an arrowhead at each end, the mockup's tilt cue. Centred on the sprite's
+        /// centre with the arc bowing DOWN below it (the finger sweeps the same arc).
+        /// </summary>
+        static Sprite MakeArcArrowSprite()
+        {
+            if (arcArrowSprite) return arcArrowSprite;
+            const float r = 0.82f, band = 0.028f, half = 34f;   // degrees either side of straight down
+            return arcArrowSprite = PaintSpriteXY("Tex_ArcArrow", 256, p =>
+            {
+                float d = p.magnitude;
+                float ang = Mathf.Atan2(p.y, p.x) * Mathf.Rad2Deg;   // -90 is straight down
+                float off = Mathf.DeltaAngle(-90f, ang);
+                float a = 0f;
+                if (Mathf.Abs(off) <= half)
+                    a = Mathf.Clamp01((band - Mathf.Abs(d - r)) / 0.012f);
+
+                // Arrowheads: small triangles at both ends pointing along the tangent, outward.
+                for (int s = -1; s <= 1; s += 2)
+                {
+                    float endRad = (-90f + s * half) * Mathf.Deg2Rad;
+                    var c = new Vector2(Mathf.Cos(endRad), Mathf.Sin(endRad)) * r;
+                    var tangent = new Vector2(-Mathf.Sin(endRad), Mathf.Cos(endRad)) * s;
+                    var radial = c.normalized;
+                    var tip = c + tangent * 0.16f;
+                    if (InTriangle(p, tip, c + radial * 0.085f, c - radial * 0.085f)) a = 1f;
+                }
+                return a;
+            });
+        }
+
         static Sprite gearSprite;
         /// <summary>
         /// A cog, drawn rather than typed. Poppins has no gear glyph, and v1 already learned that
@@ -1480,12 +1786,13 @@ namespace PullTheWorld.EditorTools
             if (font == null || font.material == null) return null;
             string path = $"{PtwArt.MatDir}/{id}.mat";
             var m = new Material(font.material) { name = id };
+            // A soft warm-dark underlay: on the pastel sky a hard black shadow reads as a sticker.
             m.EnableKeyword("UNDERLAY_ON");
-            m.SetColor("_UnderlayColor", new Color(0.03f, 0.05f, 0.08f, 0.9f));
-            m.SetFloat("_UnderlayOffsetX", 0.5f);
-            m.SetFloat("_UnderlayOffsetY", -0.6f);
-            m.SetFloat("_UnderlayDilate", 0.15f);
-            m.SetFloat("_UnderlaySoftness", 0.22f);
+            m.SetColor("_UnderlayColor", new Color(0.30f, 0.24f, 0.30f, 0.40f));
+            m.SetFloat("_UnderlayOffsetX", 0.3f);
+            m.SetFloat("_UnderlayOffsetY", -0.5f);
+            m.SetFloat("_UnderlayDilate", 0.1f);
+            m.SetFloat("_UnderlaySoftness", 0.4f);
 
             var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (existing != null)

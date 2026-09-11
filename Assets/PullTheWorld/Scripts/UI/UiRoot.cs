@@ -569,13 +569,13 @@ namespace PullTheWorld
             int total = levels ? levels.LevelCount : 0;
             int done = Mathf.Clamp(GameProgress.UnlockedIndex, 0, total);
             progressLabel.text = total > 0
-                ? (done >= total ? "ALL LEVELS CLEARED" : $"LEVEL {done + 1} OF {total}")
+                ? (done >= total ? "ALL LEVELS CLEARED" : $"LEVEL {done + 1}")
                 : "";
         }
 
         static void Click()
         {
-            PtwAudio.Play(PtwSfx.PlateOn, 0.55f, 1.5f);
+            PtwAudio.Play(PtwSfx.UiTap, 0.7f, Random.Range(0.97f, 1.03f));
             Haptics.Play(HapticKind.Pickup);
         }
 

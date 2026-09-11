@@ -135,12 +135,18 @@ namespace PullTheWorld
 
             transform.position = target - (rot * Vector3.forward) * distance + offset;
 
-            // The backdrop is welded to the camera and sized from its frustum, so it has to be
-            // resized in the same breath as the framing. See ScreenFillQuad.Fit.
+            // The backdrop and every sky layer are welded to the camera and sized from its frustum,
+            // so they have to be refitted in the same breath as the framing. See ScreenFillQuad.Fit.
+            // (The capture path renders to a portrait texture from a window that may be a different
+            // shape; without this the layers were fitted to the window and the far islets landed
+            // half off the shot.)
             if (!backdrop) backdrop = GetComponentInChildren<ScreenFillQuad>(true);
             if (backdrop) backdrop.Fit();
+            if (skyLayers == null || skyLayers.Length == 0) skyLayers = GetComponentsInChildren<SkyLayer>(true);
+            foreach (var layer in skyLayers) if (layer) layer.Fit();
         }
 
         ScreenFillQuad backdrop;
+        SkyLayer[] skyLayers;
     }
 }

@@ -30,16 +30,36 @@ namespace PullTheWorld.EditorTools
 
         public int AddVertex(Vector3 p, Vector3 n, Vector2 uv)
         {
-            verts.Add(p); normals.Add(n.normalized); uvs.Add(uv);
+            verts.Add(p); normals.Add(SafeUnit(n, Vector3.up)); uvs.Add(uv);
             return verts.Count - 1;
+        }
+
+        /// <summary>
+        /// Unit vector without Vector3.Normalize's 1e-5 cut-off. That cut-off silently zeroed the
+        /// face normals of the grass tufts' 0.003-unit tip caps, and a zero normal reaches the
+        /// shader as normalize(0) = NaN, which bloom then inflates into a screen-sized white disc.
+        /// A mesh must never carry a zero normal, so anything too small to measure gets the hint.
+        /// </summary>
+        static Vector3 SafeUnit(Vector3 v, Vector3 fallback)
+        {
+            float sq = v.sqrMagnitude;
+            if (sq < 1e-24f || float.IsNaN(sq) || float.IsInfinity(sq))
+                return fallback.sqrMagnitude > 1e-24f ? fallback / Mathf.Sqrt(fallback.sqrMagnitude) : Vector3.up;
+            return v / Mathf.Sqrt(sq);
+        }
+
+        /// <summary>A triangle over vertices already added with AddVertex, in the given winding.</summary>
+        public void AddTriangle(int sub, int a, int b, int c)
+        {
+            var t = Tri(sub); t.Add(a); t.Add(b); t.Add(c);
         }
 
         // ------------------------------------------------------------------- flat helpers ---
         public void AddFlatTri(int sub, Vector3 a, Vector3 b, Vector3 c, Vector3 outwardHint)
         {
             Vector3 n = Vector3.Cross(b - a, c - a);
-            if (n.sqrMagnitude < 1e-12f) return;
-            n.Normalize();
+            if (n.sqrMagnitude < 1e-16f) return;          // truly degenerate: no area at all
+            n = SafeUnit(n, outwardHint);
             if (Vector3.Dot(n, outwardHint) < 0f) { (b, c) = (c, b); n = -n; }
 
             int i0 = AddVertex(a, n, new Vector2(0f, 0f));
@@ -51,8 +71,8 @@ namespace PullTheWorld.EditorTools
         public void AddFlatQuad(int sub, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 outwardHint)
         {
             Vector3 n = Vector3.Cross(b - a, c - a);
-            if (n.sqrMagnitude < 1e-12f) return;
-            n.Normalize();
+            if (n.sqrMagnitude < 1e-16f) return;
+            n = SafeUnit(n, outwardHint);
             if (Vector3.Dot(n, outwardHint) < 0f) { (b, d) = (d, b); n = -n; }
 
             int i0 = AddVertex(a, n, new Vector2(0f, 0f));

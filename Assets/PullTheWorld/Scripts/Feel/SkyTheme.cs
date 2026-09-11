@@ -31,33 +31,31 @@ namespace PullTheWorld
         [SerializeField] ParticleSystem fireflies;
         [SerializeField] float blendSpeed = 2.6f;
 
-        // All three are NIGHT skies now, differing in hue rather than in brightness. The daytime
-        // meadow read as flat and grey next to the reference sheet's night card (#0D151C ground),
-        // and a dark backdrop is what lets the lit island, the amber door and the gems carry the
-        // frame. The glow is the pool of light the backdrop shader puts behind the island; it does
-        // most of the work of making a dark sky read as atmosphere rather than as a black screen.
+        // Three pastel skies from the art-direction mockups (Art/Mockup): all warm, all light, and
+        // deliberately close to each other so the game stays one world - the chapters shift the
+        // hour of the day, not the theme. `glow` is the sun's colour in the backdrop shader.
         [SerializeField] Palette[] palettes =
         {
             new Palette
             {
-                name = "Dusk",
-                top = new Color(0.180f, 0.239f, 0.388f),      // #2E3D63
-                bottom = new Color(0.082f, 0.110f, 0.184f),   // #151C2F
-                glow = new Color(0.420f, 0.525f, 0.769f),     // #6B86C4
+                name = "Dawn",
+                top = new Color(0.996f, 0.839f, 0.776f),      // #FED6C6 peach, the mockup sky
+                bottom = new Color(0.871f, 0.839f, 0.910f),   // #DED6E8 lilac
+                glow = new Color(1.000f, 0.945f, 0.800f),     // #FFF1CC
             },
             new Palette
             {
-                name = "Ember",
-                top = new Color(0.239f, 0.165f, 0.275f),      // #3D2A46
-                bottom = new Color(0.106f, 0.071f, 0.133f),   // #1B1222
-                glow = new Color(0.769f, 0.451f, 0.369f),     // #C4735E
+                name = "Morning",
+                top = new Color(0.949f, 0.894f, 0.851f),      // #F2E4D9
+                bottom = new Color(0.867f, 0.898f, 0.937f),   // #DDE5EF pale blue
+                glow = new Color(1.000f, 0.965f, 0.870f),     // #FFF6DE
             },
             new Palette
             {
-                name = "Night",
-                top = new Color(0.071f, 0.118f, 0.200f),      // #121E33
-                bottom = new Color(0.031f, 0.051f, 0.090f),   // #080D17
-                glow = new Color(0.302f, 0.435f, 0.651f),     // #4D6FA6
+                name = "Golden Hour",
+                top = new Color(0.965f, 0.816f, 0.753f),      // #F6D0C0 rose
+                bottom = new Color(0.894f, 0.827f, 0.902f),   // #E4D3E6
+                glow = new Color(1.000f, 0.851f, 0.690f),     // #FFD9B0
             },
         };
 
@@ -123,7 +121,7 @@ namespace PullTheWorld
             if (fireflies)
             {
                 var main = fireflies.main;
-                Color c = current.glow * 1.7f;
+                Color c = current.glow;      // pollen the colour of the sun
                 c.a = 1f;
                 main.startColor = c;
             }

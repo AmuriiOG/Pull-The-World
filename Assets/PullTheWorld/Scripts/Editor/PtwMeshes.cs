@@ -71,6 +71,18 @@ namespace PullTheWorld.EditorTools
             Save(EnemySpikes(), "Mesh_EnemySpikes");
             Save(EnemyFace(), "Mesh_EnemyFace");
             Save(BouncePad(), "Mesh_BouncePad");
+
+            // Pastel theme: sky layers, vegetation, the orb.
+            Save(MountainRidge(11, 0.22f, 0.78f, 5), "Mesh_MountainFar");
+            Save(MountainRidge(23, 0.18f, 0.70f, 4), "Mesh_MountainMid");
+            Save(MountainRidge(37, 0.14f, 0.62f, 3), "Mesh_MountainNear");
+            Save(GrassFringe(), "Mesh_GrassFringe");
+            Save(GrassTufts(), "Mesh_GrassTufts");
+            Save(Flower(), "Mesh_Flower");
+            Save(Vine(5, 7), "Mesh_Vine");
+            Save(Vine(9, 5), "Mesh_VineShort");
+            Save(OrbSphere(), "Mesh_OrbSphere");
+            Save(Annulus(0.46f, 0.50f, 56), "Mesh_OrbRing");
             Save(QuadXZ(), "Mesh_QuadXZ");
             Save(QuadXY(), "Mesh_QuadXY");
             Save(WaterTile(6, 1f), "Mesh_WaterTile");
@@ -228,12 +240,20 @@ namespace PullTheWorld.EditorTools
         /// The hero prop, so it gets real geometry: individually laid stones for the jambs and
         /// seven voussoirs around the arch, exactly like the reference doorway.
         /// </summary>
+        // The portal, after the mockup: a tall POINTED (equilateral) arch of cream stone with small
+        // diamond studs down the jambs, not a round Roman one. Shared numbers between the arch and
+        // the fill pane below so the glow sits exactly inside the masonry.
+        const float ArchSpring = 1.05f;    // where the jambs stop and the arch begins
+        const float ArchR = 0.44f;         // half span to the centre of the stones
+        const float ArchStoneH = 0.30f;    // radial thickness of a stone
+        const float ArchInner = ArchR - 0.13f;                  // inner half width of the opening
+        const float ArchRadius = 2f * ArchR;                    // each arc is centred on the opposite springing
+        const float ArchInnerRadius = ArchRadius - ArchStoneH * 0.5f;
+
         static Mesh DoorArch()
         {
             var mb = new MeshBuilder();
-            const float springY = 1.05f;   // where the posts stop and the arch begins
-            const float R = 0.44f;         // radius to the centre of the arch stones
-            var stone = new Vector3(0.26f, 0.3f, 0.44f);
+            var stone = new Vector3(0.26f, ArchStoneH, 0.44f);
 
             // Base step.
             mb.AddChamferBox(1, new Vector3(0f, 0.075f, 0f), new Vector3(1.52f, 0.15f, 0.62f), 0.04f);
@@ -244,49 +264,252 @@ namespace PullTheWorld.EditorTools
                 {
                     float y = 0.3f + i * 0.3f;
                     float d = stone.z + (i % 2 == 0 ? 0.03f : -0.02f);
-                    mb.AddChamferBox(0, new Vector3(R * side, y, 0f),
+                    mb.AddChamferBox(0, new Vector3(ArchR * side, y, 0f),
                                      new Vector3(stone.x, stone.y, d), 0.035f);
                 }
 
-            // Arch: seven voussoirs from 180 deg round to 0 deg.
-            const int count = 7;
-            for (int i = 0; i < count; i++)
+            // Pointed arch: two arcs, each centred on the opposite springing point, meeting at the
+            // apex. Four voussoirs per side plus a keystone.
+            const int perSide = 4;
+            for (int side = -1; side <= 1; side += 2)
             {
-                float th = Mathf.Lerp(180f, 0f, i / (float)(count - 1));
+                var centre = new Vector3(-side * ArchR, ArchSpring, 0f);
+                // Angle from the centre: starts at the springing on this side, ends at the apex.
+                float thStart = side < 0 ? 180f : 0f;
+                float thApex = side < 0 ? 120f : 60f;
+                for (int i = 0; i < perSide; i++)
+                {
+                    float th = Mathf.Lerp(thStart, thApex, (i + 0.5f) / perSide);
+                    float rad = th * Mathf.Deg2Rad;
+                    var pos = centre + new Vector3(Mathf.Cos(rad), Mathf.Sin(rad), 0f) * ArchRadius;
+                    var rot = Quaternion.Euler(0f, 0f, th - 90f);          // local +Y radially outward
+                    float d = stone.z + (i % 2 == 0 ? 0.03f : -0.02f);
+                    mb.AddChamferBox(0, pos, new Vector3(0.24f, stone.y, d), 0.035f, rot);
+                }
+            }
+            float apexY = ArchSpring + Mathf.Sin(60f * Mathf.Deg2Rad) * ArchRadius;
+            mb.AddChamferBox(0, new Vector3(0f, apexY, 0f), new Vector3(0.22f, 0.34f, stone.z + 0.04f), 0.04f,
+                             Quaternion.Euler(0f, 0f, 45f));
+
+            // Diamond studs on the front of the jambs and the arch, like the mockup's inlays.
+            float front = -(stone.z * 0.5f + 0.015f);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                foreach (float y in new[] { 0.42f, 0.78f })
+                    mb.AddChamferBox(2, new Vector3(ArchR * side, y, front), new Vector3(0.07f, 0.07f, 0.03f), 0.012f,
+                                     Quaternion.Euler(0f, 0f, 45f));
+                var centre = new Vector3(-side * ArchR, ArchSpring, 0f);
+                float th = side < 0 ? 150f : 30f;
                 float rad = th * Mathf.Deg2Rad;
-                var pos = new Vector3(Mathf.Cos(rad) * R, springY + Mathf.Sin(rad) * R, 0f);
-                // Local +Y points radially outward.
-                var rot = Quaternion.Euler(0f, 0f, th - 90f);
-                float d = stone.z + (i % 2 == 0 ? 0.03f : -0.02f);
-                mb.AddChamferBox(0, pos, new Vector3(0.25f, stone.y, d), 0.035f, rot);
+                var pos = centre + new Vector3(Mathf.Cos(rad), Mathf.Sin(rad), 0f) * ArchRadius;
+                pos.z = front;
+                mb.AddChamferBox(2, pos, new Vector3(0.06f, 0.06f, 0.03f), 0.01f, Quaternion.Euler(0f, 0f, 45f));
             }
             return mb.ToMesh("DoorArch");
         }
 
-        /// <summary>Flat glowing pane that fills the doorway. Double sided - the door can face anywhere.</summary>
+        /// <summary>Flat glowing pane that fills the pointed doorway. Double sided - the door can face anywhere.</summary>
         static Mesh ArchFill()
         {
             var mb = new MeshBuilder();
-            const float hw = 0.31f, bottom = 0.15f, spring = 1.05f;
+            const float bottom = 0.15f;
+
+            // Boundary of the opening: left inner arc up to the apex, then the right one down.
+            var rim = new List<Vector3>();
+            const int seg = 10;
+            for (int i = 0; i <= seg; i++)
+            {
+                // Left arc centred at (+R, spring): from the left springing (180 deg) towards the apex.
+                float th = Mathf.Lerp(180f, 180f - ApexAngle(), i / (float)seg) * Mathf.Deg2Rad;
+                rim.Add(new Vector3(ArchR + Mathf.Cos(th) * ArchInnerRadius, ArchSpring + Mathf.Sin(th) * ArchInnerRadius, 0f));
+            }
+            for (int i = seg; i >= 0; i--)
+            {
+                float th = Mathf.Lerp(0f, ApexAngle(), i / (float)seg) * Mathf.Deg2Rad;
+                rim.Add(new Vector3(-ArchR + Mathf.Cos(th) * ArchInnerRadius, ArchSpring + Mathf.Sin(th) * ArchInnerRadius, 0f));
+            }
 
             foreach (float z in new[] { 0f, -0.001f })
             {
                 Vector3 hint = z < -0.0005f ? Vector3.back : Vector3.forward;
-                mb.AddFlatQuad(0, new Vector3(-hw, bottom, z), new Vector3(hw, bottom, z),
-                                  new Vector3(hw, spring, z), new Vector3(-hw, spring, z), hint);
-
-                const int seg = 12;
-                var apexC = new Vector3(0f, spring, z);
-                for (int i = 0; i < seg; i++)
+                mb.AddFlatQuad(0, new Vector3(-ArchInner, bottom, z), new Vector3(ArchInner, bottom, z),
+                                  new Vector3(ArchInner, ArchSpring, z), new Vector3(-ArchInner, ArchSpring, z), hint);
+                var fan = new Vector3(0f, ArchSpring, z);
+                for (int i = 0; i + 1 < rim.Count; i++)
                 {
-                    float a0 = Mathf.Lerp(0f, 180f, i / (float)seg) * Mathf.Deg2Rad;
-                    float a1 = Mathf.Lerp(0f, 180f, (i + 1) / (float)seg) * Mathf.Deg2Rad;
-                    var p0 = apexC + new Vector3(Mathf.Cos(a0) * hw, Mathf.Sin(a0) * hw, 0f);
-                    var p1 = apexC + new Vector3(Mathf.Cos(a1) * hw, Mathf.Sin(a1) * hw, 0f);
-                    mb.AddFlatTri(0, apexC, p0, p1, hint);
+                    var p0 = rim[i]; p0.z = z;
+                    var p1 = rim[i + 1]; p1.z = z;
+                    mb.AddFlatTri(0, fan, p0, p1, hint);
                 }
             }
             return mb.ToMesh("ArchFill");
+        }
+
+        /// <summary>Angle (from the arc centre) at which the inner arc reaches x = 0, the apex.</summary>
+        static float ApexAngle() => Mathf.Acos(ArchR / ArchInnerRadius) * Mathf.Rad2Deg;
+
+        // ======================================================================= sky ========
+        /// <summary>
+        /// One layer of background mountains: a unit-wide strip (x -0.5..0.5, y 0..1) whose top
+        /// edge is a ridgeline of a few soft peaks with noise on top. UV.y runs 0 at the base and 1
+        /// at the ridge so a gradient texture hazes the tops. SkyLayer stretches it to the frustum.
+        /// </summary>
+        static Mesh MountainRidge(int seed, float baseline, float amplitude, int peaks)
+        {
+            var mb = new MeshBuilder();
+            var rnd = new System.Random(seed);
+            var centres = new float[peaks];
+            var widths = new float[peaks];
+            var heights = new float[peaks];
+            for (int i = 0; i < peaks; i++)
+            {
+                centres[i] = Mathf.Lerp(-0.55f, 0.55f, (i + 0.5f) / peaks) + ((float)rnd.NextDouble() - 0.5f) * 0.18f;
+                widths[i] = 0.16f + (float)rnd.NextDouble() * 0.16f;
+                heights[i] = 0.55f + (float)rnd.NextDouble() * 0.45f;
+            }
+
+            float Ridge(float x)
+            {
+                float h = 0f;
+                for (int i = 0; i < peaks; i++)
+                {
+                    float d = Mathf.Abs(x - centres[i]) / widths[i];
+                    // Slightly rounded peak: a triangle blended with a cosine bump.
+                    float tri = Mathf.Max(0f, 1f - d);
+                    float bump = d < 1f ? 0.5f + 0.5f * Mathf.Cos(d * Mathf.PI) : 0f;
+                    h = Mathf.Max(h, heights[i] * Mathf.Lerp(tri, bump, 0.35f));
+                }
+                float n = Mathf.PerlinNoise(x * 9f + seed * 3.1f, seed * 0.7f) - 0.5f;
+                return Mathf.Clamp01(baseline + amplitude * h + n * 0.06f);
+            }
+
+            // Shared vertices with UV.y = absolute height, so the haze gradient is continuous
+            // across the strip. Per-quad UVs (0 at each quad's base, 1 at ITS ridge) stretched the
+            // gradient differently in every column and drew vertical bands down the mountains.
+            const int cols = 96;
+            var bottom = new int[cols + 1];
+            var top = new int[cols + 1];
+            for (int i = 0; i <= cols; i++)
+            {
+                float x = -0.5f + i / (float)cols;
+                float h = Ridge(x);
+                bottom[i] = mb.AddVertex(new Vector3(x, 0f, 0f), Vector3.back, new Vector2(0.5f, 0f));
+                top[i] = mb.AddVertex(new Vector3(x, h, 0f), Vector3.back, new Vector2(0.5f, h));
+            }
+            for (int i = 0; i < cols; i++)
+            {
+                // Two triangles per column, wound to face -Z (the camera looks along +Z).
+                mb.AddTriangle(0, bottom[i], top[i], top[i + 1]);
+                mb.AddTriangle(0, bottom[i], top[i + 1], bottom[i + 1]);
+            }
+            return mb.ToMesh("MountainRidge");
+        }
+
+        // ================================================================ vegetation ========
+        /// <summary>
+        /// Tufts hanging over the FRONT top edge of a grass block, so the cap reads as turf with a
+        /// fringe rather than a green slab. Pivot at the cap edge; hangs down and out.
+        /// </summary>
+        static Mesh GrassFringe()
+        {
+            var mb = new MeshBuilder();
+            var rnd = new System.Random(77);
+            // Fuller than the first pass (which read as a row of dark dashes): more blades, fatter
+            // at the root, hanging further, plus a row of short leaf-blobs so the edge is turf.
+            const int blades = 12;
+            for (int i = 0; i < blades; i++)
+            {
+                float x = Mathf.Lerp(-0.45f, 0.45f, (i + 0.5f) / blades) + ((float)rnd.NextDouble() - 0.5f) * 0.05f;
+                float len = 0.22f + (float)rnd.NextDouble() * 0.14f;
+                var dir = new Vector3(((float)rnd.NextDouble() - 0.5f) * 0.5f, -0.8f, -0.5f).normalized;
+                mb.AddCylinder(0, new Vector3(x, 0.0f, -0.5f), 0.05f, 0.006f, len, 4, false, true,
+                               Quaternion.FromToRotation(Vector3.up, dir));
+                if (i % 2 == 0)
+                    mb.AddBlob(0, new Vector3(x + 0.03f, -0.05f, -0.53f), new Vector3(0.06f, 0.05f, 0.03f), 1, 0.05f, 40 + i, flat: false);
+            }
+            return mb.ToMesh("GrassFringe");
+        }
+
+        /// <summary>A few blades standing up on the cap. Base at y 0.</summary>
+        static Mesh GrassTufts()
+        {
+            var mb = new MeshBuilder();
+            var rnd = new System.Random(91);
+            for (int i = 0; i < 4; i++)
+            {
+                var p = new Vector3(((float)rnd.NextDouble() - 0.5f) * 0.7f, 0f, ((float)rnd.NextDouble() - 0.5f) * 0.6f);
+                var dir = new Vector3(((float)rnd.NextDouble() - 0.5f) * 0.5f, 1f, ((float)rnd.NextDouble() - 0.5f) * 0.4f).normalized;
+                float len = 0.12f + (float)rnd.NextDouble() * 0.1f;
+                mb.AddCylinder(0, p, 0.03f, 0.003f, len, 4, false, true, Quaternion.FromToRotation(Vector3.up, dir));
+            }
+            return mb.ToMesh("GrassTufts");
+        }
+
+        /// <summary>A small flower: stem (sub 0, wind material), five petals (sub 1), centre (sub 2).</summary>
+        static Mesh Flower()
+        {
+            var mb = new MeshBuilder();
+            // Big enough to read at phone size: the first pass's flowers were specks.
+            mb.AddCylinder(0, Vector3.zero, 0.018f, 0.012f, 0.24f, 5);
+            mb.AddBlob(0, new Vector3(0.05f, 0.09f, 0.01f), new Vector3(0.05f, 0.02f, 0.03f), 1, 0f, 9, flat: false);   // a leaf
+            const int petals = 5;
+            for (int i = 0; i < petals; i++)
+            {
+                float a = i / (float)petals * Mathf.PI * 2f;
+                var c = new Vector3(Mathf.Cos(a) * 0.055f, 0.26f + Mathf.Sin(a * 2f) * 0.005f, Mathf.Sin(a) * 0.055f);
+                mb.AddBlob(1, c, new Vector3(0.048f, 0.02f, 0.046f), 1, 0f, 3 + i, flat: false);
+            }
+            mb.AddBlob(2, new Vector3(0f, 0.268f, 0f), new Vector3(0.03f, 0.024f, 0.03f), 1, 0f, 2, flat: false);
+            return mb.ToMesh("Flower");
+        }
+
+        /// <summary>A hanging vine: a thin stem down a gentle curve with leaves alternating sides. Pivot at the top.</summary>
+        static Mesh Vine(int seed, int segments)
+        {
+            var mb = new MeshBuilder();
+            var rnd = new System.Random(seed);
+            var prev = Vector3.zero;
+            float drift = ((float)rnd.NextDouble() - 0.5f) * 0.08f;
+            // Lush, like the mockup's: a leaf pair at every node, big enough to read at phone size.
+            for (int i = 1; i <= segments; i++)
+            {
+                var p = new Vector3(Mathf.Sin(i * 0.8f + seed) * 0.05f + drift * i, -0.19f * i, 0.02f * Mathf.Sin(i * 1.3f));
+                var d = p - prev;
+                mb.AddCylinder(0, prev, 0.02f, 0.015f, d.magnitude, 4, false, false,
+                               Quaternion.FromToRotation(Vector3.up, d.normalized));
+                float side = i % 2 == 0 ? 1f : -1f;
+                mb.AddBlob(0, p + new Vector3(side * 0.085f, 0.03f, 0f), new Vector3(0.085f, 0.045f, 0.05f), 1, 0.06f, seed * 7 + i, flat: false);
+                mb.AddBlob(0, p + new Vector3(-side * 0.06f, 0.06f, 0.01f), new Vector3(0.06f, 0.035f, 0.04f), 1, 0.06f, seed * 5 + i, flat: false);
+                prev = p;
+            }
+            mb.AddBlob(0, prev + new Vector3(0f, -0.04f, 0f), new Vector3(0.07f, 0.06f, 0.05f), 1, 0.05f, seed * 11, flat: false);
+            return mb.ToMesh("Vine");
+        }
+
+        // ======================================================================= orb ========
+        /// <summary>The glass body: a smooth-shaded sphere the size of the player's collider.</summary>
+        static Mesh OrbSphere()
+        {
+            var mb = new MeshBuilder();
+            mb.AddBlob(0, Vector3.zero, Vector3.one * 0.335f, 3, 0f, 1, flat: false);
+            return mb.ToMesh("OrbSphere");
+        }
+
+        /// <summary>A flat ring in the XY plane, both faces, for the orb's orbit line.</summary>
+        static Mesh Annulus(float rIn, float rOut, int segs)
+        {
+            var mb = new MeshBuilder();
+            for (int i = 0; i < segs; i++)
+            {
+                float a0 = i / (float)segs * Mathf.PI * 2f, a1 = (i + 1) / (float)segs * Mathf.PI * 2f;
+                var i0 = new Vector3(Mathf.Cos(a0) * rIn, Mathf.Sin(a0) * rIn, 0f);
+                var i1 = new Vector3(Mathf.Cos(a1) * rIn, Mathf.Sin(a1) * rIn, 0f);
+                var o0 = new Vector3(Mathf.Cos(a0) * rOut, Mathf.Sin(a0) * rOut, 0f);
+                var o1 = new Vector3(Mathf.Cos(a1) * rOut, Mathf.Sin(a1) * rOut, 0f);
+                mb.AddFlatQuad(0, i0, o0, o1, i1, Vector3.back);
+                mb.AddFlatQuad(0, i0, o0, o1, i1, Vector3.forward);
+            }
+            return mb.ToMesh("Annulus");
         }
 
         // ======================================================================= hazards ====

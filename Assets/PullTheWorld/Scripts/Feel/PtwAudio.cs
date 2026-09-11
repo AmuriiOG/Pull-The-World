@@ -9,6 +9,16 @@ namespace PullTheWorld
         Grab, Release, Impact, Win, Fail, PlateOn, PlateOff, Smother, SpinTick, Unlock,
         EnemyAlert, EnemySnarl, EnemyBite, EnemyDie,
         Bounce,
+        Sparkle, UiTap, PortalEnter,
+    }
+
+    /// <summary>Looping ambiences, synthesised once on demand and cached.</summary>
+    public enum PtwLoop
+    {
+        /// <summary>The portal's warm hum: a slow-beating drone of three low partials.</summary>
+        PortalHum,
+        /// <summary>Wind and air: band-limited noise under a slow breathing envelope.</summary>
+        Ambience,
     }
 
     /// <summary>
@@ -67,6 +77,44 @@ namespace PullTheWorld
             instance.PlayInternal(sfx, volume, pitch);
         }
 
+        /// <summary>A seamless ambience loop, built on first request. Null when audio is off.</summary>
+        public static AudioClip Loop(PtwLoop kind)
+        {
+            if (instance == null) return null;
+            if (!instance.loops.TryGetValue(kind, out var clip) || !clip)
+            {
+                clip = instance.BuildLoop(kind);
+                instance.loops[kind] = clip;
+            }
+            return clip;
+        }
+
+        readonly Dictionary<PtwLoop, AudioClip> loops = new Dictionary<PtwLoop, AudioClip>();
+
+        AudioClip BuildLoop(PtwLoop kind)
+        {
+            switch (kind)
+            {
+                case PtwLoop.PortalHum:
+                {
+                    // Integer numbers of cycles in the loop length keep the seam silent.
+                    const float len = 2f;
+                    return MakeLoop("ptw_portal_hum", len, t =>
+                        (Sine(110f, t) * 0.5f + Sine(165f, t) * 0.3f + Sine(220f, t) * 0.18f + Sine(330f, t) * 0.08f)
+                        * (0.75f + 0.25f * Sine(1.5f, t)) * 0.35f);
+                }
+                default:
+                {
+                    // Wind: smoothed noise, low-passed by averaging, breathing slowly. 4 s, crossfaded
+                    // at the seam inside MakeLoop.
+                    const float len = 4f;
+                    return MakeLoop("ptw_ambience", len, t =>
+                        Noise(t) * (0.55f + 0.45f * Sine(0.25f, t)) * 0.16f
+                        + Sine(55f, t) * 0.03f * (0.5f + 0.5f * Sine(0.5f, t)));
+                }
+            }
+        }
+
         void PlayInternal(PtwSfx sfx, float volume, float pitch)
         {
             // GameProgress is the single gate for the player's Sound setting, checked here rather
@@ -96,73 +144,123 @@ namespace PullTheWorld
         // ------------------------------------------------------------------- synthesis ------
         const int Rate = 44100;
 
+        // The bank, in the pastel theme's voice: soft mallets and glass bells rather than beeps and
+        // buzzers. Every sound is built from Bell() (a sine with a quiet third partial and a long
+        // exponential tail) or from breathy noise, and nothing here is loud or sharp - the loudest
+        // moments are the portal and the win, and even those are chimes.
         void BuildBank()
         {
-            generated[PtwSfx.Grab] = Make("ptw_grab", 0.14f, t =>
-                Sine(620f, t) * Env(t, 40f) * 0.5f + Sine(930f, t) * Env(t, 70f) * 0.2f);
+            // Touching the world: a soft glass tap; letting go: a breath.
+            generated[PtwSfx.Grab] = Make("ptw_grab", 0.22f, t =>
+                Bell(t, 0f, 880f, 18f) * 0.45f + Bell(t, 0f, 1320f, 30f) * 0.12f);
 
-            generated[PtwSfx.Release] = Make("ptw_release", 0.16f, t =>
-                Sine(400f, t) * Env(t, 26f) * 0.45f);
+            generated[PtwSfx.Release] = Make("ptw_release", 0.3f, t =>
+                Bell(t, 0f, 660f, 12f) * 0.3f + Noise(t) * Env(t, 22f) * 0.05f);
 
-            generated[PtwSfx.Impact] = Make("ptw_impact", 0.34f, t =>
-                Sine(Mathf.Lerp(150f, 62f, Mathf.Clamp01(t * 7f)), t) * Env(t, 13f) * 0.85f +
-                Noise(t) * Env(t, 46f) * 0.22f);
+            // Landing: a padded thud with a faint glass overtone, so the orb reads as glass but lands soft.
+            generated[PtwSfx.Impact] = Make("ptw_impact", 0.4f, t =>
+                Sine(Mathf.Lerp(140f, 70f, Mathf.Clamp01(t * 6f)), t) * Env(t, 14f) * 0.55f +
+                Bell(t, 0f, 1760f, 40f) * 0.10f +
+                Noise(t) * Env(t, 60f) * 0.10f);
 
-            generated[PtwSfx.Win] = Make("ptw_win", 0.95f, t =>
-                Note(t, 0.00f, 523.25f, 5.5f) + Note(t, 0.09f, 659.25f, 5.5f) +
-                Note(t, 0.18f, 783.99f, 4.5f) + Note(t, 0.30f, 1046.5f, 3.2f) * 0.7f);
+            // Win: a rising pentatonic bell cascade, cream-toned, the biggest sound in the game.
+            generated[PtwSfx.Win] = Make("ptw_win", 1.6f, t =>
+                Bell(t, 0.00f, 523.25f, 3.0f) * 0.55f + Bell(t, 0.11f, 659.25f, 3.0f) * 0.5f +
+                Bell(t, 0.22f, 783.99f, 2.8f) * 0.5f + Bell(t, 0.36f, 1046.5f, 2.4f) * 0.45f +
+                Bell(t, 0.52f, 1318.5f, 2.0f) * 0.35f + Bell(t, 0.70f, 1567.98f, 1.7f) * 0.25f);
 
-            generated[PtwSfx.Fail] = Make("ptw_fail", 0.5f, t =>
-                Sine(Mathf.Lerp(240f, 96f, Mathf.Clamp01(t * 2.4f)), t) * Env(t, 6.5f) * 0.6f +
-                Sine(Mathf.Lerp(121f, 48f, Mathf.Clamp01(t * 2.4f)), t) * Env(t, 6.5f) * 0.3f);
+            // Fail: a soft descending pair of bells, sympathetic rather than a buzzer.
+            generated[PtwSfx.Fail] = Make("ptw_fail", 0.9f, t =>
+                Bell(t, 0.00f, 392f, 5f) * 0.4f + Bell(t, 0.16f, 311.13f, 4f) * 0.4f +
+                Sine(Mathf.Lerp(120f, 70f, Mathf.Clamp01(t * 2f)), t) * Env(t, 5f) * 0.12f);
 
-            generated[PtwSfx.PlateOn] = Make("ptw_plate_on", 0.2f, t =>
-                Sine(740f, t) * Env(t, 22f) * 0.5f + Sine(1108f, t) * Env(t, 38f) * 0.18f);
+            generated[PtwSfx.PlateOn] = Make("ptw_plate_on", 0.5f, t =>
+                Bell(t, 0f, 587.33f, 8f) * 0.45f + Bell(t, 0.05f, 880f, 9f) * 0.25f);
 
-            generated[PtwSfx.PlateOff] = Make("ptw_plate_off", 0.2f, t =>
-                Sine(430f, t) * Env(t, 24f) * 0.45f);
+            generated[PtwSfx.PlateOff] = Make("ptw_plate_off", 0.4f, t =>
+                Bell(t, 0f, 440f, 9f) * 0.35f);
 
-            generated[PtwSfx.Smother] = Make("ptw_smother", 0.55f, t =>
-                Noise(t) * Env(t, 6.5f) * 0.5f * (1f - Mathf.Clamp01(t * 1.4f)));
+            // Fire going out, crates breaking: a soft puff of air.
+            generated[PtwSfx.Smother] = Make("ptw_smother", 0.6f, t =>
+                Noise(t) * Env(t, 7f) * 0.35f * (1f - Mathf.Clamp01(t * 1.3f)) + Bell(t, 0f, 330f, 6f) * 0.08f);
 
-            generated[PtwSfx.SpinTick] = Make("ptw_spin_tick", 0.07f, t =>
-                Sine(1180f, t) * Env(t, 80f) * 0.28f);
+            // The rotation tick: a tiny glass tick, barely there.
+            generated[PtwSfx.SpinTick] = Make("ptw_spin_tick", 0.09f, t =>
+                Bell(t, 0f, 2093f, 70f) * 0.16f);
 
-            generated[PtwSfx.Unlock] = Make("ptw_unlock", 0.5f, t =>
-                Note(t, 0.00f, 587.33f, 7f) + Note(t, 0.10f, 880f, 5f));
+            generated[PtwSfx.Unlock] = Make("ptw_unlock", 0.9f, t =>
+                Bell(t, 0.00f, 587.33f, 4f) * 0.4f + Bell(t, 0.12f, 880f, 3.6f) * 0.4f + Bell(t, 0.26f, 1174.66f, 3f) * 0.3f);
 
-            // --- the enemy: throat sounds, all built on Growl (odd harmonics under a fast tremor)
-            // A hiss that turns into a low rumble: "it has seen you".
+            // A sparkle: two very high bells a fifth apart, short. The orb whispers with this.
+            generated[PtwSfx.Sparkle] = Make("ptw_sparkle", 0.45f, t =>
+                Bell(t, 0f, 2637f, 14f) * 0.22f + Bell(t, 0.04f, 3951f, 18f) * 0.12f);
+
+            // UI: a soft wooden tap with a glass edge.
+            generated[PtwSfx.UiTap] = Make("ptw_ui_tap", 0.16f, t =>
+                Sine(520f, t) * Env(t, 45f) * 0.35f + Bell(t, 0f, 1568f, 60f) * 0.1f);
+
+            // Entering the portal: a warm swell of the hum's partials with a shimmer on top.
+            generated[PtwSfx.PortalEnter] = Make("ptw_portal_enter", 1.3f, t =>
+                (Sine(220f, t) * 0.4f + Sine(330f, t) * 0.25f + Sine(440f, t) * 0.15f) * (1f - Env(t, 9f)) * Env(t, 2.2f) * 0.5f +
+                Bell(t, 0.15f, 1760f, 5f) * 0.2f + Bell(t, 0.30f, 2637f, 5f) * 0.14f);
+
+            // --- the enemy: throat sounds, quieter and lower than before so they sit in the pastel
+            // world as a shadow rather than a jump-scare. All built on Growl (odd harmonics under a
+            // fast tremor).
             generated[PtwSfx.EnemyAlert] = Make("ptw_enemy_alert", 0.55f, t =>
-                Noise(t) * Env(t, 5f) * 0.32f * (0.6f + 0.4f * Sine(31f, t)) +
-                Growl(78f, t) * (1f - Env(t, 9f)) * Env(t, 3.5f) * 0.42f);
+                Noise(t) * Env(t, 5f) * 0.22f * (0.6f + 0.4f * Sine(31f, t)) +
+                Growl(70f, t) * (1f - Env(t, 9f)) * Env(t, 3.5f) * 0.3f);
 
-            // The coil before a lunge: a short snarl sweeping down.
             generated[PtwSfx.EnemySnarl] = Make("ptw_enemy_snarl", 0.32f, t =>
-                Growl(Mathf.Lerp(150f, 72f, Mathf.Clamp01(t * 3f)), t) * Env(t, 7f) * 0.55f +
-                Noise(t) * Env(t, 20f) * 0.3f);
+                Growl(Mathf.Lerp(140f, 66f, Mathf.Clamp01(t * 3f)), t) * Env(t, 7f) * 0.4f +
+                Noise(t) * Env(t, 20f) * 0.2f);
 
-            // The bite: a crunch on top of a thud.
             generated[PtwSfx.EnemyBite] = Make("ptw_enemy_bite", 0.3f, t =>
-                Noise(t) * Env(t, 28f) * 0.7f +
-                Sine(95f, t) * Env(t, 12f) * 0.5f +
-                Sine(Mathf.Lerp(420f, 120f, Mathf.Clamp01(t * 6f)), t) * Env(t, 30f) * 0.3f);
+                Noise(t) * Env(t, 28f) * 0.45f +
+                Sine(90f, t) * Env(t, 12f) * 0.4f);
 
-            // Its death: a squeal falling away into hiss.
             generated[PtwSfx.EnemyDie] = Make("ptw_enemy_die", 0.7f, t =>
-                Sine(Mathf.Lerp(1100f, 260f, Mathf.Clamp01(t * 1.6f)) * (1f + 0.02f * Sine(24f, t)), t)
-                    * Env(t, 3.2f) * 0.4f +
-                Noise(t) * Env(t, 5f) * 0.25f);
+                Sine(Mathf.Lerp(900f, 240f, Mathf.Clamp01(t * 1.6f)) * (1f + 0.02f * Sine(24f, t)), t)
+                    * Env(t, 3.2f) * 0.28f +
+                Noise(t) * Env(t, 5f) * 0.18f);
 
-            // The spring pad: a quick upward sweep with a springy second partial.
-            generated[PtwSfx.Bounce] = Make("ptw_bounce", 0.28f, t =>
-                Sine(Mathf.Lerp(190f, 560f, Mathf.Clamp01(t * 5f)), t) * Env(t, 9f) * 0.5f +
-                Sine(Mathf.Lerp(380f, 1120f, Mathf.Clamp01(t * 5f)), t) * Env(t, 14f) * 0.2f +
-                Noise(t) * Env(t, 40f) * 0.15f);
+            // The spring pad: a soft "boing" - a bell that slides up.
+            generated[PtwSfx.Bounce] = Make("ptw_bounce", 0.36f, t =>
+                Sine(Mathf.Lerp(220f, 520f, Mathf.Clamp01(t * 4f)), t) * Env(t, 8f) * 0.4f +
+                Bell(t, 0.05f, 1046.5f, 10f) * 0.18f);
         }
 
         static float Sine(float hz, float t) => Mathf.Sin(2f * Mathf.PI * hz * t);
         static float Env(float t, float rate) => Mathf.Exp(-t * rate);
+
+        /// <summary>A soft bell: fundamental plus a quiet third partial, exponential tail, fast attack.</summary>
+        static float Bell(float t, float start, float hz, float decay)
+        {
+            float lt = t - start;
+            if (lt < 0f) return 0f;
+            float attack = 1f - Mathf.Exp(-lt * 400f);
+            return (Sine(hz, lt) + 0.28f * Sine(hz * 3f, lt) * Env(lt, decay * 1.8f)) * Env(lt, decay) * attack;
+        }
+
+        /// <summary>A seamless loop: rendered slightly long and cross-faded into its own start.</summary>
+        static AudioClip MakeLoop(string name, float seconds, Func<float, float> fn)
+        {
+            int n = Mathf.RoundToInt(seconds * Rate);
+            int fade = Mathf.Min(n / 4, Rate / 5);
+            var data = new float[n];
+            noiseState = 0f;
+            for (int i = 0; i < n; i++) data[i] = fn(i / (float)Rate);
+            // Blend the tail into the head so the seam is inaudible whatever fn does.
+            for (int i = 0; i < fade; i++)
+            {
+                float k = i / (float)fade;
+                float tail = fn((n + i) / (float)Rate);
+                data[i] = Mathf.Clamp(data[i] * k + tail * (1f - k), -1f, 1f);
+            }
+            var clip = AudioClip.Create(name, n, 1, Rate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
 
         /// <summary>A throaty tone: odd harmonics (a rounded square) with a 27 Hz tremor.</summary>
         static float Growl(float hz, float t) =>

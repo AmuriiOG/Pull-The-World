@@ -32,7 +32,7 @@ namespace PullTheWorld
         [Tooltip("Framing used while the main menu is up. Deliberately much wider than any level: " +
                  "the preview island is scenery behind the title here, not the subject, and at " +
                  "gameplay framing it fills the screen and collides with every menu widget.")]
-        [SerializeField] Vector2 menuViewExtents = new Vector2(26f, 26f);
+        [SerializeField] Vector2 menuViewExtents = new Vector2(19f, 19f);   // the mockup menu island fills most of the width
         [Tooltip("Recolours the backdrop per chapter so the eighteen levels do not share one sky.")]
         [SerializeField] SkyTheme sky;
 

@@ -955,6 +955,8 @@ namespace PullTheWorld.EditorTools
             ExitPortal portal;
             PressurePlate plate;
             readonly List<Gate> gates = new List<Gate>();
+            // Exposed grass blocks by cell, so the vegetation pass can dress them afterwards.
+            readonly Dictionary<(int col, int row), GameObject> grassAt = new Dictionary<(int, int), GameObject>();
             Vector3 rawSpawn;
             bool spawnSet;
 
@@ -1001,7 +1003,80 @@ namespace PullTheWorld.EditorTools
                         Place(line[col], col, row, h, At);
                 }
 
+                Dress(At, h);
                 Recentre();
+            }
+
+            /// <summary>
+            /// Turf and vegetation, after the mockups: a fringe of blades over most cap edges, tufts
+            /// on some, a flower now and then, vines hanging over open sides and occasionally down
+            /// the front face. Seeded from the level number so a rebuild reproduces the same island.
+            /// Every detail is a prefab child switched on or a small prop, so it costs nothing in
+            /// physics and nothing in level-author effort: a plain 'g' gets dressed by itself.
+            /// </summary>
+            void Dress(System.Func<int, int, char> at, int rows)
+            {
+                var rnd = new System.Random(number * 7919 + 13);
+                foreach (var kv in grassAt)
+                {
+                    var (col, row) = kv.Key;
+                    var go = kv.Value;
+                    if (!go) continue;
+                    float top = RowTop(row, rows);
+
+                    var fringe = go.transform.Find("Fringe");
+                    if (fringe)
+                    {
+                        fringe.gameObject.SetActive(rnd.NextDouble() < 0.9);
+                        // Mirror half of them and vary the length so no two edges repeat.
+                        fringe.localScale = new Vector3(rnd.NextDouble() < 0.5 ? 1f : -1f,
+                                                        0.85f + (float)rnd.NextDouble() * 0.4f, 1f);
+                    }
+                    var tufts = go.transform.Find("Tufts");
+                    if (tufts)
+                    {
+                        tufts.gameObject.SetActive(rnd.NextDouble() < 0.5);
+                        tufts.localRotation = Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f, 0f);
+                    }
+                    var flower = go.transform.Find("Flower");
+                    if (flower && rnd.NextDouble() < 0.3)
+                    {
+                        flower.gameObject.SetActive(true);
+                        flower.localPosition = new Vector3(((float)rnd.NextDouble() - 0.5f) * 0.6f, 0f,
+                                                           -0.12f - (float)rnd.NextDouble() * 0.28f);
+                        flower.localScale = Vector3.one * (1.25f + (float)rnd.NextDouble() * 0.5f);   // the mockup's flowers read from arm's length
+                        flower.localRotation = Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f, 0f);
+                        Petals(flower.gameObject, rnd);
+                    }
+
+                    // Vines over an open side (just outside the face, pulled forward so they read),
+                    // and now and then one down the front face.
+                    for (int side = -1; side <= 1; side += 2)
+                        if (!IsSolid(at(col + side, row)) && rnd.NextDouble() < 0.8)
+                            HangVine(col + side * 0.56f, top - 0.04f, -0.22f, rnd);
+                    if (rnd.NextDouble() < 0.2)
+                        HangVine(col + ((float)rnd.NextDouble() - 0.5f) * 0.6f, top - 0.03f, -0.53f, rnd);
+                }
+            }
+
+            void HangVine(float x, float y, float z, System.Random rnd)
+            {
+                var go = Prop(rnd.NextDouble() < 0.5 ? "Prop_Vine" : "Prop_VineShort", x, y);
+                if (!go) return;
+                go.transform.localPosition = new Vector3(x, y, z);
+                go.transform.localRotation = Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f,
+                                                              ((float)rnd.NextDouble() - 0.5f) * 10f);
+            }
+
+            static void Petals(GameObject flower, System.Random rnd)
+            {
+                var r = flower.GetComponent<MeshRenderer>();
+                if (!r) return;
+                var mats = r.sharedMaterials;
+                if (mats.Length < 2) return;
+                string id = rnd.Next(3) switch { 0 => PtwArt.MFlowerWhite, 1 => PtwArt.MFlowerYellow, _ => PtwArt.MFlowerPink };
+                mats[1] = PtwArt.Get(id);
+                r.sharedMaterials = mats;
             }
 
             // 'w' counts as solid for the grass rule: the pool bed covers the block beneath it.
@@ -1034,11 +1109,18 @@ namespace PullTheWorld.EditorTools
                 {
                     // --- terrain -------------------------------------------------------------
                     case 'g':
+                    {
                         // Grass only where the top face is actually exposed. A buried block with a
                         // green cap on it produces a stripe of grass running through solid rock,
                         // which is the single fastest way to make a generated island look wrong.
-                        Block(IsSolid(at(col, row - 1)) ? "Block_Stone" : "Block_Grass", col, top);
+                        bool exposed = !IsSolid(at(col, row - 1));
+                        // Buried stone alternates two close values by a stable hash, for the
+                        // mockup's gentle block-to-block variation.
+                        string stoneId = Rnd(col, row) % 360f < 100f ? "Block_Stone_Mid" : "Block_Stone";
+                        var go = Block(exposed ? "Block_Grass" : stoneId, col, top);
+                        if (exposed && go) grassAt[(col, row)] = go;
                         break;
+                    }
                     case 's': Block("Block_Stone", col, top); break;
                     case 'd': Block("Block_Stone_Dark", col, top); break;
                     case '#': Block("Block_Stone_Light", col, top); break;

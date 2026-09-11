@@ -746,6 +746,25 @@ namespace PullTheWorld.Tests
             player.Body.position = new Vector3(0f, 12f, 0f);
         }
 
+        // ------------------------------------------------------------- capture encoding -----
+        /// <summary>Linear float pixels to an 8-bit sRGB PNG, the way a phone screen would show them.</summary>
+        static byte[] ToPng(Color[] px)
+        {
+            var t = new Texture2D(ShotWidth, ShotHeight, TextureFormat.RGB24, false);
+            var c8 = new Color32[px.Length];
+            bool linear = QualitySettings.activeColorSpace == ColorSpace.Linear;
+            for (int i = 0; i < px.Length; i++)
+            {
+                var c = px[i];
+                c = new Color(Mathf.Clamp01(c.r), Mathf.Clamp01(c.g), Mathf.Clamp01(c.b), 1f);
+                c8[i] = linear ? c.gamma : c;
+            }
+            t.SetPixels32(c8); t.Apply(false);
+            var bytes = t.EncodeToPNG();
+            UnityEngine.Object.DestroyImmediate(t);
+            return bytes;
+        }
+
         // ====================================================================== captures =====
         [UnityTest, Timeout(600000)]                        // grows with the level count
         public IEnumerator CaptureAllLevels()
@@ -792,7 +811,7 @@ namespace PullTheWorld.Tests
             var settingsBtn = FindButton("SettingsButton");
             Assert.IsNotNull(settingsBtn, "Main menu has no SettingsButton");
             settingsBtn.onClick.Invoke();
-            yield return Wait(0.7f);
+            yield return Wait(1.2f);
             yield return Grab(Path.Combine(dir, "ui_02_settings.png"));
 
             var closeBtn = FindButton("CloseButton");
@@ -857,7 +876,12 @@ namespace PullTheWorld.Tests
             {
                 antiAliasing = 1
             };
-            var tex = new Texture2D(ShotWidth, ShotHeight, TextureFormat.RGB24, false);
+            // Read back as float and convert to sRGB by hand. The project renders in LINEAR colour
+            // space and an HDR RenderTexture holds linear values; encoding those bytes straight to
+            // PNG produced captures about 40% darker and muddier than the game looks on a phone,
+            // and two rounds of art direction chased that artefact (paler sky, lighter mountains)
+            // before it was caught. This is the one place the whole visual loop depends on.
+            var tex = new Texture2D(ShotWidth, ShotHeight, TextureFormat.RGBAFloat, false, true);
             var prevTarget = cam.targetTexture;
             var prevActive = RenderTexture.active;
             var rigCam = cam.GetComponent<PlaneCameraRig>();
@@ -874,7 +898,7 @@ namespace PullTheWorld.Tests
                 tex.ReadPixels(new Rect(0f, 0f, ShotWidth, ShotHeight), 0, 0);
                 tex.Apply(false);
 
-                WritePng(path, tex.EncodeToPNG());
+                WritePng(path, ToPng(tex.GetPixels()));
                 Debug.Log($"PTW_CAPTURE {Path.GetFileName(path)} {ShotWidth}x{ShotHeight}");
             }
             finally

@@ -336,16 +336,41 @@ never be soft-locked. Enemies opt out (`respawnIfLost = false`); an enemy that f
 able to press, every plate level collapsed into "tilt towards the plate"; requiring a parked rock
 is what makes them two-move puzzles.
 
-Levels are split into three chapters, each with its own **night** sky (`SkyTheme`: dusk, ember,
-night — differing in hue, not brightness). The daytime backdrop read as flat and grey against the
-reference sheet's night card; a dark sky is what lets the lit island, the amber door and the gems
-carry the frame. The backdrop shader's pool of light behind the island does most of the work of
-making a dark sky read as atmosphere rather than as a black screen.
+## Theme — from the artists' mockups
 
-The post stack is now a real grade: ACES tonemapping, contrast +20, saturation +16, split toning
-(cool `#2C3F6E` shadows, warm `#FFD6A3` highlights), a proper vignette, and bloom raised for the
-emissives. Ambient came down to `#5E6E8C` and the key light up to 1.55 so the island stays the
-brightest lit thing against the dark.
+The look is derived from two reference paintings in `Assets/PullTheWorld/Art/Mockup/`
+(`image (7).png` is gameplay, `image (9).png` is the main menu). They replaced the earlier night
+theme wholesale: a **pastel dawn** — peach-to-lilac sky with a soft sun, three hazy lilac mountain
+ridges, cumulus clouds in front of and behind the island, small floating islets with their own
+portals — around a light-grey stone island capped with mossy grass, a turf fringe, tufts, flowers
+and hanging vines. The player is a **glass orb** (its own shader: fresnel rim, iridescent band,
+fixed highlight) with a four-point star core, an orbit ring, a halo, sparkles and a cyan light.
+The exit is a pointed cream arch with diamond studs and a warm swirling energy fill.
+
+Everything is procedural and lives in three places, so the theme stays swappable: the palette
+and materials in `PtwArt`, the per-chapter sky in `SkyTheme`, and lighting, grade and UI colour in
+`PtwScene`. Lighting is deliberately almost flat — a strong neutral ambient with a weak warm key —
+because in the mockup a block's top face is only ~6% brighter than its front. The grade is close
+to identity: no tonemapping (Neutral and ACES both pull pastels towards grey), saturation +6, a
+light blush vignette, and a warm bloom that only the portal, the orb rim and the studs can reach.
+
+Measured targets from the mockups that the captures are checked against: sky top ≈ (254,214,198),
+stone front face ≈ (214,211,208), grass top ≈ (141,184,106), PLAY button ≈ (121,144,119).
+
+Three things went wrong on the way and are worth knowing about:
+
+* **Captures were linear, not sRGB.** The project renders in Linear colour space and the capture
+  path encoded raw HDR floats. Every screenshot was ~40% too dark and two rounds of art direction
+  chased that. `Grab()` now converts with `Color.gamma`; verified against an sRGB render target.
+* **The post-processing profile never saved its components.** `VolumeProfile.Add()` makes loose
+  objects; without `AssetDatabase.AddObjectToAsset` they are `{fileID: 0}` in the next session, so
+  the grade was silently the URP template's `SampleSceneProfile` (Neutral tonemapping, black
+  vignette). `PtwScene.EnsureProfile` adds them as sub-assets and `ConfigureUrp` makes the profile
+  the pipeline default too.
+* **A zero mesh normal became a screen-sized white disc.** The grass tufts taper to a 0.003-unit
+  tip; `Vector3.Normalize` zeroes anything under 1e-5, the foliage shader's `normalize` turned
+  that into NaN, and bloom's default clamp (65472) inflated one NaN pixel into a block-sized glow.
+  `MeshBuilder.SafeUnit`, `SafeNormalize` in the shaders and a bloom clamp of 12 close all three.
 
 ## Water
 
@@ -373,10 +398,13 @@ There is no fluid sim and there should not be one on a phone. Buoyancy is reckon
 `Feel/PtwMusic.cs`. One slow ambient loop per chapter, **synthesised at runtime** for the same
 reason every sound effect is: the project ships with real audio and zero licensed assets. Each
 loop is four chords of four beats — a soft detuned pad, a plucked arpeggio an octave up, a sub
-bass on each chord change and sparse pentatonic sparkles placed by a seeded RNG — in the
-chapter's own mood: dusk is A minor at 66 BPM, ember D minor at 62, night E minor at 58 with a
-major lift at the end of the loop. The pad releases before each chord ends and the arpeggio rests
-on the last eighth, so the seam is quiet and the clip just loops.
+bass on each chord change and sparse pentatonic sparkles placed by a seeded RNG — in the mood of
+the pastel theme: warm **major** progressions in C, D and F at 50–54 BPM, quiet and dreamy rather
+than atmospheric-dark. The pad releases before each chord ends and the arpeggio rests on the last
+eighth, so the seam is quiet and the clip just loops. Under it sit two generated loops from
+`PtwAudio`: a soft wind-and-birds **ambience**, and a **portal hum** that swells as the orb nears
+the door. Sound effects are bell-based (`PtwAudio.Bell`) — gentle taps, sparkles and a chime on
+entering the portal — instead of arcade blips.
 
 Chapter one is built synchronously at boot (the menu plays it); the other two are built a few
 thousand samples per frame in the background so a chapter change never hitches. Two
@@ -641,11 +669,12 @@ one when none is), or call `AdsManager.SetProvider(...)`. `OnAdClosed` is the an
   velocity as far as the solver is concerned — the player gets pushed out by penetration resolution
   rather than carried. So the platform owns its own kinematic Rigidbody, detaches from the level
   hierarchy at startup, and recomputes its pose from the level's rotation every FixedUpdate.
-* **Music is a setting with nothing behind it.** There is no music track; the toggle persists and
-  gates nothing.
-* Art is close to `PicReference/` but **not converged** — the palette was raised once after a
-  capture-compare pass because the v1 values landed near `#5A6875` on screen against a `#97A3B3`
-  target and the whole frame read as dusk.
+* **The portal's interior is a bright oval, not the mockup's golden mandala.** The energy shader
+  has concentric rings but the bloom and the halo still wash them out at gameplay scale; the next
+  pass should lower the fill's intensity further and let the ring pattern read.
+* **Art is judged against `Assets/PullTheWorld/Art/Mockup/`, not `PicReference/`.** The
+  reference sheets in `PicReference/` describe the earlier night direction and are kept for
+  history only; see the Theme section for the current targets and how captures are compared.
 * **Fixed: the pale line along tilted grass.** It was the grass cap's *front-top chamfer bevel*:
   a 45° strip that faces both up and toward the camera, which makes it the single most-lit surface
   in the scene once the island tilts (dot ≈ 0.95 against 0.88 for the top face), pushed to

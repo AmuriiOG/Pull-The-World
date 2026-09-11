@@ -36,6 +36,8 @@ namespace PullTheWorld
         [SerializeField] AudioClip[] overrideLoops = new AudioClip[0];
 
         AudioSource a, b, live;                  // two sources so chapters crossfade
+        AudioSource ambience;                    // wind and air, under the Sound setting
+        [SerializeField, Range(0f, 1f)] float ambienceVolume = 0.30f;
         readonly Dictionary<int, AudioClip> loops = new Dictionary<int, AudioClip>();
         LevelManager hooked;
         SkyTheme sky;
@@ -81,6 +83,12 @@ namespace PullTheWorld
             sky = FindFirstObjectByType<SkyTheme>();
             PlayChapter(0);                      // the menu sits in chapter one's mood
             StartCoroutine(Pregenerate());
+
+            // Environmental ambience: a soft wind that follows the SOUND setting, not the music one,
+            // so the world still breathes with the music off.
+            ambience = MakeSource();
+            var wind = PtwAudio.Loop(PtwLoop.Ambience);
+            if (wind) { ambience.clip = wind; ambience.Play(); }
         }
 
         void Update()
@@ -92,6 +100,10 @@ namespace PullTheWorld
             var other = live == a ? b : a;
             Fade(other, 0f, step);
             if (other.clip && other.volume <= 0f) { other.Stop(); other.clip = null; }
+
+            if (ambience && ambience.clip)
+                ambience.volume = Mathf.MoveTowards(ambience.volume,
+                    GameProgress.SoundOn ? ambienceVolume * (ducked ? duckVolume : 1f) : 0f, step);
         }
 
         static void Fade(AudioSource s, float target, float step)
@@ -173,40 +185,46 @@ namespace PullTheWorld
             public float[] sparkle;   // pentatonic pool for the sparse high notes, Hz
         }
 
-        // One chart per chapter, in the chapter's sky mood: dusk is open and gentle (A minor),
-        // ember is heavier and lower (D minor), night is slower and stranger (E minor with a
-        // major-chord lift at the end of the loop).
+        // One chart per chapter, all in the pastel theme's voice: slow, major, airy. Four-note
+        // chords (a seventh or a ninth on top) so the pad shimmers rather than blocks; the
+        // arpeggio only ever walks the lower three. Dawn is C, morning D, golden hour F.
         static readonly Chart[] charts =
         {
             new Chart
             {
-                bpm = 66f, detune = 0.0032f, seed = 11,
+                bpm = 54f, detune = 0.0030f, seed = 11,
                 chords = new[]
                 {
-                    new[] { 220f, 261.63f, 329.63f }, new[] { 174.61f, 220f, 261.63f },
-                    new[] { 196f, 261.63f, 329.63f }, new[] { 196f, 246.94f, 293.66f },
+                    new[] { 261.63f, 329.63f, 392.00f, 587.33f },   // C add9
+                    new[] { 220.00f, 261.63f, 329.63f, 392.00f },   // Am7
+                    new[] { 174.61f, 220.00f, 261.63f, 329.63f },   // Fmaj7
+                    new[] { 196.00f, 246.94f, 293.66f, 440.00f },   // G add9
                 },
-                sparkle = new[] { 440f, 523.25f, 587.33f, 659.25f, 783.99f, 880f },
+                sparkle = new[] { 523.25f, 587.33f, 659.25f, 783.99f, 880f, 1046.5f },
             },
             new Chart
             {
-                bpm = 62f, detune = 0.0045f, seed = 23,
+                bpm = 52f, detune = 0.0034f, seed = 23,
                 chords = new[]
                 {
-                    new[] { 146.83f, 174.61f, 220f }, new[] { 174.61f, 233.08f, 293.66f },
-                    new[] { 196f, 233.08f, 293.66f }, new[] { 220f, 277.18f, 329.63f },
+                    new[] { 293.66f, 369.99f, 440.00f, 554.37f },   // Dmaj7
+                    new[] { 196.00f, 246.94f, 293.66f, 329.63f },   // G add9
+                    new[] { 220.00f, 277.18f, 329.63f, 415.30f },   // Amaj7
+                    new[] { 246.94f, 293.66f, 369.99f, 440.00f },   // Bm7
                 },
-                sparkle = new[] { 293.66f, 349.23f, 392f, 440f, 523.25f, 587.33f },
+                sparkle = new[] { 587.33f, 659.25f, 739.99f, 880f, 987.77f, 1174.66f },
             },
             new Chart
             {
-                bpm = 58f, detune = 0.0038f, seed = 37,
+                bpm = 50f, detune = 0.0030f, seed = 37,
                 chords = new[]
                 {
-                    new[] { 164.81f, 196f, 246.94f }, new[] { 196f, 261.63f, 329.63f },
-                    new[] { 220f, 261.63f, 329.63f }, new[] { 246.94f, 293.66f, 369.99f },
+                    new[] { 174.61f, 220.00f, 261.63f, 392.00f },   // F add9
+                    new[] { 146.83f, 174.61f, 220.00f, 261.63f },   // Dm7
+                    new[] { 233.08f, 293.66f, 349.23f, 440.00f },   // Bbmaj7
+                    new[] { 261.63f, 329.63f, 392.00f, 587.33f },   // C add9
                 },
-                sparkle = new[] { 329.63f, 392f, 440f, 493.88f, 587.33f, 659.25f },
+                sparkle = new[] { 698.46f, 783.99f, 880f, 1046.5f, 1174.66f, 1396.91f },
             },
         };
 
@@ -242,9 +260,9 @@ namespace PullTheWorld
                     hits.Add(new Hit
                     {
                         start = k * eighth, hz = ch.chords[c][p] * 2f,
-                        gain = k % 4 == 0 ? 0.20f : 0.13f, decay = 3.1f, bright = 0.45f, hold = 1.6f,
+                        gain = k % 4 == 0 ? 0.14f : 0.09f, decay = 2.4f, bright = 0.30f, hold = 2.0f,
                     });
-                if (rng.NextDouble() < 0.16)
+                if (rng.NextDouble() < 0.12)
                     hits.Add(new Hit
                     {
                         start = k * eighth + eighth * 0.5f * (float)rng.NextDouble(),
@@ -256,7 +274,7 @@ namespace PullTheWorld
                 hits.Add(new Hit
                 {
                     start = c * chordLen, hz = ch.chords[c][0] * 0.5f,
-                    gain = 0.26f, decay = 0.55f, bright = 0.12f, hold = chordLen - 0.15f,
+                    gain = 0.20f, decay = 0.5f, bright = 0.08f, hold = chordLen - 0.15f,
                 });
 
             const float attack = 0.55f, release = 0.8f;
@@ -282,7 +300,7 @@ namespace PullTheWorld
                     for (int k = 0; k < notes.Length; k++)
                     {
                         float ph = 2f * Mathf.PI * notes[k] * vib * t;
-                        pad += Mathf.Sin(ph) + 0.30f * Mathf.Sin(2f * ph + 0.4f) + 0.08f * Mathf.Sin(3f * ph)
+                        pad += Mathf.Sin(ph) + 0.22f * Mathf.Sin(2f * ph + 0.4f) + 0.05f * Mathf.Sin(3f * ph)
                              + 0.60f * Mathf.Sin(ph * (1f + ch.detune));
                     }
                     data[i] = pad * env * trem * 0.11f;

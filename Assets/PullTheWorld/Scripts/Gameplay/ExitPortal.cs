@@ -37,13 +37,13 @@ namespace PullTheWorld
         [SerializeField] Light portalLight;
         [SerializeField] ParticleSystem idleVfx;
         [SerializeField] ParticleSystem arriveVfx;
-        [SerializeField] Color openColor = new Color(1f, 0.78f, 0.35f);
-        [SerializeField] Color lockedColor = new Color(0.45f, 0.52f, 0.60f);
+        [SerializeField] Color openColor = new Color(1f, 0.85f, 0.56f);      // warm cream-amber
+        [SerializeField] Color lockedColor = new Color(0.80f, 0.77f, 0.88f);  // pale lilac, dormant
 
         [Header("Feel")]
         [SerializeField] float basePulseSpeed = 1.4f;
         [SerializeField] float basePulseAmount = 0.05f;
-        [SerializeField] float baseLightIntensity = 2.2f;
+        [SerializeField] float baseLightIntensity = 1.6f;
 
         // PTW/PortalEnergy properties, cached as ids so the per-frame update allocates nothing.
         static readonly int CoreColorId = Shader.PropertyToID("_CoreColor");
@@ -62,11 +62,24 @@ namespace PullTheWorld
         public float Proximity => proximity;
         public bool Reached => consumed;
 
+        AudioSource hum;
+
         void Awake()
         {
             if (!mouth) mouth = transform;
             if (glowQuad) glowBaseScale = glowQuad.localScale;
             mpb = new MaterialPropertyBlock();
+
+            // The portal hums, and the hum swells as you approach. The loop is synthesised once by
+            // PtwAudio; in headless runs there is no audio instance and the source simply stays silent.
+            hum = gameObject.AddComponent<AudioSource>();
+            hum.loop = true;
+            hum.playOnAwake = false;
+            hum.spatialBlend = 0f;
+            hum.volume = 0f;
+            var clip = PtwAudio.Loop(PtwLoop.PortalHum);
+            if (clip) { hum.clip = clip; hum.Play(); }
+
             ApplyGlow(0f);
         }
 
@@ -106,6 +119,7 @@ namespace PullTheWorld
             {
                 consumed = true;
                 if (arriveVfx) arriveVfx.Play();
+                PtwAudio.Play(PtwSfx.PortalEnter, 0.9f);
                 PtwAudio.Play(PtwSfx.Win);
                 Haptics.Play(HapticKind.Win);
                 if (WorldRotator.Instance) WorldRotator.Instance.AddShake(0.35f);
@@ -131,7 +145,9 @@ namespace PullTheWorld
                 // Locked reads as a cold, dim field; unlocked is a hot warm core that blooms.
                 mpb.SetColor(CoreColorId, locked ? c : Color.Lerp(c, Color.white, 0.55f));
                 mpb.SetColor(EdgeColorId, c);
-                mpb.SetFloat(IntensityId, (locked ? 0.55f : 2.3f) * pulse * excite);
+                // 1.35, down from 2.3: the pastel grade has far less headroom than the night one had,
+                // and the doorway was blowing out to a white oval with no rings left in it.
+                mpb.SetFloat(IntensityId, (locked ? 0.45f : 0.75f) * pulse * excite);
                 glowRenderer.SetPropertyBlock(mpb);
             }
             if (portalLight)
@@ -144,6 +160,8 @@ namespace PullTheWorld
                 var em = idleVfx.emission;
                 em.rateOverTimeMultiplier = locked ? 0f : Mathf.Lerp(6f, 22f, p);
             }
+            if (hum)
+                hum.volume = !GameProgress.SoundOn ? 0f : locked ? 0.04f : 0.09f + p * 0.24f;
         }
 
 #if UNITY_EDITOR
