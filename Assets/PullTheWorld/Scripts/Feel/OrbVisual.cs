@@ -20,6 +20,8 @@ namespace PullTheWorld
         [SerializeField] Transform core;
         [SerializeField] Renderer coreRenderer;
         [SerializeField] Transform ring;
+        [Tooltip("The small glint riding on the orbit ring. A child of the ring, so it orbits; kept facing the camera here.")]
+        [SerializeField] Transform bead;
         [SerializeField] Transform halo;
         [SerializeField] Renderer haloRenderer;
         [SerializeField] ParticleSystem sparkles;
@@ -30,7 +32,7 @@ namespace PullTheWorld
         [SerializeField] float ringSpinIdle = 28f;          // deg/s
         [SerializeField] float ringSpinFast = 160f;
         [SerializeField] float fullSpeed = 9f;              // speed at which the glow is at its brightest
-        [SerializeField] Color haloColor = new Color(0.50f, 0.88f, 1f);
+        [SerializeField] Color haloColor = new Color(0.78f, 0.98f, 0.93f);   // mint-white: a soft cool tint on the grass, not a green flare
         [SerializeField] Color coreColor = Color.white;
         [SerializeField] Vector2 chimeEvery = new Vector2(3.5f, 7f);
 
@@ -111,6 +113,7 @@ namespace PullTheWorld
                 // Tilted orbit that slowly precesses, like the mockup's swept ring.
                 ring.localRotation = Quaternion.Euler(64f + Mathf.Sin(t * 0.4f) * 8f, ringAngle, 18f);
                 ring.localScale = ringBase * (1f + breathe * 0.04f + glow * 0.08f);
+                if (bead) bead.rotation = Quaternion.identity;   // a billboard glint, wherever the ring has carried it
             }
 
             if (halo)
@@ -120,13 +123,13 @@ namespace PullTheWorld
                 {
                     haloRenderer.GetPropertyBlock(haloBlock);
                     var c = haloColor;
-                    c.a = 0.38f + breathe * 0.10f + glow * 0.20f;
+                    c.a = 0.12f + breathe * 0.06f + glow * 0.16f;
                     haloBlock.SetColor(BaseColorId, c);
                     haloRenderer.SetPropertyBlock(haloBlock);
                 }
             }
 
-            if (orbLight) orbLight.intensity = 0.8f + breathe * 0.2f + glow * 0.5f;
+            if (orbLight) orbLight.intensity = 0.30f + breathe * 0.10f + glow * 0.35f;
 
             if (sparkles)
             {

@@ -1,10 +1,11 @@
-// The player: a glass orb.
+// The player: an opalescent pearl, after the paintings.
 //
-// Not a sphere with an emissive material. The look is built from view-dependence: the body is
-// nearly clear at the centre and thickens to a cyan rim at grazing angles (fresnel), a second,
-// tighter fresnel band carries an iridescent pink-to-cyan tint that shifts with the view, a fixed
-// upper-left specular lobe sells the glass, and a faint inner haze keeps the centre from reading
-// as a hole. Alpha follows the rim so the star core inside stays visible. Front faces only.
+// Not clear glass with a hard cyan rim (the first version), which read as a bubble outline with a
+// flare in it. The painted orb is a milky, mostly opaque sphere whose hue drifts across its
+// surface - pale cyan upper-left, pink to the right, mint below - with two glass highlights (a
+// broad soft blob upper-right and a crescent along the lower-left edge), a soft luminous centre
+// round the star, and only a thin, pastel, translucent edge. Everything here is view- and
+// normal-based, so it holds up as the ball rolls (the visual is kept upright by OrbVisual).
 //
 // _Pulse and _Boost are driven per frame by OrbVisual: a slow breath while idle and a swell of
 // rim brightness when the orb is moving fast or has just landed.
@@ -12,20 +13,23 @@ Shader "PTW/Orb"
 {
     Properties
     {
-        _BodyColor    ("Body Tint", Color) = (0.86, 0.97, 1.0, 0.16)
-        _RimColor     ("Rim Colour", Color) = (0.50, 0.90, 1.0, 1)
-        _RimPower     ("Rim Power", Range(0.5, 8)) = 2.8
-        _RimStrength  ("Rim Strength", Range(0, 4)) = 1.6
-        _IridA        ("Iridescence A", Color) = (0.98, 0.72, 0.92, 1)
-        _IridB        ("Iridescence B", Color) = (0.62, 0.95, 1.0, 1)
-        _IridStrength ("Iridescence Strength", Range(0, 2)) = 0.55
-        _SpecDir      ("Specular Direction", Vector) = (-0.55, 0.7, -0.45, 0)
-        _SpecPower    ("Specular Power", Range(4, 200)) = 60
-        _SpecStrength ("Specular Strength", Range(0, 2)) = 0.8
-        _HazeColor    ("Inner Haze", Color) = (0.80, 0.95, 1.0, 1)
-        _HazeStrength ("Inner Haze Strength", Range(0, 1)) = 0.12
-        _Pulse        ("Pulse (driven)", Range(0, 1)) = 0
-        _Boost        ("Boost (driven)", Range(0, 2)) = 0
+        _BodyColor        ("Body (milk)", Color) = (0.92, 0.97, 1.0, 0.78)
+        _TintCyan         ("Tint upper-left", Color) = (0.72, 0.93, 0.99, 1)
+        _TintPink         ("Tint right", Color) = (0.96, 0.86, 0.95, 1)
+        _TintMint         ("Tint below", Color) = (0.80, 0.97, 0.88, 1)
+        _CentreGlow       ("Centre Glow", Range(0, 1)) = 0.35
+        _RimColor         ("Rim Colour", Color) = (0.62, 0.91, 0.89, 1)
+        _RimPower         ("Rim Power", Range(0.5, 8)) = 3.0
+        _RimStrength      ("Rim Strength", Range(0, 4)) = 0.6
+        _IridA            ("Iridescence A", Color) = (0.96, 0.75, 0.92, 1)
+        _IridB            ("Iridescence B", Color) = (0.62, 0.94, 1.0, 1)
+        _IridStrength     ("Iridescence Strength", Range(0, 2)) = 0.35
+        _SpecDir          ("Highlight Direction", Vector) = (0.55, 0.65, -0.5, 0)
+        _SpecPower        ("Highlight Power", Range(4, 200)) = 16
+        _SpecStrength     ("Highlight Strength", Range(0, 2)) = 0.85
+        _CrescentStrength ("Crescent Strength", Range(0, 2)) = 0.7
+        _Pulse            ("Pulse (driven)", Range(0, 1)) = 0
+        _Boost            ("Boost (driven)", Range(0, 2)) = 0
     }
 
     SubShader
@@ -36,7 +40,9 @@ Shader "PTW/Orb"
         {
             Name "Orb"
             Blend SrcAlpha OneMinusSrcAlpha
-            ZWrite Off
+            // Writes depth: the body is nearly opaque now, and the star / ring / bead are drawn after
+            // it (queue +3) so the sphere's depth hides the ring's back half and anything behind.
+            ZWrite On
             Cull Back
 
             HLSLPROGRAM
@@ -60,9 +66,9 @@ Shader "PTW/Orb"
             };
 
             CBUFFER_START(UnityPerMaterial)
-                float4 _BodyColor, _RimColor, _IridA, _IridB, _SpecDir, _HazeColor;
-                float  _RimPower, _RimStrength, _IridStrength, _SpecPower, _SpecStrength;
-                float  _HazeStrength, _Pulse, _Boost;
+                float4 _BodyColor, _TintCyan, _TintPink, _TintMint, _RimColor, _IridA, _IridB, _SpecDir;
+                float  _CentreGlow, _RimPower, _RimStrength, _IridStrength, _SpecPower, _SpecStrength, _CrescentStrength;
+                float  _Pulse, _Boost;
             CBUFFER_END
 
             Varyings vert(Attributes IN)
@@ -82,28 +88,40 @@ Shader "PTW/Orb"
                 float3 n = SafeNormalize(IN.normalWS);
                 float3 v = SafeNormalize(IN.viewWS);
                 float ndv = saturate(dot(n, v));
-                float fres = pow(1.0 - ndv, _RimPower);
+                float edge = 1.0 - ndv;
+                float fres = pow(edge, _RimPower);
+                float glow = 1.0 + _Pulse * 0.2 + _Boost;
 
-                float glow = 1.0 + _Pulse * 0.25 + _Boost;
+                // Pearl body, tinted by where on the sphere this is.
+                float wCyan = saturate(-n.x * 0.55 + n.y * 0.45 + 0.35);
+                float wPink = saturate(n.x * 0.75 + 0.15);
+                float wMint = saturate(-n.y * 0.9 - 0.05);
+                half3 body = _BodyColor.rgb;
+                body = lerp(body, _TintCyan.rgb, wCyan * 0.75);
+                body = lerp(body, _TintPink.rgb, wPink * 0.70);
+                body = lerp(body, _TintMint.rgb, wMint * 0.70);
 
-                // Rim: the cyan edge that says "glass with light in it".
+                // Soft luminous centre round the star.
+                body = lerp(body, half3(1.0, 1.0, 1.0), pow(ndv, 5.0) * _CentreGlow * (0.8 + 0.2 * _Pulse));
+
+                // A quiet iridescent band inside the edge, hue sliding with the view.
+                float band = smoothstep(0.25, 0.6, edge) * (1.0 - smoothstep(0.8, 1.0, edge));
+                float hueT = frac(ndv * 2.2 + n.y * 0.35 + _Time.y * 0.05);
+                half3 irid = lerp(_IridA.rgb, _IridB.rgb, abs(hueT * 2.0 - 1.0));
+                body = lerp(body, irid, band * _IridStrength);
+
+                // Thin pastel edge; swells with speed and on impact.
                 half3 rim = _RimColor.rgb * fres * _RimStrength * glow;
 
-                // Iridescence: a band just inside the rim whose hue slides with the view angle.
-                float band = smoothstep(0.15, 0.55, 1.0 - ndv) * (1.0 - smoothstep(0.75, 1.0, 1.0 - ndv));
-                float hueT = frac(ndv * 2.2 + n.y * 0.35 + _Time.y * 0.05);
-                half3 irid = lerp(_IridA.rgb, _IridB.rgb, abs(hueT * 2.0 - 1.0)) * band * _IridStrength;
-
-                // Fixed specular lobe from the upper left.
+                // The two glass highlights from the painting.
                 float3 l = normalize(_SpecDir.xyz);
                 float3 h = SafeNormalize(l + v);
                 float spec = pow(saturate(dot(n, h)), _SpecPower) * _SpecStrength;
+                float3 cdir = normalize(float3(-0.75, -0.55, -0.35));
+                float crescent = smoothstep(0.35, 0.75, edge) * pow(saturate(dot(n, cdir)), 3.0) * _CrescentStrength;
 
-                // Inner haze so the middle is not a perfect hole.
-                half3 haze = _HazeColor.rgb * _HazeStrength * (1.0 - fres) * (0.6 + 0.4 * _Pulse);
-
-                half3 col = _BodyColor.rgb * _BodyColor.a + rim + irid + haze + spec;
-                float alpha = saturate(_BodyColor.a + fres * 0.85 + band * 0.25 * _IridStrength + spec + haze.g * 0.5);
+                half3 col = body + rim + (spec + crescent) * half3(1.0, 1.0, 1.0);
+                float alpha = saturate(_BodyColor.a + fres * 0.6 + spec * 0.5 + crescent * 0.3);
                 return half4(col, alpha);
             }
             ENDHLSL

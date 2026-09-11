@@ -425,6 +425,29 @@ without touching the design or proportions:
   cream-gold): small ones twinkling inside the doorway, a few larger ones drifting in front of the
   frame.
 
+### The orb
+
+Polished against the paintings on 2026-09-12, same brief as the doorway: only the differences,
+no redesign. What the reference orb is, and what changed:
+
+* **An opalescent pearl, not clear glass.** The painted body is milky and mostly opaque, and its
+  hue drifts across the surface: pale cyan upper-left (207,239,251), pink to the right
+  (241,223,242), mint below (214,249,235), white at the core. `PTW/Orb` tints a milky body by the
+  surface normal (`_TintCyan/_TintPink/_TintMint`), keeps a quiet iridescent band, and has only a
+  thin pastel edge - the old hard cyan rim at strength 2.2 read as a bubble outline with a flare
+  in it. Body alpha 0.86, so the pink sky no longer bleeds through the edge.
+* **Two glass highlights.** A broad soft blob upper-right (`_SpecDir` (0.55,0.65,-0.5), power 16)
+  and a crescent along the lower-left edge (`_CrescentStrength`), where the painting has them.
+* **A twinkle, not a flare.** The star texture is the astroid |x|^(2/3)+|y|^(2/3) ≤ 1 - a four-point
+  star whose sides curve inward - over a soft round glow; the core quad is half the ball wide. The
+  same texture serves the sparkles and the portal's glints. The centre glow is kept low (0.12) so
+  the star stays crisp against a tinted body rather than vanishing into white.
+* **A thin pale orbit line with a bead.** The ring mesh is 0.02 wide (was 0.04), its material a
+  translucent mint-white at alpha 0.22 (was cyan at 0.55), and a small billboard glint rides on it
+  as a child of the ring, the way the painting's ring carries one bright knot.
+* **A mint tint on the grass, not a green flare.** Halo and point light are mint-white and softer
+  (halo alpha 0.22 base, light 0.45 base); at speed they still swell.
+
 ### Sky motion
 
 `Feel/SkyLayer.cs` + `Feel/SkyParallax.cs`. Every sky element is a `SkyLayer` child of the

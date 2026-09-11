@@ -294,10 +294,32 @@ namespace PullTheWorld.EditorTools
             UnlitTextured(MParticleSoft, blobTex, Color.white, additive: false);
 
             // The orb's parts. The glass is its own shader; the rest are additive sprites.
-            UnlitTextured(MOrbCore, starTex, new Color(1f, 1f, 1f, 1f), additive: true);
-            UnlitTextured(MOrbSpark, starTex, new Color(0.85f, 0.97f, 1f, 1f), additive: true);
-            UnlitTextured(MOrbRing, whiteTex, new Color(0.72f, 0.95f, 1f, 0.55f), additive: true);
-            UnlitTextured(MOrbGlow, glowTex, new Color(0.50f, 0.88f, 1f, 0.8f), additive: true);
+            // Core star white; sparkles and the ring's bead mint-white; the orbit ring itself a thin
+            // pale translucent line (it was a thick bright cyan hoop); the halo mint-white so the
+            // grass under the orb takes a soft cool tint instead of a green flare.
+            // The star is PAINTED (alpha-blended), not added: an additive white star over a body that
+            // is already near-white saturates to nothing. Painted, it is crisp white on tinted pearl.
+            UnlitTextured(MOrbCore, starTex, new Color(1f, 1f, 1f, 1f), additive: false);
+            UnlitTextured(MOrbSpark, starTex, new Color(0.90f, 0.99f, 0.97f, 1f), additive: true);
+            UnlitTextured(MOrbRing, whiteTex, new Color(0.94f, 1f, 0.98f, 0.22f), additive: true);
+            UnlitTextured(MOrbGlow, glowTex, new Color(0.78f, 0.98f, 0.93f, 0.8f), additive: true);
+            // Draw order round the pearl. The glass is Transparent+2 and WRITES depth (see PtwOrb.shader),
+            // so the star, the ring and its bead go AFTER it (+3): the star sits just inside the front
+            // surface and paints over the body, the ring's front half shows and its back half is
+            // depth-rejected by the sphere. Drawn before the glass, as they were, an 88%-opaque body
+            // simply covered them - the star vanished. The halo stays at 3000, behind the ball.
+            foreach (var id in new[] { MOrbCore, MOrbSpark, MOrbRing })
+            {
+                var om = Get(id);
+                // URP's material validation (run on import, including in batch runs) recomputes a
+                // URP Unlit material's queue from its surface type whenever _QueueControl is Auto,
+                // which silently put these back to 3000 after every build. User override + offset
+                // is the supported way to hold a custom queue on a URP material.
+                om.SetFloat("_QueueOffset", 3f);
+                om.SetFloat("_QueueControl", 1f);
+                om.renderQueue = (int)RenderQueue.Transparent + 3;
+                EditorUtility.SetDirty(om);
+            }
 
             // Sky layers: hazed ridge gradients (UV.y 0 at the base, 1 at the ridge) and cloud puffs.
             UnlitTextured(MMountainFar, MakeGradientTexture("Tex_MountainFar", 4, 64, MountainFarTop, MountainFarBottom),
@@ -378,20 +400,25 @@ namespace PullTheWorld.EditorTools
         {
             var m = LoadOrCreateShader(MOrbGlass, "PTW/Orb");
             if (m == null) return;
-            // More body than the first pass: at alpha 0.16 the glass vanished against cream stone
-            // and only the ring and star were left. The mockup's orb is clearly a pale cyan sphere.
-            m.SetColor("_BodyColor", new Color(0.80f, 0.96f, 1f, 0.32f));
-            m.SetColor("_RimColor", Hex("#6FE3FF"));
-            m.SetFloat("_RimPower", 2.4f);
-            m.SetFloat("_RimStrength", 2.2f);
-            m.SetColor("_IridA", Hex("#F7B0E8"));
-            m.SetColor("_IridB", Hex("#8FF0FF"));
-            m.SetFloat("_IridStrength", 0.85f);
-            m.SetVector("_SpecDir", new Vector4(-0.55f, 0.7f, -0.45f, 0f));
-            m.SetFloat("_SpecPower", 48f);
-            m.SetFloat("_SpecStrength", 1.0f);
-            m.SetColor("_HazeColor", Hex("#BFEFFF"));
-            m.SetFloat("_HazeStrength", 0.24f);
+            // An opalescent pearl, mostly opaque, after the paintings: body samples there are
+            // (207,239,251) upper-left, (241,223,242) right, (214,249,235) below, white at the core.
+            // The first version was clear glass (alpha 0.32) with a hard cyan rim at 2.2 and read as
+            // a bubble outline with a flare in it.
+            m.SetColor("_BodyColor", new Color(0.86f, 0.95f, 0.99f, 0.88f));   // a tinted body, so the white star has something to stand on
+            m.SetColor("_TintCyan", new Color(0.62f, 0.90f, 0.99f));
+            m.SetColor("_TintPink", new Color(0.95f, 0.80f, 0.94f));
+            m.SetColor("_TintMint", new Color(0.72f, 0.96f, 0.84f));
+            m.SetFloat("_CentreGlow", 0.05f);   // at 0.35 the white centre swallowed the star; even 0.12 did
+            m.SetColor("_RimColor", Hex("#9FE8E4"));
+            m.SetFloat("_RimPower", 3.0f);
+            m.SetFloat("_RimStrength", 0.6f);
+            m.SetColor("_IridA", Hex("#DBD6FA"));   // lilac, not pink: the painting's left edge is cyan-lilac, only its right is pink
+            m.SetColor("_IridB", Hex("#B3F5EA"));
+            m.SetFloat("_IridStrength", 0.22f);
+            m.SetVector("_SpecDir", new Vector4(0.70f, 0.75f, -0.35f, 0f));   // the highlight sits upper-right in the paintings, clear of the star
+            m.SetFloat("_SpecPower", 40f);
+            m.SetFloat("_SpecStrength", 0.75f);
+            m.SetFloat("_CrescentStrength", 0.9f);
             m.renderQueue = (int)RenderQueue.Transparent + 2;   // over the water, under the UI
             EditorUtility.SetDirty(m);
         }
@@ -756,16 +783,18 @@ namespace PullTheWorld.EditorTools
                 {
                     float px = (x + 0.5f - half) / half, py = (y + 0.5f - half) / half;
                     float d = Mathf.Sqrt(px * px + py * py);
-                    // Arms: thin along one axis, long along the other, both ways.
-                    float armH = Mathf.Exp(-Mathf.Pow(py / 0.055f, 2f)) * Mathf.Exp(-Mathf.Pow(px / 0.62f, 2f));
-                    float armV = Mathf.Exp(-Mathf.Pow(px / 0.055f, 2f)) * Mathf.Exp(-Mathf.Pow(py / 0.62f, 2f));
-                    // Shorter diagonal arms for sparkle.
-                    float u = (px + py) * 0.7071f, w = (px - py) * 0.7071f;
-                    float armD = (Mathf.Exp(-Mathf.Pow(w / 0.04f, 2f)) * Mathf.Exp(-Mathf.Pow(u / 0.30f, 2f))
-                                + Mathf.Exp(-Mathf.Pow(u / 0.04f, 2f)) * Mathf.Exp(-Mathf.Pow(w / 0.30f, 2f))) * 0.55f;
-                    float core = Mathf.Exp(-Mathf.Pow(d / 0.14f, 2f));
-                    float glow = Mathf.Pow(Mathf.Clamp01(1f - d), 3f) * 0.45f;
-                    float a = Mathf.Clamp01(Mathf.Max(Mathf.Max(armH, armV), Mathf.Max(armD, core)) + glow);
+                    // A four-point TWINKLE, the painting's star: the astroid |x|^(2/3)+|y|^(2/3)<=1,
+                    // whose sides curve inward to sharp points on the axes. (The earlier long thin
+                    // arms read as a lens flare.) Soft-edged, over a soft round glow.
+                    const float reach = 0.80f;
+                    float ax = Mathf.Pow(Mathf.Abs(px) / reach, 2f / 3f);
+                    float ay = Mathf.Pow(Mathf.Abs(py) / reach, 2f / 3f);
+                    // NB Mathf.SmoothStep(a, b, t) INTERPOLATES a..b by t - it is not HLSL's threshold
+                    // smoothstep. Written the other way round this star peaked at alpha 0.1 and the
+                    // orb had no star at all (and every sparkle built from it was a ghost).
+                    float star = 1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((ax + ay - 0.90f) / 0.16f));
+                    float glow = Mathf.Pow(Mathf.Clamp01(1f - d / 0.95f), 2.5f) * 0.42f;
+                    float a = Mathf.Clamp01(star + glow);
                     tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
                 }
             tex.Apply(false, false);

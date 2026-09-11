@@ -652,29 +652,41 @@ namespace PullTheWorld.EditorTools
             glassRend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             glassRend.receiveShadows = false;
 
+            // The painting's star is a crisp four-point twinkle about a third of the ball wide.
             var core = MeshNode("Core", "Mesh_QuadXY", visual.transform, PtwArt.MOrbCore);
-            core.transform.localScale = Vector3.one * 0.42f;
+            // Just in front of the surface: drawn after the depth-writing glass, it must pass its depth
+            // test. Raised 0.12 because a point 0.345 nearer the 20-degree camera projects that much
+            // lower on screen; this puts the star back on the ball's centre.
+            core.transform.localPosition = new Vector3(0f, 0.12f, -0.345f);
+            core.transform.localScale = Vector3.one * 0.38f;   // the painted star is ~40% of the ball wide
             NoShadows(core);
 
+            // A thin pale orbit line with one small glint riding on it, like the painting's.
             var ring = MeshNode("Ring", "Mesh_OrbRing", visual.transform, PtwArt.MOrbRing);
             ring.transform.localScale = Vector3.one * 1.12f;
             ring.transform.localRotation = Quaternion.Euler(64f, 0f, 18f);
             NoShadows(ring);
+            var bead = MeshNode("Bead", "Mesh_QuadXY", ring.transform, PtwArt.MOrbSpark);
+            bead.transform.localPosition = new Vector3(0.482f, 0f, 0f);
+            bead.transform.localScale = Vector3.one * 0.13f;
+            NoShadows(bead);
 
             var halo = MeshNode("Halo", "Mesh_QuadXY", visual.transform, PtwArt.MOrbGlow);
             halo.transform.localPosition = new Vector3(0f, 0f, 0.06f);
-            halo.transform.localScale = Vector3.one * 1.55f;
+            halo.transform.localScale = Vector3.one * 1.75f;
             NoShadows(halo);
 
             var sparkles = Sparkles("Sparkles", visual.transform, PtwArt.Get(PtwArt.MOrbSpark));
 
+            // Mint rather than cyan, and softer: the grass under the painted orb takes a cool tint,
+            // it does not flare green.
             var lightGo = Node("OrbLight", visual.transform);
             lightGo.transform.localPosition = new Vector3(0f, 0.05f, -0.2f);
             var ol = lightGo.AddComponent<Light>();
             ol.type = LightType.Point;
-            ol.color = PtwArt.Cyan;
-            ol.intensity = 0.9f;
-            ol.range = 2.6f;
+            ol.color = PtwArt.Hex("#A9F0DF");
+            ol.intensity = 0.65f;
+            ol.range = 2.4f;
             ol.shadows = LightShadows.None;
 
             // No contact shadow. The orb used to carry a multiply blob under it, kept world-flat by
@@ -691,6 +703,7 @@ namespace PullTheWorld.EditorTools
             Wire(orb, "glass", glassRend);
             Wire(orb, "core", core.transform);
             Wire(orb, "ring", ring.transform);
+            Wire(orb, "bead", bead.transform);
             Wire(orb, "halo", halo.transform);
             Wire(orb, "haloRenderer", halo.GetComponent<MeshRenderer>());
             Wire(orb, "coreRenderer", core.GetComponent<MeshRenderer>());

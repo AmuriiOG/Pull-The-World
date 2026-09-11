@@ -82,7 +82,7 @@ namespace PullTheWorld.EditorTools
             Save(Vine(5, 7), "Mesh_Vine");
             Save(Vine(9, 5), "Mesh_VineShort");
             Save(OrbSphere(), "Mesh_OrbSphere");
-            Save(Annulus(0.46f, 0.50f, 56), "Mesh_OrbRing");
+            Save(Annulus(0.472f, 0.492f, 64), "Mesh_OrbRing");   // thin: a line, not a hoop
             Save(QuadXZ(), "Mesh_QuadXZ");
             Save(QuadXY(), "Mesh_QuadXY");
             Save(WaterTile(6, 1f), "Mesh_WaterTile");
