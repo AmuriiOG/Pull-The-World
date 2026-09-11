@@ -70,6 +70,40 @@ namespace PullTheWorld.EditorTools
         }
 
         /// <summary>
+        /// Renders each chapter's music loop to a 16-bit WAV in Captures/, so the soundtrack can be
+        /// auditioned in any player without launching the game - and so a headless run can at
+        /// least measure it (length, peak, silence).
+        /// </summary>
+        [MenuItem("Pull The World/Render Music To WAV", priority = 41)]
+        public static void RenderMusic()
+        {
+            string dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Captures"));
+            Directory.CreateDirectory(dir);
+            for (int c = 0; c < PtwMusic.ChapterCount; c++)
+            {
+                var data = PtwMusic.Render(c);
+                string path = Path.Combine(dir, $"music_{c + 1}_{PtwMusic.SongName(c)}.wav");
+                WriteWav(path, data, PtwMusic.SampleRate);
+                Debug.Log($"PTW_WAV {path} seconds={data.Length / (float)PtwMusic.SampleRate:F1}");
+            }
+        }
+
+        public static void BatchRenderMusic() => RunBatch(RenderMusic);
+
+        static void WriteWav(string path, float[] samples, int rate)
+        {
+            using var fs = new FileStream(path, FileMode.Create);
+            using var w = new BinaryWriter(fs);
+            int bytes = samples.Length * 2;
+            w.Write(System.Text.Encoding.ASCII.GetBytes("RIFF")); w.Write(36 + bytes);
+            w.Write(System.Text.Encoding.ASCII.GetBytes("WAVE"));
+            w.Write(System.Text.Encoding.ASCII.GetBytes("fmt ")); w.Write(16);
+            w.Write((short)1); w.Write((short)1); w.Write(rate); w.Write(rate * 2); w.Write((short)2); w.Write((short)16);
+            w.Write(System.Text.Encoding.ASCII.GetBytes("data")); w.Write(bytes);
+            foreach (var s in samples) w.Write((short)Mathf.RoundToInt(Mathf.Clamp(s, -1f, 1f) * 32767f));
+        }
+
+        /// <summary>
         /// Player settings the APK actually needs. The application identifier was empty, which
         /// leaves Unity falling back to a com.DefaultCompany.* package - fine for a sideload,
         /// but it is one more thing that makes a test build behave oddly, and it blocks a store

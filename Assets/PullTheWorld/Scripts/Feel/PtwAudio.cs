@@ -186,7 +186,9 @@ namespace PullTheWorld
             generated[PtwSfx.Smother] = Make("ptw_smother", 0.6f, t =>
                 Noise(t) * Env(t, 7f) * 0.35f * (1f - Mathf.Clamp01(t * 1.3f)) + Bell(t, 0f, 330f, 6f) * 0.08f);
 
-            // The rotation tick: a tiny glass tick, barely there.
+            // The rotation tick. No longer played by anything (ImpactFeedback ticks haptically
+            // only - a tick five times a second under the music read as a fault, not as feel);
+            // kept in the bank so the enum and any authored slot stay valid.
             generated[PtwSfx.SpinTick] = Make("ptw_spin_tick", 0.09f, t =>
                 Bell(t, 0f, 2093f, 70f) * 0.16f);
 

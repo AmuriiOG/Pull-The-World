@@ -6,21 +6,30 @@ using UnityEngine;
 namespace PullTheWorld
 {
     /// <summary>
-    /// The soundtrack: one slow ambient loop per chapter, synthesised on first use, crossfaded on
-    /// chapter change, gated by the Music setting.
+    /// The soundtrack: one short, tuneful music-box loop per chapter, synthesised in the
+    /// background on first use, crossfaded on chapter change, gated by the Music setting.
     ///
-    /// Synthesised for the same reason every sound effect is: the project ships with real audio
-    /// and zero licensed assets, and a loop built from the chapter's own chord chart cannot clash
-    /// with its mood. Each loop is four chords of four beats - a soft detuned pad carrying the
-    /// chord, a plucked arpeggio an octave up, a sub bass on each chord change, and a few sparse
-    /// pentatonic sparkles placed by a seeded RNG so the loop is fixed but does not sound gridded.
-    /// The pad releases fully before each chord ends and the arpeggio rests on the last eighth, so
-    /// the loop seam is quiet and the clip simply loops.
+    /// Everything is AUTHORED: a written eight-bar melody over a I-V-vi-IV progression, a harp
+    /// arpeggio under it, a plucked bass on the strong beats and a very quiet pad. Nothing is
+    /// random and nothing is noise-based. The earlier version - a slow drone pad with random
+    /// sparkles, a wind-noise bed underneath and a glass tick on every 18 degrees of rotation -
+    /// was rejected in three rounds ("I don't like it", "sounds like water", "a weird sound when
+    /// I tilt"). A music box is the instrument the theme's glass-bell sound effects already
+    /// imply, and a melody the player can hum is what "music that matches the theme" means for
+    /// a pastel hyper-casual game.
     ///
-    /// Chapter one's loop is built synchronously at boot (it is what the menu plays); the others
-    /// are built a few thousand samples per frame in the background so a chapter change never
-    /// hitches. Slots for authored loops exist (<see cref="overrideLoops"/>): drop a clip in per
-    /// chapter and it replaces the synthesised one.
+    /// Synthesis rules, because every one of these was a bug once:
+    ///  * every partial is sin(2*pi*f*t) with a CONSTANT f - never multiply a varying frequency
+    ///    by t (that was the out-of-tune vibrato);
+    ///  * notes that ring past the end of the loop wrap round into its start, so the seam is
+    ///    genuinely seamless rather than faded;
+    ///  * no noise, no random hits, no per-sample modulation.
+    ///
+    /// Chapters are built a few thousand samples per frame so nothing hitches, chapter one first;
+    /// the menu is silent for about a second and the music then fades in. Slots for authored
+    /// loops exist (<see cref="overrideLoops"/>): drop a clip in per chapter and it replaces the
+    /// synthesised one. "Pull The World/Render Music To WAV" writes the loops to Captures/ so they
+    /// can be auditioned outside the game.
     /// </summary>
     [DefaultExecutionOrder(-190)]
     public class PtwMusic : MonoBehaviour
@@ -36,8 +45,6 @@ namespace PullTheWorld
         [SerializeField] AudioClip[] overrideLoops = new AudioClip[0];
 
         AudioSource a, b, live;                  // two sources so chapters crossfade
-        AudioSource ambience;                    // wind and air, under the Sound setting
-        [SerializeField, Range(0f, 1f)] float ambienceVolume = 0.30f;
         readonly Dictionary<int, AudioClip> loops = new Dictionary<int, AudioClip>();
         LevelManager hooked;
         SkyTheme sky;
@@ -48,6 +55,9 @@ namespace PullTheWorld
         public bool WantsToPlay => GameProgress.MusicOn && chapter >= 0;
         public float LiveVolume => live ? live.volume : 0f;
         public int Chapter => chapter;
+        public static int ChapterCount => songs.Length;
+        public static int SampleRate => Rate;
+        public static string SongName(int c) => songs[Mathf.Clamp(c, 0, songs.Length - 1)].name;
 
         /// <summary>Pause ducking. Static so UI code need not care whether music exists.</summary>
         public static void SetDucked(bool on) => ducked = on;
@@ -83,27 +93,19 @@ namespace PullTheWorld
             sky = FindFirstObjectByType<SkyTheme>();
             PlayChapter(0);                      // the menu sits in chapter one's mood
             StartCoroutine(Pregenerate());
-
-            // Environmental ambience: a soft wind that follows the SOUND setting, not the music one,
-            // so the world still breathes with the music off.
-            ambience = MakeSource();
-            var wind = PtwAudio.Loop(PtwLoop.Ambience);
-            if (wind) { ambience.clip = wind; ambience.Play(); }
         }
 
         void Update()
         {
             Hook();
+            if (chapter >= 0) TryStart();
+
             float target = WantsToPlay ? volume * (ducked ? duckVolume : 1f) : 0f;
             float step = Time.unscaledDeltaTime / Mathf.Max(0.05f, fadeSeconds);   // keeps fading while paused
             Fade(live, target, step);
             var other = live == a ? b : a;
             Fade(other, 0f, step);
             if (other.clip && other.volume <= 0f) { other.Stop(); other.clip = null; }
-
-            if (ambience && ambience.clip)
-                ambience.volume = Mathf.MoveTowards(ambience.volume,
-                    GameProgress.SoundOn ? ambienceVolume * (ducked ? duckVolume : 1f) : 0f, step);
         }
 
         static void Fade(AudioSource s, float target, float step)
@@ -134,7 +136,7 @@ namespace PullTheWorld
             if (!hooked) return;
             int count = Mathf.Max(1, hooked.LevelCount);
             int c = sky ? sky.ChapterFor(hooked.CurrentIndex, count)
-                        : Mathf.Clamp(hooked.CurrentIndex * charts.Length / count, 0, charts.Length - 1);
+                        : Mathf.Clamp(hooked.CurrentIndex * songs.Length / count, 0, songs.Length - 1);
             PlayChapter(c);
         }
 
@@ -142,8 +144,14 @@ namespace PullTheWorld
         {
             if (c == chapter) return;
             chapter = c;
-            var clip = Loop(c);
-            if (!clip) return;
+            TryStart();
+        }
+
+        /// <summary>Puts the chapter's loop on the idle source once it exists; a no-op until then.</summary>
+        void TryStart()
+        {
+            var clip = Loop(chapter);
+            if (!clip || live.clip == clip) return;
             var next = live == a ? b : a;
             next.clip = clip;
             next.volume = 0f;
@@ -154,202 +162,230 @@ namespace PullTheWorld
         AudioClip Loop(int c)
         {
             if (c < overrideLoops.Length && overrideLoops[c]) return overrideLoops[c];
-            if (loops.TryGetValue(c, out var clip) && clip) return clip;
-
-            var it = Synthesise(c, int.MaxValue, made => clip = made);
-            while (it.MoveNext()) { }
-            loops[c] = clip;
-            return clip;
+            return loops.TryGetValue(c, out var clip) ? clip : null;
         }
 
         IEnumerator Pregenerate()
         {
-            for (int c = 0; c < charts.Length; c++)
+            // Chapter one first - it is what the menu plays - then the rest, all in the background.
+            for (int c = 0; c < songs.Length; c++)
             {
                 if (loops.ContainsKey(c)) continue;
-                AudioClip made = null;
-                yield return Synthesise(c, 16384, k => made = k);
-                if (made && !loops.ContainsKey(c)) loops[c] = made;
+                float[] data = null;
+                yield return Synthesise(c, 24576, d => data = d);
+                var clip = AudioClip.Create($"ptw_music_{c}", data.Length, 1, Rate, false);
+                clip.SetData(data, 0);
+                loops[c] = clip;
             }
         }
 
-        // ------------------------------------------------------------------ synthesis -------
-        const int Rate = 44100;
-
-        struct Chart
+        /// <summary>The whole loop, rendered synchronously. For the WAV export and for tests.</summary>
+        public static float[] Render(int chapterIndex)
         {
-            public float bpm;
-            public float detune;      // pad chorus width, as a fraction of pitch
-            public int seed;
-            public float[][] chords;  // four chords, three notes each, Hz
-            public float[] sparkle;   // pentatonic pool for the sparse high notes, Hz
+            float[] data = null;
+            var it = Synthesise(chapterIndex, int.MaxValue, d => data = d);
+            while (it.MoveNext()) { }
+            return data;
         }
 
-        // One chart per chapter, all in the pastel theme's voice: slow, major, airy. Four-note
-        // chords (a seventh or a ninth on top) so the pad shimmers rather than blocks; the
-        // arpeggio only ever walks the lower three. Dawn is C, morning D, golden hour F.
-        static readonly Chart[] charts =
+        // ------------------------------------------------------------------ the songs -------
+        const int Rate = 44100;
+
+        struct Song
         {
-            new Chart
+            public string name;
+            public float bpm;
+            public int[][] chords;                        // one MIDI triad per bar, low to high
+            public (float beat, int midi, float len)[] melody;   // beat from the loop start
+        }
+
+        // Three chapters, one tune each, same family: I-V-vi-IV over eight bars, a music-box
+        // melody that rises through the first half and walks back down to the tonic at the end so
+        // the loop closes on itself. Dawn is C, Morning D (a shade brighter), Golden Hour F (a
+        // shade warmer). MIDI: C4 = 60, C5 = 72.
+        static readonly Song[] songs =
+        {
+            new Song
             {
-                bpm = 54f, detune = 0.0030f, seed = 11,
+                name = "Dawn", bpm = 92f,
                 chords = new[]
                 {
-                    new[] { 261.63f, 329.63f, 392.00f, 587.33f },   // C add9
-                    new[] { 220.00f, 261.63f, 329.63f, 392.00f },   // Am7
-                    new[] { 174.61f, 220.00f, 261.63f, 329.63f },   // Fmaj7
-                    new[] { 196.00f, 246.94f, 293.66f, 440.00f },   // G add9
+                    new[] { 60, 64, 67 }, new[] { 55, 59, 62 }, new[] { 57, 60, 64 }, new[] { 53, 57, 60 },
+                    new[] { 60, 64, 67 }, new[] { 55, 59, 62 }, new[] { 57, 60, 64 }, new[] { 53, 57, 60 },
                 },
-                sparkle = new[] { 523.25f, 587.33f, 659.25f, 783.99f, 880f, 1046.5f },
+                melody = new (float, int, float)[]
+                {
+                    ( 0f, 76, 1f), ( 1f, 79, 1f), ( 2f, 84, 1.5f), ( 3.5f, 79, 0.5f),
+                    ( 4f, 83, 1f), ( 5f, 81, 0.5f), ( 5.5f, 79, 0.5f), ( 6f, 74, 2f),
+                    ( 8f, 72, 1f), ( 9f, 76, 1f), (10f, 81, 1.5f), (11.5f, 76, 0.5f),
+                    (12f, 77, 1f), (13f, 81, 1f), (14f, 79, 0.5f), (14.5f, 77, 0.5f), (15f, 76, 1f),
+                    (16f, 76, 1f), (17f, 79, 1f), (18f, 84, 1f), (19f, 86, 1f),
+                    (20f, 83, 1f), (21f, 86, 1f), (22f, 83, 1f), (23f, 79, 1f),
+                    (24f, 81, 1f), (25f, 84, 1f), (26f, 76, 1f), (27f, 79, 1f),
+                    (28f, 77, 1f), (29f, 76, 1f), (30f, 74, 1f), (31f, 72, 1f),
+                },
             },
-            new Chart
+            new Song
             {
-                bpm = 52f, detune = 0.0034f, seed = 23,
+                name = "Morning", bpm = 96f,
                 chords = new[]
                 {
-                    new[] { 293.66f, 369.99f, 440.00f, 554.37f },   // Dmaj7
-                    new[] { 196.00f, 246.94f, 293.66f, 329.63f },   // G add9
-                    new[] { 220.00f, 277.18f, 329.63f, 415.30f },   // Amaj7
-                    new[] { 246.94f, 293.66f, 369.99f, 440.00f },   // Bm7
+                    new[] { 62, 66, 69 }, new[] { 57, 61, 64 }, new[] { 59, 62, 66 }, new[] { 55, 59, 62 },
+                    new[] { 62, 66, 69 }, new[] { 57, 61, 64 }, new[] { 59, 62, 66 }, new[] { 55, 59, 62 },
                 },
-                sparkle = new[] { 587.33f, 659.25f, 739.99f, 880f, 987.77f, 1174.66f },
+                melody = new (float, int, float)[]
+                {
+                    ( 0f, 78, 1f), ( 1f, 81, 1f), ( 2f, 86, 1.5f), ( 3.5f, 81, 0.5f),
+                    ( 4f, 85, 0.5f), ( 4.5f, 83, 0.5f), ( 5f, 81, 1f), ( 6f, 76, 2f),
+                    ( 8f, 74, 1f), ( 9f, 78, 1f), (10f, 83, 1.5f), (11.5f, 78, 0.5f),
+                    (12f, 79, 1f), (13f, 83, 1f), (14f, 81, 0.5f), (14.5f, 79, 0.5f), (15f, 78, 1f),
+                    (16f, 78, 0.5f), (16.5f, 81, 0.5f), (17f, 86, 1f), (18f, 88, 1f), (19f, 86, 1f),
+                    (20f, 85, 1f), (21f, 88, 1f), (22f, 85, 1f), (23f, 81, 1f),
+                    (24f, 83, 1f), (25f, 86, 1f), (26f, 78, 1f), (27f, 81, 1f),
+                    (28f, 79, 1f), (29f, 78, 1f), (30f, 76, 1f), (31f, 74, 1f),
+                },
             },
-            new Chart
+            new Song
             {
-                bpm = 50f, detune = 0.0030f, seed = 37,
+                name = "GoldenHour", bpm = 84f,
                 chords = new[]
                 {
-                    new[] { 174.61f, 220.00f, 261.63f, 392.00f },   // F add9
-                    new[] { 146.83f, 174.61f, 220.00f, 261.63f },   // Dm7
-                    new[] { 233.08f, 293.66f, 349.23f, 440.00f },   // Bbmaj7
-                    new[] { 261.63f, 329.63f, 392.00f, 587.33f },   // C add9
+                    new[] { 65, 69, 72 }, new[] { 60, 64, 67 }, new[] { 62, 65, 69 }, new[] { 58, 62, 65 },
+                    new[] { 65, 69, 72 }, new[] { 60, 64, 67 }, new[] { 62, 65, 69 }, new[] { 58, 62, 65 },
                 },
-                sparkle = new[] { 698.46f, 783.99f, 880f, 1046.5f, 1174.66f, 1396.91f },
+                melody = new (float, int, float)[]
+                {
+                    ( 0f, 81, 1f), ( 1f, 84, 1f), ( 2f, 86, 1.5f), ( 3.5f, 84, 0.5f),
+                    ( 4f, 88, 0.5f), ( 4.5f, 86, 0.5f), ( 5f, 84, 1f), ( 6f, 79, 2f),
+                    ( 8f, 77, 1f), ( 9f, 81, 1f), (10f, 86, 1.5f), (11.5f, 81, 0.5f),
+                    (12f, 82, 1f), (13f, 86, 1f), (14f, 84, 0.5f), (14.5f, 82, 0.5f), (15f, 81, 1f),
+                    (16f, 81, 1f), (17f, 84, 1f), (18f, 89, 1f), (19f, 86, 1f),
+                    (20f, 88, 1f), (21f, 84, 1f), (22f, 79, 1f), (23f, 84, 1f),
+                    (24f, 86, 1f), (25f, 84, 1f), (26f, 81, 1f), (27f, 77, 1f),
+                    (28f, 82, 1f), (29f, 81, 1f), (30f, 79, 1f), (31f, 77, 1f),
+                },
             },
         };
 
-        /// <summary>One struck note: a pluck, a bass hit or a sparkle.</summary>
-        struct Hit
+        enum Timbre { MusicBox, Harp, Bass }
+
+        struct Note
         {
-            public float start, hz, gain, decay, bright, hold;
+            public float start, hz, gain, decay, hold;
+            public Timbre timbre;
         }
 
-        /// <summary>
-        /// Builds one chapter's loop. Yields after every <paramref name="samplesPerStep"/> samples
-        /// so it can run as a coroutine; pass int.MaxValue to run it straight through.
-        /// </summary>
-        IEnumerator Synthesise(int chapterIndex, int samplesPerStep, Action<AudioClip> done)
-        {
-            var ch = charts[Mathf.Clamp(chapterIndex, 0, charts.Length - 1)];
-            float beat = 60f / ch.bpm, eighth = beat * 0.5f, chordLen = beat * 4f;
-            int chordCount = ch.chords.Length;
-            float loopLen = chordLen * chordCount;
-            int n = Mathf.RoundToInt(loopLen * Rate);
-            var data = new float[n];
+        static float Hz(int midi) => 440f * Mathf.Pow(2f, (midi - 69) / 12f);
 
-            // Score the struck notes first; the pad is computed per sample below.
-            var hits = new List<Hit>();
-            int[] pattern = { 0, 1, 2, 1, 0, 2, 1, -1 };          // -1 rests, so bar ends breathe
-            var rng = new System.Random(ch.seed);
-            int eighths = Mathf.RoundToInt(loopLen / eighth);
-            for (int k = 0; k < eighths; k++)
+        /// <summary>
+        /// Renders one chapter's loop. Yields after roughly <paramref name="samplesPerStep"/>
+        /// samples of work so it can run as a coroutine; pass int.MaxValue to run straight through.
+        /// </summary>
+        static IEnumerator Synthesise(int chapterIndex, int samplesPerStep, Action<float[]> done)
+        {
+            var song = songs[Mathf.Clamp(chapterIndex, 0, songs.Length - 1)];
+            float beat = 60f / song.bpm;
+            int bars = song.chords.Length;
+            float barLen = 4f * beat;
+            int n = Mathf.RoundToInt(bars * barLen * Rate);
+            var data = new float[n];
+            bool stepping = samplesPerStep < int.MaxValue;
+
+            // ---- score ----
+            var notes = new List<Note>();
+            foreach (var (b, midi, _) in song.melody)
+                notes.Add(new Note { start = b * beat, hz = Hz(midi), gain = 0.26f, decay = 2.4f, hold = 2.2f, timbre = Timbre.MusicBox });
+
+            for (int bar = 0; bar < bars; bar++)
             {
-                int c = Mathf.Min(chordCount - 1, (int)(k * eighth / chordLen));
-                int p = pattern[k % pattern.Length];
-                if (p >= 0)
-                    hits.Add(new Hit
+                var ch = song.chords[bar];
+                // Harp: root, fifth, third, fifth - the classic music-box left hand, in eighths.
+                int[] pattern = { ch[0], ch[2], ch[1], ch[2], ch[0], ch[2], ch[1], ch[2] };
+                for (int e = 0; e < 8; e++)
+                    notes.Add(new Note
                     {
-                        start = k * eighth, hz = ch.chords[c][p] * 2f,
-                        gain = k % 4 == 0 ? 0.14f : 0.09f, decay = 2.4f, bright = 0.30f, hold = 2.0f,
+                        start = bar * barLen + e * 0.5f * beat, hz = Hz(pattern[e]),
+                        gain = e % 4 == 0 ? 0.10f : 0.07f, decay = 4.5f, hold = 1.3f, timbre = Timbre.Harp,
                     });
-                if (rng.NextDouble() < 0.12)
-                    hits.Add(new Hit
+                // Bass: the root an octave down, on one and three.
+                for (int k = 0; k < 2; k++)
+                    notes.Add(new Note
                     {
-                        start = k * eighth + eighth * 0.5f * (float)rng.NextDouble(),
-                        hz = ch.sparkle[rng.Next(ch.sparkle.Length)] * (rng.NextDouble() < 0.3 ? 2f : 1f),
-                        gain = 0.05f + 0.05f * (float)rng.NextDouble(), decay = 2.4f, bright = 0.3f, hold = 2f,
+                        start = bar * barLen + k * 2f * beat, hz = Hz(ch[0] - 12),
+                        gain = 0.22f, decay = 1.6f, hold = 2f * beat, timbre = Timbre.Bass,
                     });
             }
-            for (int c = 0; c < chordCount; c++)
-                hits.Add(new Hit
-                {
-                    start = c * chordLen, hz = ch.chords[c][0] * 0.5f,
-                    gain = 0.20f, decay = 0.5f, bright = 0.08f, hold = chordLen - 0.15f,
-                });
 
-            const float attack = 0.55f, release = 0.8f;
-            int i = 0;
-            while (i < n)
+            // ---- struck notes, wrapping round the loop end ----
+            int budget = samplesPerStep;
+            foreach (var note in notes)
             {
-                int i0 = i;
-                int end = samplesPerStep >= n - i ? n : i + samplesPerStep;
+                int s0 = Mathf.RoundToInt(note.start * Rate);
+                int count = Mathf.CeilToInt(note.hold * Rate);
+                float w = 2f * Mathf.PI * note.hz;
+                for (int j = 0; j < count; j++)
+                {
+                    float tau = j / (float)Rate;
+                    float env = Mathf.Exp(-note.decay * tau) * (1f - Mathf.Exp(-tau * 900f))
+                              * Mathf.Clamp01((note.hold - tau) / 0.25f);
+                    float ph = w * tau;
+                    float v;
+                    switch (note.timbre)
+                    {
+                        case Timbre.MusicBox:
+                            // A struck steel tooth: fundamental plus two inharmonic partials that
+                            // die faster than it does. That is what makes it a music box.
+                            v = Mathf.Sin(ph)
+                              + 0.18f * Mathf.Sin(2.756f * ph) * Mathf.Exp(-3f * tau)
+                              + 0.06f * Mathf.Sin(5.404f * ph) * Mathf.Exp(-6f * tau);
+                            break;
+                        case Timbre.Harp:
+                            v = Mathf.Sin(ph) + 0.30f * Mathf.Sin(2f * ph) * Mathf.Exp(-2f * tau) + 0.08f * Mathf.Sin(3f * ph);
+                            break;
+                        default:
+                            v = Mathf.Sin(ph) + 0.20f * Mathf.Sin(2f * ph);
+                            break;
+                    }
+                    data[(s0 + j) % n] += v * env * note.gain;
+                }
+                if (stepping && (budget -= count) <= 0) { budget = samplesPerStep; yield return null; }
+            }
 
-                // Pad: four notes, each a fundamental, two soft partials and a detuned twin, under a
-                // slow tremolo and a slight vibrato, with a per-chord attack/release envelope.
-                //
-                // The vibrato is applied to the PHASE, as the integral of the wobbling frequency:
-                //   phase = 2*pi*f * (t - (d/w) * (cos(w t + c) - cos(c)))
-                // An earlier version multiplied the frequency by (1 + d sin(w t)) and then by t.
-                // That is not a vibrato: the instantaneous pitch of sin(f*(1+d sin(wt))*t) drifts
-                // by f*d*w*t, which grows without bound - about +/-8% (more than a semitone) one
-                // second into the loop and a full siren by the end. That was the "off" music.
-                const float vibHz = 4.6f, vibDepth = 0.0028f;
-                const float vibW = 2f * Mathf.PI * vibHz;
-                for (; i < end; i++)
+            // ---- pad: the triad, very quiet, swelling in and out within each bar ----
+            var padHz = new float[bars][];
+            for (int bar = 0; bar < bars; bar++)
+            {
+                padHz[bar] = new float[3];
+                for (int k = 0; k < 3; k++) padHz[bar][k] = Hz(song.chords[bar][k]);
+            }
+            for (int i0 = 0; i0 < n; i0 += stepping ? samplesPerStep : n)
+            {
+                int end = Mathf.Min(n, i0 + (stepping ? samplesPerStep : n));
+                for (int i = i0; i < end; i++)
                 {
                     float t = i / (float)Rate;
-                    int c = Mathf.Min(chordCount - 1, (int)(t / chordLen));
-                    float lt = t - c * chordLen;
-                    float env = Mathf.SmoothStep(0f, 1f, lt / attack)
-                              * Mathf.SmoothStep(0f, 1f, (chordLen - lt) / release);
-                    float trem = 0.86f + 0.14f * Mathf.Sin(2f * Mathf.PI * 0.31f * t);
-                    float vibT = t - (vibDepth / vibW) * (Mathf.Cos(vibW * t + c) - Mathf.Cos(c));
+                    int bar = Mathf.Min(bars - 1, (int)(t / barLen));
+                    float lt = t - bar * barLen;
+                    float env = Mathf.SmoothStep(0f, 1f, lt / 0.35f) * Mathf.SmoothStep(0f, 1f, (barLen - lt) / 0.45f);
                     float pad = 0f;
-                    var notes = ch.chords[c];
-                    for (int k = 0; k < notes.Length; k++)
+                    var hz = padHz[bar];
+                    for (int k = 0; k < 3; k++)
                     {
-                        float ph = 2f * Mathf.PI * notes[k] * vibT;
-                        pad += Mathf.Sin(ph) + 0.22f * Mathf.Sin(2f * ph + 0.4f) + 0.05f * Mathf.Sin(3f * ph)
-                             + 0.60f * Mathf.Sin(ph * (1f + ch.detune));
+                        float ph = 2f * Mathf.PI * hz[k] * t;
+                        pad += Mathf.Sin(ph) + 0.12f * Mathf.Sin(2f * ph) + 0.5f * Mathf.Sin(ph * 1.003f);
                     }
-                    data[i] = pad * env * trem * 0.11f;
+                    data[i] += pad * env * 0.035f;
                 }
-
-                // Struck notes overlapping this block.
-                foreach (var h in hits)
-                {
-                    int s0 = Mathf.RoundToInt(h.start * Rate);
-                    int s1 = Mathf.Min(n, s0 + Mathf.CeilToInt(h.hold * Rate));
-                    int from = Mathf.Max(s0, i0), to = Mathf.Min(s1, end);
-                    for (int j = from; j < to; j++)
-                    {
-                        float tau = (j - s0) / (float)Rate;
-                        float ph = 2f * Mathf.PI * h.hz * tau;
-                        float env = Mathf.Exp(-h.decay * tau) * (1f - Mathf.Exp(-tau * 240f))
-                                  * Mathf.Clamp01((h.hold - tau) / 0.35f);
-                        data[j] += (Mathf.Sin(ph) + h.bright * Mathf.Sin(2f * ph)) * env * h.gain;
-                    }
-                }
-
-                if (i < n) yield return null;
+                if (stepping && end < n) yield return null;
             }
 
-            // Normalise, and belt-and-braces fades at the seam so nothing can click.
+            // ---- normalise ----
             float peak = 0.001f;
             for (int k = 0; k < n; k++) peak = Mathf.Max(peak, Mathf.Abs(data[k]));
             float norm = 0.8f / peak;
-            int fadeIn = Rate / 25, fadeOut = Rate / 4;
-            for (int k = 0; k < n; k++)
-            {
-                float v = data[k] * norm;
-                if (k < fadeIn) v *= k / (float)fadeIn;
-                if (k >= n - fadeOut) v *= (n - 1 - k) / (float)fadeOut;
-                data[k] = v;
-            }
+            for (int k = 0; k < n; k++) data[k] *= norm;
 
-            var clip = AudioClip.Create($"ptw_music_{chapterIndex}", n, 1, Rate, false);
-            clip.SetData(data, 0);
-            done(clip);
+            done(data);
         }
     }
 }

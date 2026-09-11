@@ -35,10 +35,10 @@ namespace PullTheWorld
         [SerializeField] float rollSpeedReference = 6f;
         [SerializeField] float rollMaxRate = 8f;
 
-        [Header("Rotation ticks")]
-        [Tooltip("Ticks are the main reason turning the world feels physical rather than like " +
-                 "dragging a slider. They must stay quiet and tiny.")]
-        [SerializeField, Range(0f, 1f)] float tickVolume = 0.32f;
+        // Rotation ticks are HAPTIC ONLY. They used to play a glass tick (PtwSfx.SpinTick) every
+        // 18 degrees as well - five ticks a second while dragging - and that repeating tick under
+        // the music was reported three times as "a weird sound when I tilt the level". The tap in
+        // the hand keeps the ratchet feel; the ear gets nothing on a plain turn.
 
         void Awake()
         {
@@ -108,7 +108,6 @@ namespace PullTheWorld
 
         void HandleTick()
         {
-            PtwAudio.Play(PtwSfx.SpinTick, tickVolume, Random.Range(0.94f, 1.06f));
             Haptics.Play(HapticKind.RotateTick);
         }
 

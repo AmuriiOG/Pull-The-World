@@ -429,22 +429,27 @@ There is no fluid sim and there should not be one on a phone. Buoyancy is reckon
 
 ## Music
 
-`Feel/PtwMusic.cs`. One slow ambient loop per chapter, **synthesised at runtime** for the same
-reason every sound effect is: the project ships with real audio and zero licensed assets. Each
-loop is four chords of four beats — a soft detuned pad, a plucked arpeggio an octave up, a sub
-bass on each chord change and sparse pentatonic sparkles placed by a seeded RNG — in the mood of
-the pastel theme: warm **major** progressions in C, D and F at 50–54 BPM, quiet and dreamy rather
-than atmospheric-dark. The pad releases before each chord ends and the arpeggio rests on the last
-eighth, so the seam is quiet and the clip just loops. Under it sit two generated loops from
-`PtwAudio`: a soft wind-and-birds **ambience**, and a **portal hum** that swells as the orb nears
-the door. Sound effects are bell-based (`PtwAudio.Bell`) — gentle taps, sparkles and a chime on
-entering the portal — instead of arcade blips.
+`Feel/PtwMusic.cs`. One short, tuneful **music-box** loop per chapter, **synthesised at runtime**
+for the same reason every sound effect is: the project ships with real audio and zero licensed
+assets. Each loop is eight bars of I–V–vi–IV with an authored melody (music box: a struck-tooth
+tone with two fast-dying inharmonic partials), a harp arpeggio in eighths under it, a plucked bass
+on one and three, and a very quiet pad. Dawn is C at 92 BPM, Morning D at 96, Golden Hour F at 84;
+the three melodies are one family, rising through the first half and walking down to the tonic so
+the loop closes on itself. Notes that ring past the loop end wrap round into its start, so the seam
+is seamless rather than faded. **Nothing is random and nothing is noise-based.** The earlier
+soundtrack — a slow drone pad with RNG sparkles, a wind-noise bed and a glass tick every 18° of
+rotation — was rejected in three rounds ("I don't like it", "sounds like water", "a weird sound
+when I tilt"), and each of those complaints traced to one of those three things. The only other
+loop left is the **portal hum**, which swells as the orb nears the door. Sound effects are
+bell-based (`PtwAudio.Bell`) — gentle taps, sparkles and a chime on entering the portal.
 
-Chapter one is built synchronously at boot (the menu plays it); the other two are built a few
-thousand samples per frame in the background so a chapter change never hitches. Two
+All three loops are built a few thousand samples per frame in the background, chapter one first,
+so nothing hitches: the menu is silent for about a second and the music fades in. Two
 `AudioSource`s crossfade on chapter change; the **Music** setting fades it out and back in; the
 pause screen ducks it. `overrideLoops` has one slot per chapter for an authored track — drop a
-clip in and it replaces the synthesised one.
+clip in and it replaces the synthesised one. **Pull The World → Render Music To WAV** (or
+`PtwBuild.BatchRenderMusic` headless) writes the loops to `Captures/music_*.wav` so they can be
+auditioned in any player without launching the game.
 
 **Why it sounded out of tune until 2026-09-11.** The pad's vibrato was written as
 `sin(2π · f · (1 + d·sin(ωt)) · t)`. That is not a vibrato: the instantaneous pitch of that
@@ -712,6 +717,13 @@ one when none is), or call `AdsManager.SetProvider(...)`. `OnAdClosed` is the an
   velocity as far as the solver is concerned — the player gets pushed out by penetration resolution
   rather than carried. So the platform owns its own kinematic Rigidbody, detaches from the level
   hierarchy at startup, and recomputes its pose from the level's rotation every FixedUpdate.
+* **Fixed: a ticking sound while tilting.** The rotation ratchet played a glass tick every 18° of
+  turn - about five a second while dragging - on top of a haptic tap. Under the music it read as
+  a fault rather than as feel, and was reported as "a weird sound when I tilt the level" after the
+  rolling thuds below were already gone. The ratchet is haptic only now (`ImpactFeedback.HandleTick`);
+  `PtwSfx.SpinTick` stays in the bank unused. The only sounds that can still fire on a plain tilt
+  are a genuine hop of the ball or a rock (quiet, squared volume) and, on water levels, the pour
+  puff while a pool spills over its lip.
 * **Fixed: a knocking sound under the music while rolling, and a white orb at speed.** Both had
   one cause. The level is a compound body with one box collider per block, so a ball rolling
   along a flat row raises `OnCollisionEnter` at every seam, and both `PlayerBody` and
