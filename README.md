@@ -549,13 +549,25 @@ Because the active level is no longer at the origin, the fall checks in `PlayerB
 rules change, not a physics one; the ball's body is untouched. Direct loads (PLAY, restart, level
 select, the tests) still cut: `LoadLevel` moves the root, snaps the camera and rebuilds the preview.
 
-Depth is real now, so the sky had to move back: the mountain ridges stand 340-460 units from the
-lens (behind the level after next), the far clouds 240-520, the three foreground clouds ~30, and
-every `SkyLayer` sizes itself to the frustum at its own distance so the composition is unchanged.
-Fog is linear from 80 to 800 units: nothing on the live island, ~17% on the next level, about a
-third on the one after it, 35-50% on the ridges. The main light casts two shadow cascades to 240
-units so the next level is shaded like the one being played. The painted "far islets" that used to
-stand in for distant levels are gone.
+**The sky is the artists' painting, in layers.** `Art/layered-background` holds the reference
+painting cut into 14 ridges and 12 cloud banks; `PtwScene.BuildSkyLayers` places 11 ridges and 9
+clouds after that reference (the pieces that would land on the next level or under the levels'
+own rocks are left out). Each is a `SkyLayer` quad, a child of the camera at its own distance -
+far lilac skyline at 460, the main sage and blue ranges at 240-280 behind the island, the low
+ridges at 175-195, three foreground clouds at ~40 in front of the island's tip - placed by where
+its painted CONTENT lands (viewport fractions, measured alpha bounds in `PtwSkyAssets`) and how
+tall it is there, so the composition holds on every level's framing and every screen shape. They
+draw on `PTW/SkySprite`, unlit and fog-free, so the paintings keep their own haze.
+
+The sky moves three ways, each scaled by a layer's depth share (`parallax`: far ridge 0.05,
+foreground cloud 0.35): during the push it **lags the lens** by that share of
+`SkyParallax.TravelLagWorld` - the real camera against one that set off later along the same
+line - so a near cloud swells and sinks past while a far ridge barely stirs, and both curves are
+smootherstep so the lag is zero at both ends with zero velocity; during play it **leans** a little
+with the level's tilt and the orb's travel; and the clouds **sway** on slow sines (1-2% of the
+frame, 45-90 s) so nothing ever wanders from its place. Fog is linear from 80 to 800 units on the
+world (nothing on the live island, ~17% on the next level). The main light casts two shadow
+cascades to 240 units so the next level is shaded like the one being played.
 
 ## Water
 

@@ -30,9 +30,10 @@ namespace PullTheWorld
         [SerializeField] int dustAtFullImpact = 7;
         [SerializeField] float shakeAtFullImpact = 0.55f;
         [Tooltip("Seconds after a spawn during which an impact puffs and thuds but does NOT shake " +
-                 "the level: the drop-in landing is the game's doing, not the player's, and a " +
-                 "level that wobbles as it starts reads as a bounce.")]
-        [SerializeField] float spawnGrace = 0.8f;
+                 "the level: the drop-in landing and its settling bounces are the game's doing, " +
+                 "not the player's, and a level that wobbles as it starts reads as a bounce. The " +
+                 "second bounce can land past a second, hence two.")]
+        [SerializeField] float spawnGrace = 2f;
 
         [Header("Rolling")]
         [Tooltip("Speed at which the rolling dust reaches full rate.")]

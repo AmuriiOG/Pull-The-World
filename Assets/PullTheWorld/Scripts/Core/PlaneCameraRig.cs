@@ -64,6 +64,10 @@ namespace PullTheWorld
         [Tooltip("The lens widens by this fraction over the middle of a push and settles back on " +
                  "arrival: a touch of wide-angle exaggerates the rush of the world going past.")]
         [SerializeField, Range(0f, 0.4f)] float travelWiden = 0.10f;
+        [Tooltip("The sky lags the push and catches up: it starts catching up at this fraction of " +
+                 "the journey. Later means a bigger lag mid-push (more parallax), but always zero " +
+                 "again, with zero velocity, when the camera arrives. See SkyParallax.TravelLagWorld.")]
+        [SerializeField, Range(0f, 0.9f)] float skyLagStart = 0.3f;
 
         [Header("Clipping")]
         [SerializeField] float nearClip = 0.05f;
@@ -109,8 +113,7 @@ namespace PullTheWorld
             TravelProgress = 0f;
             lift = 0f;
             widen = 0f;
-            SkyParallax.TravelOffset = Vector2.zero;
-            SkyParallax.DriftBoost = 1f;
+            SkyParallax.TravelLagWorld = Vector3.zero;
             focus = worldFocus;
             FrameExtents(extents);
         }
@@ -132,10 +135,15 @@ namespace PullTheWorld
             travelSeconds = Mathf.Max(0.05f, seconds);
             travelT = 0f;
             inPlace = (travelTo - travelFrom).sqrMagnitude < 0.01f;
+            // Where the lens stands now and where it will stand: the sky's lag is measured
+            // between the real camera and a camera that left later along the same line.
+            travelStartPos = transform.position;
+            travelEndPos = StandFor(travelTo, extTo, CurrentAspect());
             travelling = true;
         }
 
         bool inPlace;
+        Vector3 travelStartPos, travelEndPos;
 
         void Update()
         {
@@ -159,16 +167,11 @@ namespace PullTheWorld
                 lift = travelLift * bump;
                 widen = travelWiden * bump;
                 TravelProgress = u;
-                // The foreground clouds sink out of the way and hurry sideways as the camera
-                // sails past them; the ridges, welded to the lens, barely notice.
-                SkyParallax.TravelOffset = new Vector2(0f, -bump * 2.5f);
-                SkyParallax.DriftBoost = 1f + 3f * bump;
-                if (u >= 1f)
+                bool arrived = u >= 1f;
+                if (arrived)
                 {
                     travelling = false;
                     TravelProgress = 0f;
-                    SkyParallax.TravelOffset = Vector2.zero;
-                    SkyParallax.DriftBoost = 1f;
                     focus = travelTo;
                     minViewWidth = extTo.x;
                     minViewHeight = extTo.y;
@@ -176,6 +179,15 @@ namespace PullTheWorld
                     widen = 0f;
                 }
                 Apply();
+
+                // The sky's lag: the real camera against a camera that set off later along the
+                // same line and catches up by the end. Both curves are smootherstep, so the lag
+                // is zero at both ends and arrives with zero velocity - the layers settle exactly
+                // as the camera does. An in-place re-frame (menu to level) has no lag at all.
+                float catchUp = inPlace ? 1f : Smoother((u - skyLagStart) / Mathf.Max(0.05f, 1f - skyLagStart));
+                SkyParallax.TravelLagWorld = arrived
+                    ? Vector3.zero
+                    : transform.position - Vector3.Lerp(travelStartPos, travelEndPos, catchUp);
                 return;
             }
 
@@ -222,6 +234,27 @@ namespace PullTheWorld
         /// <summary>The camera's forward and up in the world for the fixed pitch. Shared with the layout.</summary>
         public Quaternion Attitude => Quaternion.Euler(pitch, 0f, 0f);
 
+        /// <summary>
+        /// Where the lens stands to frame <paramref name="target"/> with these extents at this
+        /// aspect: back along its own forward by the stand distance, then shifted so the target
+        /// lands at centreViewportPoint. The stand distance comes from the BASE lens, so the
+        /// travel widening is a pure zoom - the camera does not move and the pivot stays put.
+        /// </summary>
+        Vector3 StandFor(Vector3 target, Vector2 extents, float aspect)
+        {
+            float tanHalf = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
+            float forHeight = extents.y * 0.5f / tanHalf;
+            float forWidth = extents.x * 0.5f / (tanHalf * Mathf.Max(0.01f, aspect));
+            float distance = Mathf.Max(forHeight, forWidth);
+
+            Quaternion rot = Attitude;
+            float viewH = 2f * distance * tanHalf;
+            float viewW = viewH * aspect;
+            Vector3 offset = -(rot * Vector3.right) * ((centreViewportPoint.x - 0.5f) * viewW)
+                             - (rot * Vector3.up) * ((centreViewportPoint.y - 0.5f) * viewH);
+            return target - (rot * Vector3.forward) * distance + offset;
+        }
+
         public void Apply()
         {
             if (!cam) cam = GetComponent<Camera>();
@@ -233,27 +266,12 @@ namespace PullTheWorld
             cam.orthographic = false;
             cam.nearClipPlane = nearClip;
             cam.farClipPlane = farClip;
-
-            // The stand distance comes from the BASE lens, so the travel widening is a pure zoom:
-            // the camera does not move and the pivot stays put on screen.
-            float tanHalf = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
-            float forHeight = minViewHeight * 0.5f / tanHalf;
-            float forWidth = minViewWidth * 0.5f / (tanHalf * Mathf.Max(0.01f, aspect));
-            float distance = Mathf.Max(forHeight, forWidth);
             cam.fieldOfView = Mathf.Clamp(fieldOfView * (1f + widen), 2f, 120f);
 
             // Yaw stays 0. Roll stays 0. Only pitch.
-            Quaternion rot = Attitude;
-            transform.rotation = rot;
-
+            transform.rotation = Attitude;
             Vector3 target = lookTarget ? lookTarget.position : focus;
-            float viewH = 2f * distance * tanHalf;
-            float viewW = viewH * aspect;
-
-            Vector3 offset = -(rot * Vector3.right) * ((centreViewportPoint.x - 0.5f) * viewW)
-                             - (rot * Vector3.up) * ((centreViewportPoint.y - 0.5f) * viewH);
-
-            transform.position = target - (rot * Vector3.forward) * distance + offset + Vector3.up * lift;
+            transform.position = StandFor(target, new Vector2(minViewWidth, minViewHeight), aspect) + Vector3.up * lift;
 
             // The backdrop and every sky layer are welded to the camera and sized from its frustum,
             // so they have to be refitted in the same breath as the framing. See ScreenFillQuad.Fit.

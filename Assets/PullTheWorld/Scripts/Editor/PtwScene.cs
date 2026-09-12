@@ -170,7 +170,8 @@ namespace PullTheWorld.EditorTools
             // simulated in world space so a reframe does not drag them.
             PtwPrefabs.Wire(sky, "fireflies", MakeFireflies(go.transform));
 
-            // The rest of the sky: mountains and clouds, all welded to the camera.
+            // The rest of the sky: the painted mountain ridges and cloud banks, each a child of
+            // the camera at its own depth, lagging the push by its share (see BuildSkyLayers).
             BuildSkyLayers(cam);
 
             // The shared parallax shift the layers read (tilt of the level, position of the orb).
@@ -181,79 +182,83 @@ namespace PullTheWorld.EditorTools
         }
 
         /// <summary>
-        /// The mockup's atmosphere, in layers from the back: three hazed mountain ridges and cloud
-        /// puffs drifting between and in front of them. Everything is a SkyLayer child of the
-        /// camera: placed by viewport fraction and sized to the frustum AT ITS OWN DISTANCE, so it
-        /// composes the same on every level's framing and never turns with the world - the
-        /// reference the turning island is read against. The far islands of the mockup are no
-        /// longer painted here: they are the real next two levels, standing in the world (see
-        /// LevelManager.SlotFor), which is why the ridges stand 340-460 units back - behind the
-        /// level after next, in front of nothing but the backdrop.
+        /// The sky, built from the artists' painted layers (Art/layered-background) and composed
+        /// after their reference painting: eleven mountain ridges and nine cloud banks, each on a
+        /// quad that is a child of the camera at its own distance down the line of sight, back to
+        /// front. A layer is placed by where its painted CONTENT lands in the reference (viewport
+        /// fractions, y from the bottom) and how tall it is there, so it composes the same on
+        /// every level's framing and every screen shape - see SkyLayer.
         ///
-        /// It does move, though, in two ways that both scale with depth (see SkyLayer):
-        /// clouds DRIFT sideways on their own, the near ones several times faster than the far
-        /// ones, and every layer takes a share of the SkyParallax shift (level tilt, orb
-        /// position) - a tenth for the far ridge, the whole thing for a cloud in front of the
-        /// island. Ridges never drift (a strip cannot wrap) but they do parallax.
+        /// What it is arranged around: the live island fills the middle of the frame (0.28-0.66)
+        /// and the next level waits in the sky above it (~0.72-0.86), so the far lilac ridges are
+        /// its backdrop, the main sage and blue ranges stand behind the island and show at its
+        /// shoulders and below its tip, the low ridges and the lower cloud banks fill the bottom
+        /// third, and three foreground clouds sit in front of the island's tip like the mockup's.
+        /// The right-middle cloud and the two centre-low haze ridges of the pack are left out: the
+        /// first lands exactly where the next level stands, the others are fillers the levels'
+        /// own rocks now cover.
+        ///
+        /// Every layer stands behind the level after next (170+) except the three foreground
+        /// clouds; their distances are staggered so they sort back to front, and the parallax
+        /// share grows with nearness - a far ridge lags the camera's push by a twentieth, a
+        /// foreground cloud by a third.
         /// </summary>
         static void BuildSkyLayers(Camera cam)
         {
             var root = new GameObject("Sky");
             root.transform.SetParent(cam.transform, false);
 
-            // Mountains: far ridge highest and faintest, near ridge lowest and strongest. Their bases
-            // sit below the frame so no bottom edge ever shows. The 1.4x width leaves room for the
-            // parallax shift on both sides.
-            Ridge(root.transform, cam, "MountainsFar", "Mesh_MountainFar", PtwArt.MMountainFar, 460f, -0.1f, 0.74f, 0.10f);
-            Ridge(root.transform, cam, "MountainsMid", "Mesh_MountainMid", PtwArt.MMountainMid, 400f, -0.1f, 0.60f, 0.18f);
-            Ridge(root.transform, cam, "MountainsNear", "Mesh_MountainNear", PtwArt.MMountainNear, 340f, -0.1f, 0.46f, 0.28f);
-
-            // Clouds. (viewport x, viewport y, width, height - as fractions of the frame - distance,
-            // drift, parallax, near). Behind the mountains in the upper sky, between the far
-            // levels in the middle distance, and three thin ones in FRONT of the island's lower
-            // tip, like the mockup's foreground clouds. The drift speeds are frame-relative (see
-            // SkyLayer) and fast enough to SEE - the near ones cross the frame in ~40 s.
-            var clouds = new[]
+            // (piece, distance, parallax, content centre x, y, content height, sway amplitude, sway period)
+            var layers = new[]
             {
-                (0.18f, 0.73f, 0.58f, 0.15f, 520f, 0.10f, 0.12f, false), (0.74f, 0.65f, 0.67f, 0.17f, 500f, 0.08f, 0.12f, false),
-                (0.46f, 0.56f, 0.53f, 0.135f, 300f, 0.14f, 0.22f, false), (0.92f, 0.49f, 0.58f, 0.15f, 290f, 0.12f, 0.22f, false),
-                (0.08f, 0.44f, 0.62f, 0.16f, 250f, 0.18f, 0.35f, false), (0.60f, 0.39f, 0.53f, 0.135f, 240f, 0.20f, 0.35f, false),
-                (0.28f, 0.10f, 0.89f, 0.21f, 30f, 0.40f, 1.00f, true), (0.82f, 0.05f, 0.84f, 0.20f, 28f, 0.46f, 1.00f, true),
-                (0.55f, 0.16f, 0.67f, 0.165f, 34f, 0.36f, 0.85f, true),
+                // Far lilac skyline, the next level's backdrop.
+                (PtwSkyAssets.Mountain01, 460f, 0.05f, 0.52f, 0.797f, 0.085f, 0f, 0f),
+                (PtwSkyAssets.Mountain02, 440f, 0.06f, 0.146f, 0.77f, 0.135f, 0f, 0f),
+                (PtwSkyAssets.Mountain03, 440f, 0.06f, 0.90f, 0.776f, 0.0875f, 0f, 0f),
+                // High clouds: the thin wisp by the sun, the two upper-corner banks.
+                (PtwSkyAssets.Cloud02, 420f, 0.07f, 0.47f, 0.87f, 0.019f, 0.006f, 90f),
+                (PtwSkyAssets.Cloud01, 400f, 0.08f, 0.15f, 0.83f, 0.111f, 0.008f, 75f),
+                (PtwSkyAssets.Cloud04, 400f, 0.08f, 0.956f, 0.86f, 0.057f, 0.008f, 82f),
+                // Middle-distance ranges.
+                (PtwSkyAssets.Mountain04, 380f, 0.09f, 0.678f, 0.68f, 0.091f, 0f, 0f),
+                (PtwSkyAssets.Mountain05, 350f, 0.11f, 0.20f, 0.71f, 0.1375f, 0f, 0f),
+                (PtwSkyAssets.Mountain06, 340f, 0.12f, 0.85f, 0.61f, 0.118f, 0f, 0f),
+                // The diagonal cloud row, then the main ranges behind the island.
+                (PtwSkyAssets.Cloud06, 300f, 0.16f, 0.33f, 0.596f, 0.136f, 0.012f, 64f),
+                (PtwSkyAssets.Mountain07, 280f, 0.18f, 0.32f, 0.53f, 0.175f, 0f, 0f),
+                (PtwSkyAssets.Cloud08, 250f, 0.22f, 0.35f, 0.393f, 0.158f, 0.014f, 58f),
+                (PtwSkyAssets.Mountain09, 240f, 0.24f, 0.83f, 0.44f, 0.109f, 0f, 0f),
+                // The lower bank and the low ridges under the island.
+                (PtwSkyAssets.Cloud09, 210f, 0.28f, 0.776f, 0.267f, 0.119f, 0.016f, 52f),
+                (PtwSkyAssets.Mountain11, 195f, 0.30f, 0.29f, 0.24f, 0.099f, 0f, 0f),
+                (PtwSkyAssets.Mountain12, 185f, 0.32f, 0.74f, 0.15f, 0.111f, 0f, 0f),
+                (PtwSkyAssets.Mountain13, 175f, 0.34f, 0.24f, 0.165f, 0.115f, 0f, 0f),
+                // Foreground clouds, in front of the island's tip.
+                (PtwSkyAssets.Cloud10, 40f, 0.35f, 0.10f, 0.088f, 0.076f, 0.02f, 46f),
+                (PtwSkyAssets.Cloud11, 42f, 0.35f, 0.543f, 0.07f, 0.112f, 0.018f, 50f),
+                (PtwSkyAssets.Cloud12, 38f, 0.36f, 0.946f, 0.10f, 0.097f, 0.02f, 44f),
             };
-            int i = 0;
-            foreach (var (x, y, w, h, z, drift, parallax, near) in clouds)
+
+            foreach (var (piece, distance, parallax, x, y, height, sway, period) in layers)
             {
-                var c = PtwPrefabs.MeshNode($"Cloud{i++}", "Mesh_QuadXY", root.transform,
-                                            near ? PtwArt.MCloudNear : PtwArt.MCloud);
-                var r = c.GetComponent<MeshRenderer>();
+                var mat = PtwArt.SkySprite(piece);
+                if (!mat) continue;
+                var go = PtwPrefabs.MeshNode(piece.Id.Substring(6), "Mesh_QuadXY", root.transform, piece.Id);
+                var r = go.GetComponent<MeshRenderer>();
                 r.shadowCastingMode = ShadowCastingMode.Off;
                 r.receiveShadows = false;
-                var layer = c.AddComponent<SkyLayer>();
+                var layer = go.AddComponent<SkyLayer>();
                 PtwPrefabs.Wire(layer, "targetCamera", cam);
-                PtwPrefabs.Wire(layer, "distance", z);
-                PtwPrefabs.Wire(layer, "centred", true);
+                PtwPrefabs.Wire(layer, "distance", distance);
                 PtwPrefabs.Wire(layer, "viewportPos", new Vector2(x, y));
-                PtwPrefabs.Wire(layer, "viewportSize", new Vector2(w, h));
-                PtwPrefabs.Wire(layer, "driftSpeed", drift);
+                PtwPrefabs.Wire(layer, "heightFraction", height);
+                PtwPrefabs.Wire(layer, "aspect", piece.Aspect);
+                PtwPrefabs.Wire(layer, "contentCentre", piece.Centre);
+                PtwPrefabs.Wire(layer, "contentSize", piece.Size);
                 PtwPrefabs.Wire(layer, "parallax", parallax);
+                PtwPrefabs.Wire(layer, "swayAmplitude", sway);
+                PtwPrefabs.Wire(layer, "swayPeriod", period);
             }
-        }
-
-        static void Ridge(Transform parent, Camera cam, string name, string mesh, string mat,
-                          float distance, float bottom, float top, float parallax)
-        {
-            var go = PtwPrefabs.MeshNode(name, mesh, parent, mat);
-            var r = go.GetComponent<MeshRenderer>();
-            r.shadowCastingMode = ShadowCastingMode.Off;
-            r.receiveShadows = false;
-            var layer = go.AddComponent<SkyLayer>();
-            PtwPrefabs.Wire(layer, "targetCamera", cam);
-            PtwPrefabs.Wire(layer, "distance", distance);
-            PtwPrefabs.Wire(layer, "viewportBottom", bottom);
-            PtwPrefabs.Wire(layer, "viewportTop", top);
-            PtwPrefabs.Wire(layer, "widthScale", 1.4f);
-            PtwPrefabs.Wire(layer, "parallax", parallax);
         }
 
         static ParticleSystem MakeFireflies(Transform cameraTransform)

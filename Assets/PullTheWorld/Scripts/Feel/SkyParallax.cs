@@ -21,10 +21,12 @@ namespace PullTheWorld
     public class SkyParallax : MonoBehaviour
     {
         public static Vector2 Offset { get; private set; }
-        /// <summary>Extra shift during a level-to-level camera glide, set by PlaneCameraRig. Zero otherwise.</summary>
-        public static Vector2 TravelOffset;
-        /// <summary>Cloud drift multiplier during a glide, set by PlaneCameraRig. One otherwise.</summary>
-        public static float DriftBoost = 1f;
+        /// <summary>
+        /// World-space vector by which a layer with parallax 1 lags the lens during a push, set by
+        /// PlaneCameraRig every travel frame: the camera's displacement from the point it would be
+        /// at had it left later. Zero at rest and at the end of a push, with zero velocity there.
+        /// </summary>
+        public static Vector3 TravelLagWorld;
 
         [Tooltip("World units the nearest layer (parallax 1) slides sideways at a quarter turn.")]
         [SerializeField] float tiltShift = 1.1f;
@@ -39,8 +41,8 @@ namespace PullTheWorld
 
         Vector2 current;
 
-        void OnEnable() { current = Vector2.zero; Offset = Vector2.zero; }
-        void OnDisable() { Offset = Vector2.zero; }
+        void OnEnable() { current = Vector2.zero; Offset = Vector2.zero; TravelLagWorld = Vector3.zero; }
+        void OnDisable() { Offset = Vector2.zero; TravelLagWorld = Vector3.zero; }
 
         void Update()
         {

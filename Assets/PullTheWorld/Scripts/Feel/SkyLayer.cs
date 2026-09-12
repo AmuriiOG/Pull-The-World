@@ -3,106 +3,109 @@ using UnityEngine;
 namespace PullTheWorld
 {
     /// <summary>
-    /// A background layer welded to the camera: mountains, cloud puffs, far islets. Positioned by
-    /// VIEWPORT fraction and sized to the frustum, so it lands in the same place on screen whatever
-    /// the level's framing. It never moves with the world's rotation - the backdrop is still the
-    /// reference the turning island is read against - but it is not frozen either:
+    /// One painted layer of the sky - a mountain ridge or a cloud bank - on a quad that is a child
+    /// of the camera, at its own distance down the line of sight. Placed by where its painted
+    /// CONTENT should land on screen (viewport fractions) and sized by how tall that content
+    /// should be as a fraction of the frame, measured at the layer's own distance; so the same
+    /// composition holds on every level's framing and on every screen shape, and the quad's
+    /// transparent margins never enter into it.
     ///
-    ///  * <see cref="driftSpeed"/>: clouds glide sideways on their own and wrap at the frustum
-    ///    edge, the near ones faster than the far ones. Ridges do not drift (they cannot wrap).
-    ///  * <see cref="parallax"/>: each layer takes a fraction of <see cref="SkyParallax.Offset"/>,
-    ///    a small shared shift driven by the level's tilt and the orb's position. Far ridge ~0.1,
-    ///    a cloud in front of the island ~1. It is a translation, never a rotation, so it adds
-    ///    depth without re-creating the "which one is turning" ambiguity.
-    ///  * <see cref="bobAmplitude"/>: a slow vertical float, for the islets.
+    /// It never turns with the world - the sky is the still reference the turning island is read
+    /// against - but it is not welded to the screen either. It moves in three small ways, each
+    /// scaled by <see cref="parallax"/>, which stands in for depth (far ridge ~0.05, foreground
+    /// cloud ~0.35):
     ///
-    /// For a unit mesh (x -0.5..0.5, y 0..1): the base sits at <see cref="viewportBottom"/> and
-    /// the top at <see cref="viewportTop"/>, width is the frustum width times <see cref="widthScale"/>.
-    /// For a quad sprite (x,y -0.5..0.5) use <see cref="centred"/>: placed at (viewportX, viewportY)
-    /// and sized as a fraction of the frame, so it looks the same however far back it sits.
-    ///
-    /// Works for a perspective camera as well as an orthographic one: the frame is measured at
-    /// the layer's own distance, which is what lets the ridges stand hundreds of units back,
-    /// behind the levels waiting in the distance, and still fill the same part of the screen.
+    ///  * PUSH. While the camera travels to the next level it lags behind the lens by its share
+    ///    of <see cref="SkyParallax.TravelLagWorld"/> and catches up as the camera settles, so a
+    ///    near cloud swells and sinks past while a far ridge barely stirs - the depth of the
+    ///    scene, read off the one move the camera makes. Zero at rest, zero velocity at the end.
+    ///  * TILT and FOLLOW. A fraction of <see cref="SkyParallax.Offset"/>: as the level tips and
+    ///    the orb travels, the sky leans a little, near layers most.
+    ///  * SWAY. Clouds drift a hair sideways on a slow sine, each with its own phase, so the sky
+    ///    is alive without the composition ever wandering.
     /// </summary>
     [ExecuteAlways]
     public class SkyLayer : MonoBehaviour
     {
         [SerializeField] Camera targetCamera;
-        [SerializeField] float distance = 60f;
-        [Header("Strip (unit mesh, base at y 0)")]
-        [SerializeField] float viewportBottom = 0f;
-        [SerializeField] float viewportTop = 0.5f;
-        [SerializeField] float widthScale = 1.6f;
-        [Header("Centred sprite")]
-        [SerializeField] bool centred;
-        [SerializeField] Vector2 viewportPos = new Vector2(0.5f, 0.5f);
-        [Tooltip("Width and height as fractions of the frame at this layer's distance.")]
-        [SerializeField] Vector2 viewportSize = new Vector2(0.5f, 0.15f);
-        [Header("Motion")]
-        [Tooltip("World units per second along x. Wraps at the frustum edge. Zero for mountains.")]
-        [SerializeField] float driftSpeed;
-        [Tooltip("Share of the SkyParallax offset this layer takes. Far ridge ~0.1, mid clouds " +
-                 "~0.3, a cloud in front of the island 1.")]
-        [SerializeField, Range(0f, 1.5f)] float parallax;
-        [Tooltip("Slow vertical float in world units (islets). Zero for everything else.")]
-        [SerializeField] float bobAmplitude;
-        [SerializeField] float bobHz = 0.07f;
+        [Tooltip("Distance down the line of sight. Everything behind the level after next is 170+.")]
+        [SerializeField] float distance = 300f;
 
-        float driftX, bobPhase;
+        [Header("Placement (of the painted content)")]
+        [Tooltip("Where the content's centre lands, as viewport fractions.")]
+        [SerializeField] Vector2 viewportPos = new Vector2(0.5f, 0.5f);
+        [Tooltip("Height of the content as a fraction of the frame height.")]
+        [SerializeField] float heightFraction = 0.1f;
+        [Tooltip("Canvas width / height of the sprite.")]
+        [SerializeField] float aspect = 2f;
+        [Tooltip("Content centre within the canvas, as fractions; y from the TOP.")]
+        [SerializeField] Vector2 contentCentre = new Vector2(0.5f, 0.5f);
+        [Tooltip("Content size within the canvas, as fractions.")]
+        [SerializeField] Vector2 contentSize = new Vector2(0.9f, 0.6f);
+
+        [Header("Motion")]
+        [Tooltip("Share of the sky's parallax this layer takes: the push lag, the tilt lean. " +
+                 "Far ridge ~0.05, mid cloud ~0.2, foreground cloud ~0.35.")]
+        [SerializeField, Range(0f, 1f)] float parallax = 0.1f;
+        [Tooltip("Sideways sway amplitude as a fraction of the frame width. Zero for ridges.")]
+        [SerializeField] float swayAmplitude;
+        [SerializeField] float swayPeriod = 60f;
+
+        float swayPhase;
 
         void OnEnable()
         {
             if (!targetCamera) targetCamera = GetComponentInParent<Camera>();
-            // Spread the islets' bobbing out so they do not rise and fall as one.
-            bobPhase = (GetInstanceID() & 1023) * (Mathf.PI * 2f / 1024f);
+            // Spread the clouds' sway out so they do not breathe as one.
+            swayPhase = (GetInstanceID() & 1023) * (Mathf.PI * 2f / 1024f);
             Fit();
         }
 
-        void LateUpdate()
-        {
-            if (Application.isPlaying && Mathf.Abs(driftSpeed) > 0.0001f) driftX += driftSpeed * SkyParallax.DriftBoost * Time.deltaTime;
-            Fit();
-        }
+        void LateUpdate() => Fit();
 
         public void Fit()
         {
             if (!targetCamera) return;
-            float aspect = targetCamera.pixelHeight > 0
+            float aspectScreen = targetCamera.pixelHeight > 0
                 ? targetCamera.pixelWidth / (float)targetCamera.pixelHeight
                 : 0.5625f;
-            // Half the frame at this layer's distance.
+
+            // Half the frame at this layer's distance, before any push lag.
             float halfH = targetCamera.orthographic
                 ? targetCamera.orthographicSize
                 : distance * Mathf.Tan(targetCamera.fieldOfView * 0.5f * Mathf.Deg2Rad);
-            float halfW = halfH * aspect;
-            // The parallax shift is specified for a ~20-unit-tall frame; scale it with the frame
-            // so a far layer moves the same fraction of the screen whatever its distance.
-            float shiftScale = halfH / 10f;
+            float halfW = halfH * aspectScreen;
 
-            Vector2 shift = (SkyParallax.Offset + SkyParallax.TravelOffset) * parallax * shiftScale;
-            float bob = Application.isPlaying && bobAmplitude > 0f
-                ? Mathf.Sin(Time.time * bobHz * Mathf.PI * 2f + bobPhase) * bobAmplitude * shiftScale
-                : 0f;
+            // The quad from the content: tall enough that the painted part is heightFraction of
+            // the frame, wide by the canvas aspect, and centred so the CONTENT sits at viewportPos.
+            float quadH = heightFraction / Mathf.Max(0.05f, contentSize.y) * 2f * halfH;
+            float quadW = quadH * aspect;
+            float x = (viewportPos.x - 0.5f) * 2f * halfW - (contentCentre.x - 0.5f) * quadW;
+            float y = (viewportPos.y - 0.5f) * 2f * halfH + (contentCentre.y - 0.5f) * quadH;
+
+            // Tilt / follow lean, specified for a ~20-unit frame and scaled with this frame.
+            float shiftScale = halfH / 10f;
+            Vector2 lean = SkyParallax.Offset * parallax * shiftScale;
+            x += lean.x;
+            y += lean.y;
+
+            // Sway.
+            if (Application.isPlaying && swayAmplitude > 0f && swayPeriod > 0.1f)
+                x += Mathf.Sin(Time.time * (Mathf.PI * 2f / swayPeriod) + swayPhase) * swayAmplitude * 2f * halfW;
+
+            // Push lag: the layer stays behind while the lens moves on, by its share. In camera
+            // space that is closer and lower, which is what things do when you fly over them.
+            // The forward part is capped so a near cloud can never reach the lens.
+            Vector3 lag = Vector3.zero;
+            if (SkyParallax.TravelLagWorld.sqrMagnitude > 1e-8f)
+            {
+                lag = targetCamera.transform.InverseTransformDirection(SkyParallax.TravelLagWorld) * parallax;
+                lag.z = Mathf.Min(lag.z, distance * 0.45f);
+            }
 
             transform.localRotation = Quaternion.identity;
-            if (centred)
-            {
-                var size = new Vector2(viewportSize.x * 2f * halfW, viewportSize.y * 2f * halfH);
-                float wrapW = halfW * 2f + size.x;
-                float x = (viewportPos.x - 0.5f) * 2f * halfW + driftX * shiftScale + shift.x;
-                x = Mathf.Repeat(x + wrapW * 0.5f, wrapW) - wrapW * 0.5f;
-                float y = (viewportPos.y - 0.5f) * 2f * halfH + shift.y + bob;
-                transform.localPosition = new Vector3(x, y, distance);
-                transform.localScale = new Vector3(size.x, size.y, 1f);
-            }
-            else
-            {
-                float bottom = (viewportBottom - 0.5f) * 2f * halfH;
-                float top = (viewportTop - 0.5f) * 2f * halfH;
-                transform.localPosition = new Vector3(driftX * shiftScale + shift.x, bottom + shift.y, distance);
-                transform.localScale = new Vector3(halfW * 2f * widthScale, Mathf.Max(0.01f, top - bottom), 1f);
-            }
+            transform.localPosition = new Vector3(x - lag.x, y - lag.y, distance - lag.z);
+            transform.localScale = new Vector3(quadW, quadH, 1f);
         }
     }
 }

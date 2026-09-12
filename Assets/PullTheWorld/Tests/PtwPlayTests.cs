@@ -1042,6 +1042,12 @@ namespace PullTheWorld.Tests
             yield return WaitForHint();
             yield return Grab(Path.Combine(dir, "ui_04_hud.png"));
 
+            // The same view with the level tilted: the sky leans a little the other way (SkyParallax).
+            yield return RotateTo(30f, 3f);
+            yield return Wait(0.6f);
+            yield return Grab(Path.Combine(dir, "ui_04b_hud_tilted.png"));
+            yield return RotateTo(0f, 3f);
+
             // Settings over a paused level. The clock is stopped, so wait on real time.
             var pauseBtn = FindButton("PauseButton");
             Assert.IsNotNull(pauseBtn, "HUD has no PauseButton");

@@ -73,9 +73,6 @@ namespace PullTheWorld.EditorTools
             Save(BouncePad(), "Mesh_BouncePad");
 
             // Pastel theme: sky layers, vegetation, the orb.
-            Save(MountainRidge(11, 0.22f, 0.78f, 5), "Mesh_MountainFar");
-            Save(MountainRidge(23, 0.18f, 0.70f, 4), "Mesh_MountainMid");
-            Save(MountainRidge(37, 0.14f, 0.62f, 3), "Mesh_MountainNear");
             Save(GrassFringe(), "Mesh_GrassFringe");
             Save(GrassTufts(), "Mesh_GrassTufts");
             Save(Flower(), "Mesh_Flower");
@@ -441,63 +438,6 @@ namespace PullTheWorld.EditorTools
 
         /// <summary>Angle (from the arc centre) at which the inner arc reaches x = 0, the apex.</summary>
         static float ApexAngle() => Mathf.Acos(ArchInner / ArchInnerRadius) * Mathf.Rad2Deg;   // 60 for an equilateral arch
-
-        // ======================================================================= sky ========
-        /// <summary>
-        /// One layer of background mountains: a unit-wide strip (x -0.5..0.5, y 0..1) whose top
-        /// edge is a ridgeline of a few soft peaks with noise on top. UV.y runs 0 at the base and 1
-        /// at the ridge so a gradient texture hazes the tops. SkyLayer stretches it to the frustum.
-        /// </summary>
-        static Mesh MountainRidge(int seed, float baseline, float amplitude, int peaks)
-        {
-            var mb = new MeshBuilder();
-            var rnd = new System.Random(seed);
-            var centres = new float[peaks];
-            var widths = new float[peaks];
-            var heights = new float[peaks];
-            for (int i = 0; i < peaks; i++)
-            {
-                centres[i] = Mathf.Lerp(-0.55f, 0.55f, (i + 0.5f) / peaks) + ((float)rnd.NextDouble() - 0.5f) * 0.18f;
-                widths[i] = 0.16f + (float)rnd.NextDouble() * 0.16f;
-                heights[i] = 0.55f + (float)rnd.NextDouble() * 0.45f;
-            }
-
-            float Ridge(float x)
-            {
-                float h = 0f;
-                for (int i = 0; i < peaks; i++)
-                {
-                    float d = Mathf.Abs(x - centres[i]) / widths[i];
-                    // Slightly rounded peak: a triangle blended with a cosine bump.
-                    float tri = Mathf.Max(0f, 1f - d);
-                    float bump = d < 1f ? 0.5f + 0.5f * Mathf.Cos(d * Mathf.PI) : 0f;
-                    h = Mathf.Max(h, heights[i] * Mathf.Lerp(tri, bump, 0.35f));
-                }
-                float n = Mathf.PerlinNoise(x * 9f + seed * 3.1f, seed * 0.7f) - 0.5f;
-                return Mathf.Clamp01(baseline + amplitude * h + n * 0.06f);
-            }
-
-            // Shared vertices with UV.y = absolute height, so the haze gradient is continuous
-            // across the strip. Per-quad UVs (0 at each quad's base, 1 at ITS ridge) stretched the
-            // gradient differently in every column and drew vertical bands down the mountains.
-            const int cols = 96;
-            var bottom = new int[cols + 1];
-            var top = new int[cols + 1];
-            for (int i = 0; i <= cols; i++)
-            {
-                float x = -0.5f + i / (float)cols;
-                float h = Ridge(x);
-                bottom[i] = mb.AddVertex(new Vector3(x, 0f, 0f), Vector3.back, new Vector2(0.5f, 0f));
-                top[i] = mb.AddVertex(new Vector3(x, h, 0f), Vector3.back, new Vector2(0.5f, h));
-            }
-            for (int i = 0; i < cols; i++)
-            {
-                // Two triangles per column, wound to face -Z (the camera looks along +Z).
-                mb.AddTriangle(0, bottom[i], top[i], top[i + 1]);
-                mb.AddTriangle(0, bottom[i], top[i + 1], bottom[i + 1]);
-            }
-            return mb.ToMesh("MountainRidge");
-        }
 
         // ================================================================ vegetation ========
         /// <summary>

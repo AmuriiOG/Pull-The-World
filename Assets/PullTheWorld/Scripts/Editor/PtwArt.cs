@@ -95,9 +95,6 @@ namespace PullTheWorld.EditorTools
         // the far ridges are almost the sky's lilac, the near ones a soft teal-grey.
         // The mockup's ridges go from lilac at the back to grey-teal at the front (near ridges
         // sample ~(150,165,160)); the first pass had every ridge lilac-blue.
-        public static readonly Color MountainFarTop = Hex("#DAD3E6"), MountainFarBottom = Hex("#C9C6DE");
-        public static readonly Color MountainMidTop = Hex("#C0C6D4"), MountainMidBottom = Hex("#A7B2C0");
-        public static readonly Color MountainNearTop = Hex("#A8B4BA"), MountainNearBottom = Hex("#8B9CA2");
         // Clouds are peach-cream where they are thick (mockup: 254,229,208) and thin out to the
         // sky's lilac (220,212,220). They were pure white before and covered half the frame.
         public static readonly Color CloudColor = Hex("#FEE5D0");
@@ -154,11 +151,6 @@ namespace PullTheWorld.EditorTools
         public const string MFarStone = "M_FarStone";
         public const string MFarGrass = "M_FarGrass";
         // Pastel theme additions.
-        public const string MMountainFar = "M_MountainFar";
-        public const string MMountainMid = "M_MountainMid";
-        public const string MMountainNear = "M_MountainNear";
-        public const string MCloud = "M_Cloud";
-        public const string MCloudNear = "M_CloudNear";   // the ones in front of the island: thinner
         public const string MFoliageWind = "M_FoliageWind";   // tufts, flower stems: sway up from the base
         public const string MVine = "M_Vine";
         public const string MFringe = "M_Fringe";                 // hangs down, sways from the attachment
@@ -279,7 +271,6 @@ namespace PullTheWorld.EditorTools
             var bgTex = MakeGradientTexture("Tex_Background", 8, 256, BgTop, BgBottom);
             var shadowTex = MakeContactShadowTexture("Tex_ContactShadow", 128);
             var starTex = MakeStarTexture("Tex_Star", 128);
-            var cloudTex = MakeCloudTexture("Tex_Cloud", 512, 7);
             var whiteTex = MakeSolidTexture("Tex_White", 4, Color.white);
 
             UnlitTextured(MAnchorRing, ringTex, Cyan * 1.5f, additive: true);
@@ -328,17 +319,8 @@ namespace PullTheWorld.EditorTools
                 EditorUtility.SetDirty(om);
             }
 
-            // Sky layers: hazed ridge gradients (UV.y 0 at the base, 1 at the ridge) and cloud puffs.
-            UnlitTextured(MMountainFar, MakeGradientTexture("Tex_MountainFar", 4, 64, MountainFarTop, MountainFarBottom),
-                          Color.white, additive: false, opaque: true);
-            UnlitTextured(MMountainMid, MakeGradientTexture("Tex_MountainMid", 4, 64, MountainMidTop, MountainMidBottom),
-                          Color.white, additive: false, opaque: true);
-            UnlitTextured(MMountainNear, MakeGradientTexture("Tex_MountainNear", 4, 64, MountainNearTop, MountainNearBottom),
-                          Color.white, additive: false, opaque: true);
-            // Translucent on purpose: at 0.96 the puffs were opaque white cotton that hid the
-            // ridges; the mockup's clouds let the mountains show through everywhere but their cores.
-            UnlitTextured(MCloud, cloudTex, new Color(1f, 1f, 1f, 0.72f), additive: false);
-            UnlitTextured(MCloudNear, cloudTex, new Color(1f, 1f, 1f, 0.55f), additive: false);
+            // The sky's mountains and clouds are the artists' painted layers now - see
+            // SkySprite, called by the scene builder for each piece it places.
 
             BuildBackdrop();
             BuildPortalEnergy();
@@ -453,7 +435,7 @@ namespace PullTheWorld.EditorTools
             m.SetFloat("_GlowAspect", 1.0f);
             m.SetColor("_CloudColor", CloudColor);
             m.SetColor("_CloudShade", CloudShade);
-            m.SetFloat("_CloudStrength", 0.55f);
+            m.SetFloat("_CloudStrength", 0f);      // the clouds are painted layers now (BuildSkyLayers); the sky is a clean gradient
             m.SetFloat("_CloudCover", 0.36f);
             m.SetFloat("_CloudScale", 2.1f);
             m.SetFloat("_CloudSpeed", 0.007f);
@@ -584,6 +566,20 @@ namespace PullTheWorld.EditorTools
         }
 
         // ------------------------------------------------------------------ material makers -
+        /// <summary>A painted sky piece (Art/layered-background) on the fog-free sprite shader.</summary>
+        public static Material SkySprite(PtwSkyAssets.Piece piece)
+        {
+            var tex = PtwSkyAssets.Load(piece);
+            if (tex == null) return null;
+            var m = LoadOrCreateShader(piece.Id, "PTW/SkySprite");
+            if (m == null) return null;
+            m.SetTexture("_BaseMap", tex);
+            m.SetColor("_BaseColor", Color.white);
+            m.renderQueue = (int)RenderQueue.Transparent;
+            EditorUtility.SetDirty(m);
+            return m;
+        }
+
         static Shader LitShader => Shader.Find("Universal Render Pipeline/Lit");
         static Shader UnlitShader => Shader.Find("Universal Render Pipeline/Unlit");
 
@@ -834,56 +830,6 @@ namespace PullTheWorld.EditorTools
                     float glow = Mathf.Pow(Mathf.Clamp01(1f - d / 0.95f), 2.5f) * 0.42f;
                     float a = Mathf.Clamp01(star + glow);
                     tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
-                }
-            tex.Apply(false, false);
-            return SaveTexture(tex, id);
-        }
-
-        /// <summary>
-        /// A cloud puff: the union of soft discs strung along a flattened ellipse, lit cream on top
-        /// and blushed underneath so it has volume without any lighting.
-        /// </summary>
-        public static Texture2D MakeCloudTexture(string id, int size, int seed)
-        {
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false, false)
-            {
-                name = id,
-                wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Bilinear
-            };
-            var rnd = new System.Random(seed);
-            const int puffs = 9;
-            var centers = new Vector2[puffs];
-            var radii = new float[puffs];
-            for (int i = 0; i < puffs; i++)
-            {
-                float t = (i + 0.5f) / puffs;
-                centers[i] = new Vector2(Mathf.Lerp(-0.62f, 0.62f, t) + ((float)rnd.NextDouble() - 0.5f) * 0.12f,
-                                         -0.12f + Mathf.Sin(t * Mathf.PI) * 0.22f + ((float)rnd.NextDouble() - 0.5f) * 0.14f);
-                radii[i] = 0.22f + (float)rnd.NextDouble() * 0.16f + Mathf.Sin(t * Mathf.PI) * 0.12f;
-            }
-
-            float half = size * 0.5f;
-            for (int y = 0; y < size; y++)
-                for (int x = 0; x < size; x++)
-                {
-                    var p = new Vector2((x + 0.5f - half) / half, (y + 0.5f - half) / half);
-                    float a = 0f, top = 0f;
-                    for (int i = 0; i < puffs; i++)
-                    {
-                        float d = Vector2.Distance(p, centers[i]) / radii[i];
-                        float k = Mathf.Clamp01(1f - d);
-                        k = k * k * (3f - 2f * k);
-                        a = Mathf.Max(a, k);
-                        // How high inside this puff we are, for the lighting.
-                        top = Mathf.Max(top, Mathf.Clamp01((p.y - centers[i].y) / radii[i] + 0.5f) * k);
-                    }
-                    // Flat bottom: clouds sit on their own shadow line. Then a wide, soft feather:
-                    // the mockup's clouds have no firm edge at all, they dissolve into the sky.
-                    if (p.y < -0.3f) a *= Mathf.Clamp01(1f + (p.y + 0.3f) / 0.25f);
-                    a = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((a - 0.08f) / 0.66f));
-                    Color c = Color.Lerp(CloudShade, CloudColor, Mathf.Clamp01(top * 1.3f));
-                    tex.SetPixel(x, y, new Color(c.r, c.g, c.b, a));
                 }
             tex.Apply(false, false);
             return SaveTexture(tex, id);
