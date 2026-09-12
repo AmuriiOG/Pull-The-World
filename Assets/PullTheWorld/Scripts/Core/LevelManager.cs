@@ -12,21 +12,26 @@ namespace PullTheWorld
     /// the ONE WORLD they all stand in.
     ///
     /// Levels are no longer swapped in and out at the origin. Each level has a slot in the world
-    /// (<see cref="SlotFor"/>: straight up, with a gentle sideways weave), the rotating root moves
-    /// to the active level's slot, and the camera frames that slot. Three levels exist at once:
+    /// (<see cref="SlotFor"/>) further DOWN THE LINE OF SIGHT than the one before: deeper along
+    /// +Z, a little lower (the camera looks down, so a deeper island at the same height would
+    /// climb up the screen) and weaving a little sideways. Seen through the narrow perspective
+    /// lens (see <see cref="PlaneCameraRig"/>) that puts the next level in the upper part of the
+    /// frame at about a third of the size, and the one after it smaller again above and beside it
+    /// - the mockup's far islands, except that they are the real levels. Four things exist at once:
     ///
-    ///  * PREVIOUS - the level just finished, standing where it was as scenery: no physics, no
-    ///    behaviours, no lights, no particles, just meshes (see <see cref="StripToVisual"/>).
     ///  * CURRENT - the live one, under the rotating root, the only thing with physics.
-    ///  * NEXT - a preview of the level ahead, stripped the same way, standing in its slot so it is
-    ///    there when the camera glides up to it.
+    ///  * NEXT and the one AFTER - the complete prefabs, stripped to their meshes (see
+    ///    <see cref="StripToVisual"/>), standing in their slots in the distance.
+    ///  * PREVIOUS - only for the length of the journey: the finished level, frozen where it
+    ///    stands, so the camera has something to sail over. It ends up behind the lens and goes.
     ///
     /// Reaching a portal no longer cuts to the next level. The orb is drawn in, the door flares,
-    /// the finished level is frozen into scenery, the real next level replaces its preview, and
-    /// the camera glides up to it (<see cref="PlaneCameraRig.TravelTo"/>) while the sky lags and
-    /// the clouds hurry. Control comes back only when the camera has settled, through
-    /// <see cref="ArrivalGate"/> so the UI can put an interstitial there. Everything further away
-    /// than previous / next is destroyed, so the world costs the same on a phone as one level did.
+    /// the finished level is frozen, the real next level replaces its stand-in in the same slot,
+    /// and the camera PUSHES FORWARD to it (<see cref="PlaneCameraRig.TravelTo"/>): the finished
+    /// island swells and slides out under the frame, the next grows from a silhouette into the
+    /// level. Control comes back only when the camera has settled, through <see cref="ArrivalGate"/>
+    /// so the UI can put an interstitial there. Nothing more than two levels ahead exists, so the
+    /// world costs a phone a little more than one level did, not a lot.
     ///
     /// The one ordering rule that matters: the level is parented and the rotator is bound BEFORE
     /// the player is spawned, because the spawn point is expressed in level-local space and would
@@ -54,13 +59,22 @@ namespace PullTheWorld
         [SerializeField] SkyTheme sky;
 
         [Header("World")]
-        [Tooltip("World units between consecutive levels' pivots, straight up. Larger than any " +
-                 "level's framing so islands never overlap.")]
-        [SerializeField] float slotSpacing = 26f;
-        [Tooltip("Sideways wander of the slots (0, right, left, 0, ...) so the climb weaves.")]
+        [Tooltip("World units each level stands DEEPER (+Z) than the one before, down the line of " +
+                 "sight. With the 18-degree lens ~70 units in front of a level, this puts the next " +
+                 "one at about a third of the size.")]
+        [SerializeField] float slotDepth = 126f;
+        [Tooltip("World units each level stands LOWER than the one before. The camera looks down " +
+                 "20 degrees, so a deeper island at the same height would climb up the screen; " +
+                 "this drop holds the next level at about 78% of the frame height, in the sky " +
+                 "above the live island, and the one after it a little higher.")]
+        [SerializeField] float slotDrop = 27f;
+        [Tooltip("Sideways wander of the slots (0, right, left, 0, ...) so the path into the " +
+                 "distance weaves and the far levels stand beside each other, not in a stack.")]
         [SerializeField] float slotWander = 3.5f;
-        [Tooltip("Seconds the camera takes to glide from a finished level to the next.")]
-        [SerializeField] float travelSeconds = 1.8f;
+        [Tooltip("Seconds the camera takes to push from a finished level to the next.")]
+        [SerializeField] float travelSeconds = 2.2f;
+        [Tooltip("How many levels ahead of the live one stand in the distance as scenery.")]
+        [SerializeField, Range(1, 3)] int lookAhead = 2;
 
         [Header("Timing")]
         [Tooltip("How long the celebration runs before the camera sets off for the next level.")]
@@ -82,9 +96,10 @@ namespace PullTheWorld
         int keysRequired;
         bool travelling;
 
-        Transform stage;                 // static parent for the previous level and the next-level preview
-        GameObject previous;             // the level just left, frozen into scenery
-        GameObject preview;              // the level ahead, as scenery, standing in its slot
+        Transform stage;                 // static parent for the frozen level and the stand-ins ahead
+        GameObject previous;             // the level just left, frozen into scenery for the journey
+        readonly List<GameObject> ahead = new List<GameObject>();   // the levels after index, as scenery, nearest first
+        GameObject menuIsland;           // the menu only: the level about to be played, as scenery
 
         public event Action<LevelDefinition> OnLevelLoaded;
         public event Action<LevelDefinition> OnLevelWon;
@@ -118,12 +133,16 @@ namespace PullTheWorld
         public Vector3 Pivot => levelParent ? levelParent.position : Vector3.zero;
         public static Vector3 PivotOrOrigin => Instance ? Instance.Pivot : Vector3.zero;
 
-        /// <summary>Where level <paramref name="i"/> stands in the world.</summary>
+        /// <summary>
+        /// Where level <paramref name="i"/> stands in the world: deeper, lower and a little to
+        /// one side of the one before, so from any level's camera the next two recede into the
+        /// sky above it. Level 1 is at the origin.
+        /// </summary>
         public Vector3 SlotFor(int i)
         {
             int k = ((i % 3) + 3) % 3;
             float x = k == 1 ? slotWander : k == 2 ? -slotWander : 0f;
-            return new Vector3(x, i * slotSpacing, 0f);
+            return new Vector3(x, -i * slotDrop, i * slotDepth);
         }
 
         void Awake()
@@ -158,16 +177,35 @@ namespace PullTheWorld
 
         void Start()
         {
+            // The scene opens on the menu; UiRoot decides when to actually start a level. The
+            // menu looks at the level the player will play next, standing in ITS slot with the
+            // two after it in the distance, so PLAY is a zoom into the same view rather than a
+            // cut to somewhere else.
+            ShowMenuWorld();
+        }
+
+        /// <summary>The menu world: the level about to be played, in its slot, under the wide menu framing.</summary>
+        void ShowMenuWorld()
+        {
+            ClearEditorPreview();
+            if (current) { Destroy(current.gameObject); current = null; }
+            ClearScenery();
+            DynamicRegistry.Prune();
+            if (player) player.gameObject.SetActive(false);
+
+            index = LevelCount > 0 ? Mathf.Clamp(GameProgress.UnlockedIndex, 0, LevelCount - 1) : 0;
+            Vector3 slot = SlotFor(index);
+            PlaceRoot(slot);
+            if (rotator) { rotator.CancelDrive(); rotator.IdleSway = true; rotator.RotationAllowed = true; }
+            if (cameraRig) cameraRig.SnapTo(slot, menuViewExtents);
+            if (sky) sky.Apply(sky.ChapterFor(index, LevelCount));
+
+            // Something to look at behind the title: the level they will play next, as scenery.
+            // The two beyond it are NOT stood up here - from the menu framing they land exactly
+            // behind the logo and read as clutter around the letters. They appear on PLAY, while
+            // the menu fades.
+            if (LevelCount > 0) menuIsland = BuildScenery(index, slot);
             SetState(LevelState.Menu);
-            if (rotator) rotator.IdleSway = true;
-            if (cameraRig) cameraRig.SnapTo(Vector3.zero, menuViewExtents);
-            // The scene opens on the menu; UiRoot decides when to actually start a level.
-            //
-            // The editor preview level is deliberately NOT cleared here. v1 cleared it on Start
-            // because it went straight into gameplay, but v2 opens on a main menu - and a menu
-            // floating over an empty void looks broken. Leaving the preview island in place gives
-            // the menu a real backdrop for free, and LoadLevel clears it the moment PLAY is
-            // pressed.
         }
 
         /// <summary>
@@ -201,18 +239,21 @@ namespace PullTheWorld
             ClearEditorPreview();
             if (current) Destroy(current.gameObject);
             current = null;
+            bool sameView = cameraRig && cameraRig.Focus == SlotFor(index);
             ClearScenery();
             DynamicRegistry.Prune();
 
             PlaceRoot(SlotFor(index));
             current = SpawnLevel(index);
 
-            // Framed before the player spawns so the first frame is already composed. The kick
-            // is a small zoom that settles over the first half-second: the island arrives.
+            // Framed before the player spawns so the first frame is already composed. From the
+            // menu the camera is already looking at this slot, so it eases in to the level's
+            // framing rather than cutting; anywhere else it snaps, with a small zoom that settles
+            // over the first half-second: the island arrives.
             if (cameraRig)
             {
-                cameraRig.SnapTo(SlotFor(index), current.viewExtents);
-                cameraRig.Kick(1.07f);
+                if (sameView) cameraRig.TravelTo(SlotFor(index), current.viewExtents, 0.8f);
+                else { cameraRig.SnapTo(SlotFor(index), current.viewExtents); cameraRig.Kick(1.07f); }
             }
             if (sky) sky.Apply(sky.ChapterFor(index, LevelCount));
 
@@ -220,7 +261,19 @@ namespace PullTheWorld
             SetState(LevelState.Playing);
             OnLevelLoaded?.Invoke(current);
 
-            preview = BuildScenery(index + 1, SlotFor(index + 1));
+            TopUpAhead();
+        }
+
+        /// <summary>Stand levels in their slots as scenery until <see cref="lookAhead"/> of them wait beyond the live one.</summary>
+        void TopUpAhead()
+        {
+            while (ahead.Count < lookAhead)
+            {
+                int i = index + ahead.Count + 1;
+                var go = BuildScenery(i, SlotFor(i));
+                if (!go) break;                       // past the last level
+                ahead.Add(go);
+            }
         }
 
         public void Restart() => LoadLevel(index);
@@ -240,18 +293,7 @@ namespace PullTheWorld
         public void ReturnToMenu()
         {
             CancelPending();
-            if (current) { Destroy(current.gameObject); current = null; }
-            ClearScenery();
-            DynamicRegistry.Prune();
-            if (player) player.gameObject.SetActive(false);
-            PlaceRoot(Vector3.zero);
-            if (rotator) { rotator.CancelDrive(); rotator.IdleSway = true; rotator.RotationAllowed = true; }
-            if (cameraRig) cameraRig.SnapTo(Vector3.zero, menuViewExtents);
-            if (sky) sky.Apply(0);
-            // Something to look at behind the title: the level they will play next, as scenery.
-            if (LevelCount > 0)
-                preview = BuildScenery(Mathf.Clamp(GameProgress.UnlockedIndex, 0, LevelCount - 1), Vector3.zero);
-            SetState(LevelState.Menu);
+            ShowMenuWorld();
         }
 
         void PlaceRoot(Vector3 slot)
@@ -290,8 +332,7 @@ namespace PullTheWorld
             if (current && current.exit) current.exit.Flare();
             if (rotator) { rotator.CancelDrive(); rotator.RotationAllowed = false; }
 
-            // 1. The finished level becomes scenery where it stands; whatever was scenery before it
-            //    is now two levels back and goes.
+            // 1. The finished level becomes scenery where it stands, for the camera to sail over.
             if (previous) Destroy(previous);
             previous = null;
             if (current)
@@ -302,17 +343,25 @@ namespace PullTheWorld
             }
             DynamicRegistry.Prune();
 
-            // 2. The preview ahead gives way to the real level in the same slot.
-            if (preview) Destroy(preview);
-            preview = null;
+            // 2. The stand-in ahead gives way to the real level in the same slot - same prefab,
+            //    same pose, so nothing visibly changes but the portal's light coming on. The
+            //    level beyond it stays where it is and is now simply "next".
+            if (ahead.Count > 0)
+            {
+                if (ahead[0]) Destroy(ahead[0]);
+                ahead.RemoveAt(0);
+            }
             index++;
             failsOnLevel = 0;
             PlaceRoot(SlotFor(index));
             current = SpawnLevel(index);
             if (rotator) rotator.RotationAllowed = false;             // not until the camera has settled
             if (sky) sky.Apply(sky.ChapterFor(index, LevelCount));
+            // The new far level stands up NOW, tiny and fogged at the top of the frame, so it is
+            // simply there as the camera approaches rather than popping in on arrival.
+            TopUpAhead();
 
-            // 3. The glide.
+            // 3. The push forward.
             if (cameraRig) cameraRig.TravelTo(SlotFor(index), current.viewExtents, travelSeconds);
             float guard = travelSeconds + 2f;
             while (cameraRig && cameraRig.IsTravelling && guard > 0f)
@@ -345,7 +394,10 @@ namespace PullTheWorld
             if (player) player.Spawn(current.WorldSpawnPoint);
             SetState(LevelState.Playing);
             OnLevelLoaded?.Invoke(current);
-            preview = BuildScenery(index + 1, SlotFor(index + 1));
+
+            // The finished level is behind the lens now.
+            if (previous) Destroy(previous);
+            previous = null;
         }
 
         // ---------------------------------------------------------------------- scenery -----
@@ -382,8 +434,11 @@ namespace PullTheWorld
         void ClearScenery()
         {
             if (previous) Destroy(previous);
-            if (preview) Destroy(preview);
-            previous = preview = null;
+            previous = null;
+            if (menuIsland) Destroy(menuIsland);
+            menuIsland = null;
+            foreach (var go in ahead) if (go) Destroy(go);
+            ahead.Clear();
         }
 
         /// <summary>

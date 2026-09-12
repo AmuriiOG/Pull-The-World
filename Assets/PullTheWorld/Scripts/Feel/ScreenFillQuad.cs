@@ -3,7 +3,8 @@ using UnityEngine;
 namespace PullTheWorld
 {
     /// <summary>
-    /// Keeps a quad exactly filling an orthographic camera's frustum.
+    /// Keeps a quad exactly filling the camera's frustum at a fixed distance, orthographic or
+    /// perspective.
     ///
     /// The backdrop is a child of the camera rather than a skybox or a UI layer, which means it is
     /// welded to the screen and provably cannot drift. That matters: the fixed backdrop is the
@@ -13,8 +14,9 @@ namespace PullTheWorld
     public class ScreenFillQuad : MonoBehaviour
     {
         [SerializeField] Camera targetCamera;
-        [Tooltip("How far in front of the camera to sit. Must be inside the far clip plane.")]
-        [SerializeField] float distance = 100f;
+        [Tooltip("How far in front of the camera to sit. Behind the farthest mountain ridge and " +
+                 "inside the far clip plane.")]
+        [SerializeField] float distance = 650f;
         [Tooltip("Overscan so no seam shows at any aspect ratio. Raised from 1.06 because the " +
                  "capture path re-frames the camera and renders in the same call, without a " +
                  "LateUpdate in between - see Fit().")]
@@ -36,12 +38,14 @@ namespace PullTheWorld
         /// </summary>
         public void Fit()
         {
-            if (!targetCamera || !targetCamera.orthographic) return;
+            if (!targetCamera) return;
 
             float aspect = targetCamera.pixelHeight > 0
                 ? targetCamera.pixelWidth / (float)targetCamera.pixelHeight
                 : 0.5625f;
-            float size = targetCamera.orthographicSize;
+            float size = targetCamera.orthographic
+                ? targetCamera.orthographicSize
+                : distance * Mathf.Tan(targetCamera.fieldOfView * 0.5f * Mathf.Deg2Rad);
             if (Mathf.Approximately(size, lastSize) && Mathf.Approximately(aspect, lastAspect)) return;
             lastSize = size; lastAspect = aspect;
 

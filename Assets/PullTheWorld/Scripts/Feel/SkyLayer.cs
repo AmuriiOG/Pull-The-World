@@ -19,7 +19,11 @@ namespace PullTheWorld
     /// For a unit mesh (x -0.5..0.5, y 0..1): the base sits at <see cref="viewportBottom"/> and
     /// the top at <see cref="viewportTop"/>, width is the frustum width times <see cref="widthScale"/>.
     /// For a quad sprite (x,y -0.5..0.5) use <see cref="centred"/>: placed at (viewportX, viewportY)
-    /// with an explicit world size.
+    /// and sized as a fraction of the frame, so it looks the same however far back it sits.
+    ///
+    /// Works for a perspective camera as well as an orthographic one: the frame is measured at
+    /// the layer's own distance, which is what lets the ridges stand hundreds of units back,
+    /// behind the levels waiting in the distance, and still fill the same part of the screen.
     /// </summary>
     [ExecuteAlways]
     public class SkyLayer : MonoBehaviour
@@ -33,7 +37,8 @@ namespace PullTheWorld
         [Header("Centred sprite")]
         [SerializeField] bool centred;
         [SerializeField] Vector2 viewportPos = new Vector2(0.5f, 0.5f);
-        [SerializeField] Vector2 worldSize = new Vector2(6f, 3f);
+        [Tooltip("Width and height as fractions of the frame at this layer's distance.")]
+        [SerializeField] Vector2 viewportSize = new Vector2(0.5f, 0.15f);
         [Header("Motion")]
         [Tooltip("World units per second along x. Wraps at the frustum edge. Zero for mountains.")]
         [SerializeField] float driftSpeed;
@@ -62,33 +67,40 @@ namespace PullTheWorld
 
         public void Fit()
         {
-            if (!targetCamera || !targetCamera.orthographic) return;
+            if (!targetCamera) return;
             float aspect = targetCamera.pixelHeight > 0
                 ? targetCamera.pixelWidth / (float)targetCamera.pixelHeight
                 : 0.5625f;
-            float halfH = targetCamera.orthographicSize;
+            // Half the frame at this layer's distance.
+            float halfH = targetCamera.orthographic
+                ? targetCamera.orthographicSize
+                : distance * Mathf.Tan(targetCamera.fieldOfView * 0.5f * Mathf.Deg2Rad);
             float halfW = halfH * aspect;
+            // The parallax shift is specified for a ~20-unit-tall frame; scale it with the frame
+            // so a far layer moves the same fraction of the screen whatever its distance.
+            float shiftScale = halfH / 10f;
 
-            Vector2 shift = (SkyParallax.Offset + SkyParallax.TravelOffset) * parallax;
+            Vector2 shift = (SkyParallax.Offset + SkyParallax.TravelOffset) * parallax * shiftScale;
             float bob = Application.isPlaying && bobAmplitude > 0f
-                ? Mathf.Sin(Time.time * bobHz * Mathf.PI * 2f + bobPhase) * bobAmplitude
+                ? Mathf.Sin(Time.time * bobHz * Mathf.PI * 2f + bobPhase) * bobAmplitude * shiftScale
                 : 0f;
 
             transform.localRotation = Quaternion.identity;
             if (centred)
             {
-                float wrapW = halfW * 2f + worldSize.x;
-                float x = (viewportPos.x - 0.5f) * 2f * halfW + driftX + shift.x;
+                var size = new Vector2(viewportSize.x * 2f * halfW, viewportSize.y * 2f * halfH);
+                float wrapW = halfW * 2f + size.x;
+                float x = (viewportPos.x - 0.5f) * 2f * halfW + driftX * shiftScale + shift.x;
                 x = Mathf.Repeat(x + wrapW * 0.5f, wrapW) - wrapW * 0.5f;
                 float y = (viewportPos.y - 0.5f) * 2f * halfH + shift.y + bob;
                 transform.localPosition = new Vector3(x, y, distance);
-                transform.localScale = new Vector3(worldSize.x, worldSize.y, 1f);
+                transform.localScale = new Vector3(size.x, size.y, 1f);
             }
             else
             {
                 float bottom = (viewportBottom - 0.5f) * 2f * halfH;
                 float top = (viewportTop - 0.5f) * 2f * halfH;
-                transform.localPosition = new Vector3(driftX + shift.x, bottom + shift.y, distance);
+                transform.localPosition = new Vector3(driftX * shiftScale + shift.x, bottom + shift.y, distance);
                 transform.localScale = new Vector3(halfW * 2f * widthScale, Mathf.Max(0.01f, top - bottom), 1f);
             }
         }

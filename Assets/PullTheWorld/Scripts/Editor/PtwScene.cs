@@ -124,8 +124,7 @@ namespace PullTheWorld.EditorTools
             var go = new GameObject("MainCamera");
             go.tag = "MainCamera";
             var cam = go.AddComponent<Camera>();
-            cam.orthographic = true;
-            cam.clearFlags = CameraClearFlags.SolidColor;
+            cam.clearFlags = CameraClearFlags.SolidColor;   // projection, clipping and framing are PlaneCameraRig's
             // Matches the TOP of the backdrop gradient, so if the fill quad ever fails to cover the
             // frame the uncovered area blends instead of banding.
             cam.backgroundColor = PtwArt.BgTop;
@@ -158,7 +157,7 @@ namespace PullTheWorld.EditorTools
             // simulated in world space so a reframe does not drag them.
             PtwPrefabs.Wire(sky, "fireflies", MakeFireflies(go.transform));
 
-            // The rest of the sky: mountains, clouds and far islets, all welded to the camera.
+            // The rest of the sky: mountains and clouds, all welded to the camera.
             BuildSkyLayers(cam);
 
             // The shared parallax shift the layers read (tilt of the level, position of the orb).
@@ -169,11 +168,14 @@ namespace PullTheWorld.EditorTools
         }
 
         /// <summary>
-        /// The mockup's atmosphere, in layers from the back: three hazed mountain ridges, cloud
-        /// puffs drifting between and in front of them, and small floating islets with tiny portals
-        /// up in the sky. Everything is a SkyLayer child of the camera: placed by viewport fraction
-        /// and sized to the frustum, so it composes the same on every level's framing and never
-        /// turns with the world - the reference the turning island is read against.
+        /// The mockup's atmosphere, in layers from the back: three hazed mountain ridges and cloud
+        /// puffs drifting between and in front of them. Everything is a SkyLayer child of the
+        /// camera: placed by viewport fraction and sized to the frustum AT ITS OWN DISTANCE, so it
+        /// composes the same on every level's framing and never turns with the world - the
+        /// reference the turning island is read against. The far islands of the mockup are no
+        /// longer painted here: they are the real next two levels, standing in the world (see
+        /// LevelManager.SlotFor), which is why the ridges stand 340-460 units back - behind the
+        /// level after next, in front of nothing but the backdrop.
         ///
         /// It does move, though, in two ways that both scale with depth (see SkyLayer):
         /// clouds DRIFT sideways on their own, the near ones several times faster than the far
@@ -189,23 +191,22 @@ namespace PullTheWorld.EditorTools
             // Mountains: far ridge highest and faintest, near ridge lowest and strongest. Their bases
             // sit below the frame so no bottom edge ever shows. The 1.4x width leaves room for the
             // parallax shift on both sides.
-            Ridge(root.transform, cam, "MountainsFar", "Mesh_MountainFar", PtwArt.MMountainFar, 84f, -0.1f, 0.74f, 0.10f);
-            Ridge(root.transform, cam, "MountainsMid", "Mesh_MountainMid", PtwArt.MMountainMid, 76f, -0.1f, 0.60f, 0.18f);
-            Ridge(root.transform, cam, "MountainsNear", "Mesh_MountainNear", PtwArt.MMountainNear, 68f, -0.1f, 0.46f, 0.28f);
+            Ridge(root.transform, cam, "MountainsFar", "Mesh_MountainFar", PtwArt.MMountainFar, 460f, -0.1f, 0.74f, 0.10f);
+            Ridge(root.transform, cam, "MountainsMid", "Mesh_MountainMid", PtwArt.MMountainMid, 400f, -0.1f, 0.60f, 0.18f);
+            Ridge(root.transform, cam, "MountainsNear", "Mesh_MountainNear", PtwArt.MMountainNear, 340f, -0.1f, 0.46f, 0.28f);
 
-            // Clouds. (viewport x, viewport y, width, height, distance, drift, parallax, near).
-            // Behind the mountains in the upper sky, between them in the middle, and three thin
-            // ones in FRONT of the island's lower tip, like the mockup's foreground clouds. Smaller
-            // and far fewer than the first pass, which buried the ridges under white cotton; the
-            // drift speeds are now fast enough to SEE (the near ones cross the frame in ~40 s),
-            // and scale with distance so the layers pull apart.
+            // Clouds. (viewport x, viewport y, width, height - as fractions of the frame - distance,
+            // drift, parallax, near). Behind the mountains in the upper sky, between the far
+            // levels in the middle distance, and three thin ones in FRONT of the island's lower
+            // tip, like the mockup's foreground clouds. The drift speeds are frame-relative (see
+            // SkyLayer) and fast enough to SEE - the near ones cross the frame in ~40 s.
             var clouds = new[]
             {
-                (0.18f, 0.73f, 6.5f, 3.0f, 90f, 0.10f, 0.12f, false), (0.74f, 0.65f, 7.5f, 3.4f, 88f, 0.08f, 0.12f, false),
-                (0.46f, 0.56f, 6.0f, 2.7f, 80f, 0.14f, 0.22f, false), (0.92f, 0.49f, 6.5f, 3.0f, 79f, 0.12f, 0.22f, false),
-                (0.08f, 0.44f, 7.0f, 3.2f, 72f, 0.18f, 0.35f, false), (0.60f, 0.39f, 6.0f, 2.7f, 70f, 0.20f, 0.35f, false),
-                (0.28f, 0.10f, 10.0f, 4.2f, 24f, 0.40f, 1.00f, true), (0.82f, 0.05f, 9.5f, 4.0f, 22f, 0.46f, 1.00f, true),
-                (0.55f, 0.16f, 7.5f, 3.3f, 26f, 0.36f, 0.85f, true),
+                (0.18f, 0.73f, 0.58f, 0.15f, 520f, 0.10f, 0.12f, false), (0.74f, 0.65f, 0.67f, 0.17f, 500f, 0.08f, 0.12f, false),
+                (0.46f, 0.56f, 0.53f, 0.135f, 300f, 0.14f, 0.22f, false), (0.92f, 0.49f, 0.58f, 0.15f, 290f, 0.12f, 0.22f, false),
+                (0.08f, 0.44f, 0.62f, 0.16f, 250f, 0.18f, 0.35f, false), (0.60f, 0.39f, 0.53f, 0.135f, 240f, 0.20f, 0.35f, false),
+                (0.28f, 0.10f, 0.89f, 0.21f, 30f, 0.40f, 1.00f, true), (0.82f, 0.05f, 0.84f, 0.20f, 28f, 0.46f, 1.00f, true),
+                (0.55f, 0.16f, 0.67f, 0.165f, 34f, 0.36f, 0.85f, true),
             };
             int i = 0;
             foreach (var (x, y, w, h, z, drift, parallax, near) in clouds)
@@ -220,12 +221,10 @@ namespace PullTheWorld.EditorTools
                 PtwPrefabs.Wire(layer, "distance", z);
                 PtwPrefabs.Wire(layer, "centred", true);
                 PtwPrefabs.Wire(layer, "viewportPos", new Vector2(x, y));
-                PtwPrefabs.Wire(layer, "worldSize", new Vector2(w, h));
+                PtwPrefabs.Wire(layer, "viewportSize", new Vector2(w, h));
                 PtwPrefabs.Wire(layer, "driftSpeed", drift);
                 PtwPrefabs.Wire(layer, "parallax", parallax);
             }
-
-            BuildSkyIslets(root.transform, cam);
         }
 
         static void Ridge(Transform parent, Camera cam, string name, string mesh, string mat,
@@ -244,93 +243,11 @@ namespace PullTheWorld.EditorTools
             PtwPrefabs.Wire(layer, "parallax", parallax);
         }
 
-        /// <summary>
-        /// Small floating islands up in the sky, each with a grass cap, a fringe, a vine or two and
-        /// a tiny glowing portal - the mockup's far islands. Camera-relative, above the island, so
-        /// they never overlap the play area or the HUD on any level's framing.
-        /// </summary>
-        static void BuildSkyIslets(Transform parent, Camera cam)
-        {
-            var grass = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Blocks + "/Block_Grass.prefab");
-            var stone = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Blocks + "/Block_Stone.prefab");
-            var vine = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Props + "/Prop_Vine.prefab");
-            var flower = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Props + "/Prop_Flower.prefab");
-            if (!grass || !stone) return;
-
-            var rnd = new System.Random(4242);
-            // (viewport x, viewport y, width in blocks, scale, distance)
-            var spots = new[]
-            {
-                (0.22f, 0.71f, 3, 0.36f, 46f), (0.60f, 0.64f, 5, 0.42f, 44f), (0.86f, 0.72f, 3, 0.30f, 48f),
-            };
-            foreach (var (vx, vy, w, scale, z) in spots)
-            {
-                var islet = new GameObject("Islet");
-                islet.transform.SetParent(parent, false);
-                var layer = islet.AddComponent<SkyLayer>();
-                PtwPrefabs.Wire(layer, "targetCamera", cam);
-                PtwPrefabs.Wire(layer, "distance", z);
-                PtwPrefabs.Wire(layer, "centred", true);
-                PtwPrefabs.Wire(layer, "viewportPos", new Vector2(vx, vy));
-                PtwPrefabs.Wire(layer, "worldSize", new Vector2(scale, scale));
-                // Between the mid clouds and the island in depth, and floating: a slow bob of a
-                // fifth of a block, each islet out of phase with the others (SkyLayer seeds it).
-                PtwPrefabs.Wire(layer, "parallax", 0.5f);
-                PtwPrefabs.Wire(layer, "bobAmplitude", 0.14f);
-                PtwPrefabs.Wire(layer, "bobHz", 0.06f);
-
-                // Inverted pyramid of blocks, built in XY like the real islands.
-                int rows = w >= 5 ? 3 : 2;
-                for (int r = 0; r < rows; r++)
-                {
-                    int count = w - r * 2;
-                    for (int c = 0; c < count; c++)
-                    {
-                        var src = r == 0 ? grass : stone;
-                        var b = (GameObject)PrefabUtility.InstantiatePrefab(src, islet.transform);
-                        b.transform.localPosition = new Vector3(c - (count - 1) * 0.5f, -r * PtwMeshes.BlockH, 0f);
-                        StripCollidersAndShadows(b);
-                        if (r == 0)
-                        {
-                            var fringe = b.transform.Find("Fringe"); if (fringe) fringe.gameObject.SetActive(true);
-                            var tufts = b.transform.Find("Tufts"); if (tufts) tufts.gameObject.SetActive(rnd.NextDouble() < 0.6);
-                        }
-                    }
-                }
-
-                // A tiny portal in the middle of the top row.
-                var arch = PtwPrefabs.MeshNode("Arch", "Mesh_DoorArch", islet.transform, PtwArt.MFarStone, PtwArt.MFarStone, PtwArt.MPortalStud, PtwArt.MFarStone);
-                arch.transform.localPosition = new Vector3(0f, 0f, 0f);
-                arch.transform.localScale = Vector3.one * 0.8f;
-                StripCollidersAndShadows(arch, keepMaterials: true);
-                var glow = PtwPrefabs.MeshNode("Glow", "Mesh_ArchFill", arch.transform, PtwArt.MPortalEnergyFar);
-                StripCollidersAndShadows(glow, keepMaterials: true);
-                var halo = PtwPrefabs.MeshNode("Halo", "Mesh_QuadXY", arch.transform, PtwArt.MPortalGlow);
-                halo.transform.localPosition = new Vector3(0f, PtwMeshes.ArchApex * 0.5f, -0.2f);
-                halo.transform.localScale = new Vector3(2.2f, PtwMeshes.ArchApex * 1.7f, 1f);
-                StripCollidersAndShadows(halo, keepMaterials: true);
-
-                if (vine)
-                {
-                    int side = rnd.NextDouble() < 0.5 ? -1 : 1;
-                    var v = (GameObject)PrefabUtility.InstantiatePrefab(vine, islet.transform);
-                    v.transform.localPosition = new Vector3(side * ((w - 1) * 0.5f + 0.56f), -0.05f, -0.2f);
-                    StripCollidersAndShadows(v, keepMaterials: true);
-                }
-                if (flower)
-                {
-                    var f = (GameObject)PrefabUtility.InstantiatePrefab(flower, islet.transform);
-                    f.transform.localPosition = new Vector3(-(w - 1) * 0.5f + 0.2f, 0f, -0.3f);
-                    StripCollidersAndShadows(f, keepMaterials: true);
-                }
-            }
-        }
-
         static ParticleSystem MakeFireflies(Transform cameraTransform)
         {
             var go = new GameObject("Fireflies");
             go.transform.SetParent(cameraTransform, false);
-            go.transform.localPosition = new Vector3(0f, 2f, 30f);      // about the island's plane
+            go.transform.localPosition = new Vector3(0f, 0f, 60f);      // about the island's plane
 
             var ps = go.AddComponent<ParticleSystem>();
             var main = ps.main;
@@ -349,7 +266,7 @@ namespace PullTheWorld.EditorTools
             var sh = ps.shape;
             sh.enabled = true;
             sh.shapeType = ParticleSystemShapeType.Box;
-            sh.scale = new Vector3(30f, 48f, 8f);
+            sh.scale = new Vector3(14f, 24f, 24f);                      // a frame's worth at 60 units, with depth
 
             var noise = ps.noise;
             noise.enabled = true;
@@ -430,16 +347,16 @@ namespace PullTheWorld.EditorTools
             RenderSettings.reflectionIntensity = 0.2f;
             RenderSettings.skybox = null;
 
-            // Atmospheric depth, cheaply: linear fog towards the horizon's lilac. The active island
-            // sits 34 units from the camera and takes ~4%; the far islets at 46-48 take ~15%; the
-            // ridges at 68-84 take 35-50% and recede the way the painting's do. A fog keyword on
-            // URP Lit/Unlit costs nothing on a phone; the custom island shaders ignore it, which
-            // is fine at 4%.
+            // Atmospheric depth, cheaply: linear fog towards the horizon's lilac. The live island
+            // stands ~70 units from the lens and takes nothing; the next level at ~200 takes ~17%,
+            // the one after it at ~330 about a third, and the ridges at 340-460 take 35-50% and
+            // recede the way the painting's do. A fog keyword on URP Lit/Unlit costs nothing on a
+            // phone; the custom island shaders ignore it.
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogColor = PtwArt.Hex("#E6DCEC");
-            RenderSettings.fogStartDistance = 30f;
-            RenderSettings.fogEndDistance = 110f;
+            RenderSettings.fogStartDistance = 80f;
+            RenderSettings.fogEndDistance = 800f;
         }
 
         // ================================================================ post processing =====
@@ -579,8 +496,12 @@ namespace PullTheWorld.EditorTools
                 SetProp(so, "m_RequireOpaqueTexture", true);
                 SetProp(so, "m_MSAA", 4);
                 SetProp(so, "m_RenderScale", 1f);
-                SetProp(so, "m_ShadowDistance", 45f);
-                SetProp(so, "m_ShadowCascadeCount", 1);
+                // Two cascades: the first covers the live island (~70 units out) at about the
+                // resolution one cascade over 45 units used to give it, the second reaches the
+                // next level standing ~200 units back so it is shaded like the one being played.
+                SetProp(so, "m_ShadowDistance", 240f);
+                SetProp(so, "m_ShadowCascadeCount", 2);
+                SetProp(so, "m_Cascade2Split", 0.4f);
                 SetProp(so, "m_SoftShadowsSupported", true);
                 SetProp(so, "m_MainLightShadowmapResolution", 2048);
                 SetProp(so, "m_MainLightShadowsSupported", true);
@@ -681,141 +602,6 @@ namespace PullTheWorld.EditorTools
             }
         }
 
-        // ================================================================ backdrop scenery ====
-        /// <summary>
-        /// A few distant islands sitting well behind the play area.
-        ///
-        /// These are COMPLETELY STATIC, and in v2 that is the entire point. v1 slid them at a
-        /// fraction of the world's speed and had a long comment about parallax factors being
-        /// deliberately zero, because a backdrop that scrolls is the signature of a moving camera.
-        /// v2 has a genuinely rotating object in the middle of the frame, so a fixed backdrop is
-        /// the reference that makes the rotation unambiguous: something in shot is definitely not
-        /// turning, therefore the island definitely is.
-        ///
-        /// They get hazed, desaturated materials so they read as distance rather than as level
-        /// geometry the player is failing to reach.
-        /// </summary>
-        static void BuildBackdropScenery()
-        {
-            var layer = new GameObject("StaticBackdrop");
-            // The camera is pitched 20 degrees, so anything far along +Z projects UPWARD on screen
-            // (screen height ~ 0.94*y + 0.34*z). At y = -4.5 the nearest islets landed at grass
-            // level and, on the thin two-row levels, poked out from behind the floor looking like a
-            // stray dark slab with a tree on it. Four metres lower keeps every piece below even the
-            // thinnest island; the tall ones still hide the rest behind their blocks.
-            layer.transform.position = new Vector3(0f, -8.5f, 18f);
-
-            var grass = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Blocks + "/Block_Grass.prefab");
-            var stone = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Blocks + "/Block_Stone.prefab");
-            var tree = AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Props + "/Prop_TreeSmall.prefab");
-
-            var rnd = new System.Random(4242);
-            // Kept in a band BELOW the play area rather than scattered around it.
-            //
-            // The first v2 pass inherited v1's ring of spots, which put islets in the top corners
-            // where they clipped the screen edge and read as stray blocks floating next to the
-            // level rather than as scenery. Portrait framing leaves its slack at the bottom (the
-            // camera frames the level's width, so there is always spare height), so that is where
-            // scenery belongs: it fills the dead space and stays clear of the island and the HUD.
-            // Kept inside |x| < 3.5. Framing is per-level now, so the visible width changes from
-            // level to level (a 40-degree level is framed much tighter than a free-spinning one) -
-            // anything further out than the tightest level's half-width gets sliced by the screen
-            // edge on that level and reads as debris. This band is inside all of them.
-            var spots = new[]
-            {
-                new Vector3(-3.2f, -1.5f, -3f), new Vector3(2.6f, -3.2f, 2f),
-                new Vector3(-1.2f, -5.8f, 6f),  new Vector3(3.1f, -7.4f, -5f),
-                new Vector3(-2.8f, -8.6f, 4f),  new Vector3(0.6f, -11f, 1f),
-            };
-
-            foreach (var s in spots)
-            {
-                var cluster = new GameObject("Islet");
-                cluster.transform.SetParent(layer.transform, false);
-                cluster.transform.localPosition = s;
-                float scale = 0.45f + (float)rnd.NextDouble() * 0.3f;
-                cluster.transform.localScale = Vector3.one * scale;
-                // Only a small Z tilt. A Y rotation would swing the islet away from a camera that
-                // is looking almost straight down the Z axis and it would vanish edge-on.
-                cluster.transform.localRotation =
-                    Quaternion.Euler(0f, 0f, ((float)rnd.NextDouble() - 0.5f) * 16f);
-
-                // Built in XY like everything else in v2, so an islet reads as a chunk seen
-                // face-on rather than as a floor plan.
-                int w = 1 + rnd.Next(3), tall = 1 + rnd.Next(2);
-                for (int x = 0; x < w; x++)
-                    for (int y = 0; y < tall; y++)
-                    {
-                        var src = y == 0 ? (rnd.NextDouble() > 0.4 ? grass : stone) : stone;
-                        if (!src) continue;
-                        var b = (GameObject)PrefabUtility.InstantiatePrefab(src, cluster.transform);
-                        b.transform.localPosition = new Vector3(x, -y * PtwMeshes.BlockH, 0f);
-                        StripCollidersAndShadows(b);
-                    }
-
-                if (tree && rnd.NextDouble() > 0.45)
-                {
-                    var t = (GameObject)PrefabUtility.InstantiatePrefab(tree, cluster.transform);
-                    t.transform.localPosition = new Vector3(rnd.Next(w), 0f, -0.1f);
-                    StripCollidersAndShadows(t);
-                }
-            }
-        }
-
-        static void StripCollidersAndShadows(GameObject go, bool keepMaterials = false)
-        {
-            foreach (var c in go.GetComponentsInChildren<Collider>(true))
-                UnityEngine.Object.DestroyImmediate(c, true);
-
-            var far = PtwArt.Get(PtwArt.MFarStone);
-            var farGrass = PtwArt.Get(PtwArt.MFarGrass);
-
-            foreach (var r in go.GetComponentsInChildren<Renderer>(true))
-            {
-                r.shadowCastingMode = ShadowCastingMode.Off;
-                r.receiveShadows = false;
-                if (keepMaterials) continue;
-
-                // Swap to hazed materials so distance reads without needing fog. Vegetation keeps
-                // its wind material (already a soft green) so far islets still sway.
-                if (far == null || farGrass == null) continue;
-                var mats = r.sharedMaterials;
-                for (int i = 0; i < mats.Length; i++)
-                {
-                    string n = mats[i] ? mats[i].name : "";
-                    if (n.Contains("Vine") || n.Contains("FoliageWind") || n.Contains("Flower")) continue;
-                    mats[i] = n.Contains("Grass") || n.Contains("Foliage") ? farGrass : far;
-                }
-                r.sharedMaterials = mats;
-            }
-        }
-
-        /// <summary>
-        /// A static sea far below the islands. Deliberately NOT parented to WorldRoot.
-        ///
-        /// This is the fix for "it still feels like the player is moving". A fixed camera over a
-        /// moving world and a moving camera over a fixed world are the same image; the only thing
-        /// that tells them apart is something static with visible features. The backdrop was a
-        /// featureless gradient, so there was literally nothing to judge against. Now the islands
-        /// visibly travel across a textured sea that never moves, and drop their shadows onto it.
-        /// </summary>
-        static void BuildOcean()
-        {
-            var go = PtwPrefabs.MeshNode("Ocean", "Mesh_OceanPlane", null, PtwArt.MOcean);
-            go.transform.position = new Vector3(0f, -13f, 0f);
-            var r = go.GetComponent<MeshRenderer>();
-            r.shadowCastingMode = ShadowCastingMode.Off;
-            r.receiveShadows = true;
-        }
-
-        /// <summary>
-        /// Two dust emitters, both driven by ImpactFeedback.
-        ///
-        /// v1 had a single system fed by how fast the world was being dragged. v2 has no drag, and
-        /// dust that responded to ROTATION would be wrong anyway - the level turning is not the
-        /// thing hitting something. So it is split by cause: a one-shot burst at the contact point
-        /// of an impact, and a continuous trickle while the ball is skidding along the ground.
-        /// </summary>
         static (ParticleSystem burst, ParticleSystem roll) BuildDust()
         {
             var burst = MakeDustSystem("ImpactDust", 60, 0.06f);

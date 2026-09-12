@@ -3,56 +3,72 @@ using UnityEngine;
 namespace PullTheWorld
 {
     /// <summary>
-    /// Places the one and only camera and then leaves it alone forever.
+    /// Places the one and only camera, frames whichever level is live, and - the one time it ever
+    /// moves - pushes forward through the world to the next one.
     ///
-    /// v1 used a 46/45 isometric rig. v2 cannot: the mechanic is a rotation about world Z, and a
-    /// yawed camera turns that clean screen-plane spin into a skewed tumble, which is precisely the
-    /// ambiguity the whole redesign exists to remove. So yaw is zero and the camera looks straight
-    /// down +Z at the XY puzzle plane.
+    /// Yaw is zero and the camera looks straight down +Z at the XY puzzle plane: the mechanic is a
+    /// rotation about world Z, and a yawed camera would turn that clean screen-plane spin into a
+    /// skewed tumble. What survives from the old isometric look is the PITCH, and it earns more of
+    /// the frame than it looks like it should: downward tilt is what reveals the top faces of the
+    /// blocks, and the top face is where the grass is. Do not push it much past 20.
     ///
-    /// What survives from the isometric look is the PITCH, and it earns more of the frame than it
-    /// looks like it should. Downward tilt is what reveals the top faces of the blocks - and the
-    /// top face is where the GRASS is. At 13 degrees the first captures were a wall of grey stone
-    /// sides with a thin green line along the top; at 20 the same island reads as green. That is
-    /// the trade to understand here: pitch buys colour, and it costs fidelity on the rotation
-    /// reading as a flat spin (cos 20 is 0.94, still invisible; cos 40 would not be). Do not push
-    /// it much past this.
+    /// The lens is a NARROW perspective, not an orthographic one. The world is laid out in depth
+    /// now (see LevelManager.SlotFor): the level you are playing stands 70-odd units in front of
+    /// the lens and the next two stand further down the same line of sight, so they have to get
+    /// smaller with distance or they would simply sit on top of each other. At 18 degrees the
+    /// island itself is still as good as flat - a block a unit deep changes size by under two
+    /// percent front to back - and the turntable gesture is still read off the pivot's screen
+    /// position, so nothing about the mechanic's legibility is spent. What the perspective buys is
+    /// real parallax on the one move the camera makes.
     ///
-    /// Orthographic is non-negotiable for two reasons. With no perspective divide the turntable
-    /// gesture is a true 1:1 grab at every radius, and every 1x1 block is the same size on screen
-    /// wherever it sits, so a level reads as a readable diagram of itself.
+    /// Framing is by DISTANCE at a fixed focal length: the level's worst-case extents (computed by
+    /// the generator across its rotation range) decide how far back the camera stands so they
+    /// fit. A level that can only tip 40 degrees is framed much tighter than one that spins
+    /// freely, which is the difference between an island that fills the screen and one that sits
+    /// in the middle of it looking like a model.
     /// </summary>
     [ExecuteAlways]
     [RequireComponent(typeof(Camera))]
     [DefaultExecutionOrder(-250)]
     public class PlaneCameraRig : MonoBehaviour
     {
-        [Header("Angle")]
+        [Header("Lens")]
         [Tooltip("Downward tilt. Small on purpose - see the class comment. Above ~20 degrees the " +
                  "rotation stops reading as a flat spin.")]
         [SerializeField, Range(0f, 26f)] float pitch = 20f;
-        [SerializeField] float distance = 34f;
+        [Tooltip("Vertical field of view. Narrow, so the live island stays a readable diagram of " +
+                 "itself while the levels behind it still recede.")]
+        [SerializeField, Range(8f, 40f)] float fieldOfView = 18f;
 
         [Header("Framing")]
-        [Tooltip("What the camera is centred on. Left empty it uses the world origin, which is " +
-                 "where every level pivots.")]
+        [Tooltip("What the camera is centred on. Left empty it uses `focus`.")]
         [SerializeField] Transform lookTarget;
         [Tooltip("World point framed at centreViewportPoint when there is no lookTarget: the active " +
-                 "level's pivot. LevelManager snaps it on a load and glides it on a level change.")]
+                 "level's pivot. LevelManager snaps it on a load and pushes it forward on a win.")]
         [SerializeField] Vector3 focus;
-        [Tooltip("Minimum world units visible horizontally. On a portrait phone the height " +
-                 "constraint normally wins, so this is the safety net for a wide screen.")]
+        [Tooltip("Minimum world units visible horizontally at the focus plane. On a portrait phone " +
+                 "this is normally the binding constraint, because a level's rotation extents are " +
+                 "about square and the screen is not.")]
         [SerializeField] float minViewWidth = 11f;
-        [Tooltip("Minimum world units visible vertically. This is the real composition dial in " +
-                 "portrait: it decides how much empty margin surrounds the island.")]
+        [Tooltip("Minimum world units visible vertically at the focus plane.")]
         [SerializeField] float minViewHeight = 19f;
-        [Tooltip("Where the level centre sits on screen. Slightly above centre leaves room for " +
-                 "the bottom HUD without pushing the island under it.")]
-        [SerializeField] Vector2 centreViewportPoint = new Vector2(0.5f, 0.54f);
+        [Tooltip("Where the level pivot sits on screen. Below centre so the sky above the island " +
+                 "is free for the next two levels standing in the distance, like the mockup's " +
+                 "far islands, while the tilt cue keeps its room at the bottom.")]
+        [SerializeField] Vector2 centreViewportPoint = new Vector2(0.5f, 0.46f);
+
+        [Header("Travel")]
+        [Tooltip("How far the camera rises over the middle of a push, so it clears the finished " +
+                 "island rather than skimming its portal. Small - the move is forward, not up.")]
+        [SerializeField] float travelLift = 4f;
+        [Tooltip("The lens widens by this fraction over the middle of a push and settles back on " +
+                 "arrival: a touch of wide-angle exaggerates the rush of the world going past.")]
+        [SerializeField, Range(0f, 0.4f)] float travelWiden = 0.10f;
 
         [Header("Clipping")]
         [SerializeField] float nearClip = 0.05f;
-        [SerializeField] float farClip = 120f;
+        [Tooltip("Far enough for the level after next and the mountain ridges behind it.")]
+        [SerializeField] float farClip = 700f;
 
         Camera cam;
         float lastAspect = -1f;
@@ -65,8 +81,9 @@ namespace PullTheWorld
         float zoom = 1f, zoomVel;
 
         /// <summary>
-        /// A momentary zoom that springs back to 1 over about half a second. Above 1 on level load
-        /// (the island arrives), below 1 on a win (lean in). Visual only; framing math is unchanged.
+        /// A momentary lens zoom that springs back to 1 over about half a second. Above 1 on level
+        /// load (the island arrives), below 1 on a win (lean in). Visual only; the camera does not
+        /// move, so the framing math and the pivot's screen position are unchanged.
         /// </summary>
         public void Kick(float scale)
         {
@@ -75,17 +92,21 @@ namespace PullTheWorld
         }
 
         // ---- travel: the one time this camera moves ------------------------------------------
-        // Between levels the camera glides from the finished island's pivot to the next one's,
-        // easing in and out, zooming out through the middle so both islands sit in frame at once,
-        // then settling on the new framing. During play it is bolted down exactly as before.
+        // Between levels the camera pushes FORWARD, from its stand in front of the finished island
+        // to its stand in front of the next one, which was already there in the distance. It eases
+        // in and out, lifts a little over the middle so it sails over the finished island rather
+        // than through its portal, and widens the lens a touch at speed. The finished island
+        // swells and slides out under the bottom of the frame; the next grows from a distant
+        // silhouette into the level. During play the camera is bolted down exactly as before.
         bool travelling;
         float travelT, travelSeconds;
         Vector3 travelFrom, travelTo;
         Vector2 extFrom, extTo;
+        float lift, widen;
 
         public bool IsTravelling => travelling;
         public Vector3 Focus => focus;
-        /// <summary>0 while idle, 0..1 through a glide. Read by SkyParallax for the travel parallax.</summary>
+        /// <summary>0 while idle, 0..1 through a push. Read by SkyParallax for the travel parallax.</summary>
         public static float TravelProgress { get; private set; }
 
         /// <summary>Cut straight to a framing: level load, restart, menu.</summary>
@@ -93,13 +114,15 @@ namespace PullTheWorld
         {
             travelling = false;
             TravelProgress = 0f;
+            lift = 0f;
+            widen = 0f;
             SkyParallax.TravelOffset = Vector2.zero;
             SkyParallax.DriftBoost = 1f;
             focus = worldFocus;
             FrameExtents(extents);
         }
 
-        /// <summary>Glide to a framing over <paramref name="seconds"/>. Poll <see cref="IsTravelling"/>.</summary>
+        /// <summary>Push to a framing over <paramref name="seconds"/>. Poll <see cref="IsTravelling"/>.</summary>
         public void TravelTo(Vector3 worldFocus, Vector2 extents, float seconds)
         {
             travelFrom = focus;
@@ -120,16 +143,19 @@ namespace PullTheWorld
             {
                 travelT += Time.deltaTime / travelSeconds;
                 float u = Mathf.Clamp01(travelT);
-                float e = u * u * (3f - 2f * u);                 // smoothstep: slow out, slow in
-                float bump = Mathf.Sin(u * Mathf.PI);           // 0 at both ends, 1 in the middle
+                float e = u * u * u * (u * (u * 6f - 15f) + 10f);   // smootherstep: gentle start, gentle stop
+                float bump = Mathf.Sin(u * Mathf.PI);               // 0 at both ends, 1 in the middle
                 focus = Vector3.Lerp(travelFrom, travelTo, e);
-                Vector2 ext = Vector2.Lerp(extFrom, extTo, e) * (1f + 0.55f * bump);
+                Vector2 ext = Vector2.Lerp(extFrom, extTo, e);
                 minViewWidth = ext.x;
                 minViewHeight = ext.y;
+                lift = travelLift * bump;
+                widen = travelWiden * bump;
                 TravelProgress = u;
-                // The sky lags the climb and catches up (near layers most), and the clouds hurry.
-                SkyParallax.TravelOffset = new Vector2(0f, -bump * 3.2f);
-                SkyParallax.DriftBoost = 1f + 5f * bump;
+                // The foreground clouds sink out of the way and hurry sideways as the camera
+                // sails past them; the ridges, welded to the lens, barely notice.
+                SkyParallax.TravelOffset = new Vector2(0f, -bump * 2.5f);
+                SkyParallax.DriftBoost = 1f + 3f * bump;
                 if (u >= 1f)
                 {
                     travelling = false;
@@ -139,6 +165,8 @@ namespace PullTheWorld
                     focus = travelTo;
                     minViewWidth = extTo.x;
                     minViewHeight = extTo.y;
+                    lift = 0f;
+                    widen = 0f;
                 }
                 Apply();
                 return;
@@ -154,23 +182,30 @@ namespace PullTheWorld
             return Screen.height > 0 ? Screen.width / (float)Screen.height : 1080f / 1920f;
         }
 
-        /// <summary>
-        /// Frame a specific level, called on every level load.
-        ///
-        /// One global framing does not work here, and the reason is the mechanic. A level is spun
-        /// through arbitrary angles, so the box it occupies on screen changes constantly - an 11x6
-        /// island becomes 6x11 at ninety degrees. The generator therefore hands over the worst-case
-        /// extents across each level's own rotation range (see PtwLevels), and the camera simply
-        /// obeys. A level that can only tip 40 degrees gets framed much tighter than one that can
-        /// be spun freely, which is the difference between an island that fills the screen and one
-        /// that sits in the middle of it looking like a model.
-        /// </summary>
+        /// <summary>Frame a specific level's worst-case rotation extents, called on every level load.</summary>
         public void FrameExtents(Vector2 extents)
         {
             minViewWidth = Mathf.Max(1f, extents.x);
             minViewHeight = Mathf.Max(1f, extents.y);
             Apply();
         }
+
+        /// <summary>
+        /// How far in front of the lens a level framed with <paramref name="extents"/> stands.
+        /// LevelManager uses it to lay the levels out so each one's successors land where the
+        /// mockup's far islands are. Portrait is assumed (the width constraint binds), so the
+        /// layout does not depend on the device's exact shape.
+        /// </summary>
+        public float StandDistance(Vector2 extents)
+        {
+            float tanHalf = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
+            float forHeight = Mathf.Max(1f, extents.y) * 0.5f / tanHalf;
+            float forWidth = Mathf.Max(1f, extents.x) * 0.5f / (tanHalf * (9f / 16f));
+            return Mathf.Max(forHeight, forWidth);
+        }
+
+        /// <summary>The camera's forward and up in the world for the fixed pitch. Shared with the layout.</summary>
+        public Quaternion Attitude => Quaternion.Euler(pitch, 0f, 0f);
 
         public void Apply()
         {
@@ -180,34 +215,35 @@ namespace PullTheWorld
             float aspect = CurrentAspect();
             lastAspect = aspect;
 
-            cam.orthographic = true;
+            cam.orthographic = false;
             cam.nearClipPlane = nearClip;
             cam.farClipPlane = farClip;
 
-            // Satisfy whichever minimum is the binding constraint on this device.
-            float sizeForWidth = minViewWidth / (2f * Mathf.Max(0.01f, aspect));
-            float sizeForHeight = minViewHeight * 0.5f;
-            float orthoSize = Mathf.Max(sizeForWidth, sizeForHeight) * zoom;
-            cam.orthographicSize = orthoSize;
+            // The stand distance comes from the BASE lens, so a kick or the travel widening is a
+            // pure zoom: the camera does not move and the pivot stays put on screen.
+            float tanHalf = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
+            float forHeight = minViewHeight * 0.5f / tanHalf;
+            float forWidth = minViewWidth * 0.5f / (tanHalf * Mathf.Max(0.01f, aspect));
+            float distance = Mathf.Max(forHeight, forWidth);
+            cam.fieldOfView = Mathf.Clamp(fieldOfView * zoom * (1f + widen), 2f, 120f);
 
             // Yaw stays 0. Roll stays 0. Only pitch.
-            Quaternion rot = Quaternion.Euler(pitch, 0f, 0f);
+            Quaternion rot = Attitude;
             transform.rotation = rot;
 
             Vector3 target = lookTarget ? lookTarget.position : focus;
-            float viewH = orthoSize * 2f;
+            float viewH = 2f * distance * tanHalf;
             float viewW = viewH * aspect;
 
             Vector3 offset = -(rot * Vector3.right) * ((centreViewportPoint.x - 0.5f) * viewW)
                              - (rot * Vector3.up) * ((centreViewportPoint.y - 0.5f) * viewH);
 
-            transform.position = target - (rot * Vector3.forward) * distance + offset;
+            transform.position = target - (rot * Vector3.forward) * distance + offset + Vector3.up * lift;
 
             // The backdrop and every sky layer are welded to the camera and sized from its frustum,
             // so they have to be refitted in the same breath as the framing. See ScreenFillQuad.Fit.
             // (The capture path renders to a portrait texture from a window that may be a different
-            // shape; without this the layers were fitted to the window and the far islets landed
-            // half off the shot.)
+            // shape; without this the layers were fitted to the window and landed half off the shot.)
             if (!backdrop) backdrop = GetComponentInChildren<ScreenFillQuad>(true);
             if (backdrop) backdrop.Fit();
             if (skyLayers == null || skyLayers.Length == 0) skyLayers = GetComponentsInChildren<SkyLayer>(true);

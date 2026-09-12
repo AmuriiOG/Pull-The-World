@@ -157,7 +157,7 @@ namespace PullTheWorld.Tests
 
             Vector3 c0 = cam.transform.position;
             Quaternion cr0 = cam.transform.rotation;
-            float ortho = cam.orthographicSize;
+            float fov = cam.fieldOfView;
 
             yield return RotateTo(35f);
             rotator.AddShake(1f);
@@ -167,41 +167,63 @@ namespace PullTheWorld.Tests
             Assert.Less(Vector3.Distance(c0, cam.transform.position), 0.0005f,
                         "Camera moved - it must be completely fixed");
             Assert.Less(Quaternion.Angle(cr0, cam.transform.rotation), 0.05f, "Camera rotated");
-            Assert.AreEqual(ortho, cam.orthographicSize, 0.0005f, "Camera zoomed");
+            Assert.AreEqual(fov, cam.fieldOfView, 0.0005f, "Camera zoomed");
         }
 
         /// <summary>
-        /// Finishing a level is a journey, not a cut: the camera glides up the world to the next
-        /// level, which was already standing in its slot, and only then does the orb drop in. The
-        /// finished level stays behind as scenery with no physics left on it.
+        /// The real next two levels stand in the distance while a level is played - in front of
+        /// the lens, inside the frame, above the live island and smaller than it - and finishing a
+        /// level is a journey, not a cut: the camera pushes forward to the next one and only then
+        /// does the orb drop in. The finished level is behind the lens by then and is gone.
         /// </summary>
         [UnityTest]
         public IEnumerator PortalTravelsToTheNextLevel()
         {
             yield return LoadLevel(0);
             Vector3 camBefore = cam.transform.position;
-            Assert.IsNotNull(GameObject.Find("Level_02 [scenery]"), "The next level is not standing in the world ahead");
+
+            var next = GameObject.Find("Level_02 [scenery]");
+            var after = GameObject.Find("Level_03 [scenery]");
+            Assert.IsNotNull(next, "The next level is not standing in the world ahead");
+            Assert.IsNotNull(after, "The level after next is not standing in the world ahead");
+            Assert.AreEqual(0, next.GetComponentsInChildren<Collider>(true).Length, "Scenery still has colliders");
+            Assert.AreEqual(0, next.GetComponentsInChildren<MonoBehaviour>(true).Length, "Scenery still has behaviours");
+            Assert.Greater(next.GetComponentsInChildren<Renderer>(true).Length, 20, "The next level is not the complete level");
+
+            Vector3 live = cam.WorldToViewportPoint(levels.Pivot);
+            Vector3 vNext = cam.WorldToViewportPoint(next.transform.position);
+            Vector3 vAfter = cam.WorldToViewportPoint(after.transform.position);
+            Assert.Greater(vNext.z, live.z, "The next level is not further from the lens than the live one");
+            Assert.Greater(vAfter.z, vNext.z, "The level after next is not further away than the next");
+            Assert.IsTrue(vNext.x > 0.05f && vNext.x < 0.95f && vNext.y > live.y && vNext.y < 0.95f,
+                          $"The next level is not in the sky above the live island: viewport {vNext}");
+            Assert.IsTrue(vAfter.x > 0.02f && vAfter.x < 0.98f && vAfter.y > live.y && vAfter.y < 0.98f,
+                          $"The level after next is not in frame: viewport {vAfter}");
 
             levels.ReportWin();
             yield return WaitUntil(() => levels.IsTravelling, 3f, "the camera to set off");
             Assert.IsFalse(levels.IsPlaying, "Control was handed back before the camera arrived");
-            // Half way up: both islands in frame, the sky lagging. The one frame of the whole game
-            // that no other capture shows.
-            yield return Wait(0.85f);
-            yield return Grab(Path.Combine(Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Captures")), "travel_01_to_02_mid.png"));
+            // Mid-push, then late in the push: the finished island sliding out under the frame,
+            // the next one growing into the level. Frames no other capture shows.
+            string caps = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Captures"));
+            yield return Wait(0.6f);
+            yield return Grab(Path.Combine(caps, "travel_01_to_02_early.png"));
+            yield return Wait(0.4f);
+            yield return Grab(Path.Combine(caps, "travel_01_to_02_mid.png"));
+            yield return Wait(0.6f);
+            yield return Grab(Path.Combine(caps, "travel_01_to_02_late.png"));
             yield return WaitUntil(() => levels.IsPlaying && !levels.IsTravelling, 6f, "the next level to start");
 
             Assert.AreEqual(1, levels.CurrentIndex, "Did not arrive at level 2");
-            Assert.Greater(cam.transform.position.y - camBefore.y, 10f, "The camera did not glide up to the next level");
+            Assert.Greater(cam.transform.position.z - camBefore.z, 60f, "The camera did not push forward to the next level");
+            Assert.Less(cam.transform.position.y, camBefore.y, "The camera climbed instead of pushing in");
             Assert.IsTrue(player.IsAlive && player.gameObject.activeInHierarchy, "The orb did not drop into the next level");
             Assert.Less(Vector3.Distance(player.transform.position, levels.Current.WorldSpawnPoint), 3f,
                         "The orb did not spawn at the next level");
 
-            var scenery = GameObject.Find("Level_01 [scenery]");
-            Assert.IsNotNull(scenery, "The finished level did not stay behind as scenery");
-            Assert.AreEqual(0, scenery.GetComponentsInChildren<Collider>(true).Length, "Scenery still has colliders");
-            Assert.AreEqual(0, scenery.GetComponentsInChildren<MonoBehaviour>(true).Length, "Scenery still has behaviours");
-            Assert.IsNotNull(GameObject.Find("Level_03 [scenery]"), "The level after next was not prepared");
+            Assert.IsNull(GameObject.Find("Level_01 [scenery]"), "The finished level, now behind the lens, was kept");
+            Assert.IsNotNull(GameObject.Find("Level_03 [scenery]"), "The next level is not standing ahead");
+            Assert.IsNotNull(GameObject.Find("Level_04 [scenery]"), "The level after next was not prepared");
         }
 
         /// <summary>
@@ -266,8 +288,10 @@ namespace PullTheWorld.Tests
             for (float a = -40f; a <= 40f; a += 20f)
             {
                 yield return RotateTo(a, 2f);
-                Assert.Less(Mathf.Abs(player.transform.position.z), 0.05f,
-                            $"Player left the XY plane at {a} degrees (z={player.transform.position.z})");
+                // The puzzle plane is the live level's plane, and levels stand at different depths now.
+                float depth = player.transform.position.z - levels.Pivot.z;
+                Assert.Less(Mathf.Abs(depth), 0.05f,
+                            $"Player left the XY plane at {a} degrees (z={depth} from the level)");
             }
         }
 

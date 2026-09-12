@@ -22,7 +22,8 @@ namespace PullTheWorld
     /// </summary>
     public class UiRoot : MonoBehaviour
     {
-        public enum Screen { MainMenu, Playing, LevelComplete }
+        /// <summary>Travelling: the camera is pushing forward to the next level and every panel is out of the way.</summary>
+        public enum Screen { MainMenu, Playing, LevelComplete, Travelling }
 
         [Header("Panels")]
         [SerializeField] UiPanel mainMenu;
@@ -598,6 +599,11 @@ namespace PullTheWorld
                 flash.a = Mathf.MoveTowards(flash.a, 0f, flashFade * Time.unscaledDeltaTime);
                 if (flashImage) flashImage.color = flash;
             }
+
+            // The complete card gets the celebration beat; the moment the camera sets off for the
+            // next level it fades, haze and all, so the push through the world is seen clean. The
+            // HUD comes back with the next level (HandleLevelLoaded).
+            if (screen == Screen.LevelComplete && levels && levels.IsTravelling) GoTo(Screen.Travelling);
         }
     }
 }

@@ -502,26 +502,40 @@ Three things went wrong on the way and are worth knowing about:
   that into NaN, and bloom's default clamp (65472) inflated one NaN pixel into a block-sized glow.
   `MeshBuilder.SafeUnit`, `SafeNormalize` in the shaders and a bloom clamp of 12 close all three.
 
-## One world: levels stand in slots, the camera travels
+## One world: levels stand in the distance, the camera pushes forward
 
 Since 2026-09-12 a finished level is not swapped for the next one at the origin. Every level has a
-**slot** in the world (`LevelManager.SlotFor`: 26 units straight up per level, with a 3.5-unit
-sideways weave), the rotating root moves to the active level's slot, and the camera frames that
-slot. Three levels exist at once:
+**slot** in the world (`LevelManager.SlotFor`): each stands 126 units **deeper** (+Z) than the one
+before, 27 units lower and a little to one side (a 3.5-unit weave), so from any level's camera the
+next one waits in the sky above the live island at about a third of the size and the one after it
+smaller again beside it. Those are the real, complete levels — platform, grass, flowers, vines,
+portal — stripped to their meshes, not painted stand-ins. The rotating root moves to the active
+level's slot, and the camera frames that slot. What exists at once:
 
-* **previous** — the level just finished, frozen where it stands as scenery;
 * **current** — the live one under the rotating root, the only thing with physics;
-* **next** — a preview of the level ahead, standing in its slot, ready for the camera.
+* **next** and the one **after** — the complete prefabs as scenery, standing in their slots;
+* **previous** — only for the length of the journey: the finished level, frozen where it stands.
+
+The camera is a **narrow perspective** (`PlaneCameraRig`: 18° vertical FOV, the same 20° pitch,
+framing by distance so each level's rotation extents fit). At that focal length the island itself
+is as good as flat — a block a unit deep changes size by under two percent — and the turntable
+gesture still reads off the pivot's screen position, so the mechanic's legibility is untouched;
+what the lens buys is depth. The pivot sits at 46% of the frame height, leaving the sky above the
+island to the levels in the distance.
 
 Reaching a portal: the orb is drawn in (0.9 s), the door **flares** (`ExitPortal.Flare`), the
-finished level is frozen into scenery, the preview ahead is replaced by the real level, and the
-camera **glides** (`PlaneCameraRig.TravelTo`, 1.8 s, smoothstep) from the old pivot to the new one,
-zooming out through the middle so both islands sit in frame and back in on arrival. The sky lags the
-climb and catches up (near layers most) and the clouds hurry (`SkyParallax.TravelOffset` /
-`DriftBoost`). Control returns only when the camera has settled, through `LevelManager.ArrivalGate`
-- the UI puts the interstitial there ("after a win, on the way to the next level"), and the
-level-complete card clears itself when the next level starts. Everything two or more levels away
-is destroyed, so the world costs a phone what one level did.
+finished level is frozen into scenery, the stand-in ahead is replaced by the real level in the same
+pose, and the camera **pushes forward** (`PlaneCameraRig.TravelTo`, 2.2 s, smootherstep) from its
+stand in front of the old island to its stand in front of the new one — lifting four units over the
+middle so it sails over the finished island rather than through its portal, and widening the lens a
+tenth at speed. The finished island swells and slides out under the bottom of the frame; the next
+grows from a fogged silhouette into the level. The foreground clouds sink and hurry
+(`SkyParallax.TravelOffset` / `DriftBoost`). Control returns only when the camera has settled,
+through `LevelManager.ArrivalGate` - the UI puts the interstitial there ("after a win, on the way to
+the next level"), and the level-complete card clears itself when the next level starts. On arrival
+the finished level is behind the lens and is destroyed; nothing more than two levels ahead exists.
+The menu looks at the level about to be played in *its* slot, with the two after it behind, so PLAY
+is a 0.8 s ease into the gameplay framing rather than a cut.
 
 **Scenery** (`LevelManager.StripToVisual`) is the level prefab with every collider, rigidbody,
 behaviour, light, particle system and audio source removed immediately - behaviours in
@@ -535,9 +549,13 @@ Because the active level is no longer at the origin, the fall checks in `PlayerB
 rules change, not a physics one; the ball's body is untouched. Direct loads (PLAY, restart, level
 select, the tests) still cut: `LoadLevel` moves the root, snaps the camera and rebuilds the preview.
 
-Honest limitation: with an orthographic camera the next island cannot be seen *smaller in the
-distance* during play - it stands 26 units up, out of frame, and is revealed by the zoom-out of the
-glide. Fog (linear, to the horizon's lilac) does the depth work on the far islets and ridges.
+Depth is real now, so the sky had to move back: the mountain ridges stand 340-460 units from the
+lens (behind the level after next), the far clouds 240-520, the three foreground clouds ~30, and
+every `SkyLayer` sizes itself to the frustum at its own distance so the composition is unchanged.
+Fog is linear from 80 to 800 units: nothing on the live island, ~17% on the next level, about a
+third on the one after it, 35-50% on the ridges. The main light casts two shadow cascades to 240
+units so the next level is shaded like the one being played. The painted "far islets" that used to
+stand in for distant levels are gone.
 
 ## Water
 
