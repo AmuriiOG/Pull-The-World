@@ -37,6 +37,9 @@ namespace PullTheWorld
         [Tooltip("What the camera is centred on. Left empty it uses the world origin, which is " +
                  "where every level pivots.")]
         [SerializeField] Transform lookTarget;
+        [Tooltip("World point framed at centreViewportPoint when there is no lookTarget: the active " +
+                 "level's pivot. LevelManager snaps it on a load and glides it on a level change.")]
+        [SerializeField] Vector3 focus;
         [Tooltip("Minimum world units visible horizontally. On a portrait phone the height " +
                  "constraint normally wins, so this is the safety net for a wide screen.")]
         [SerializeField] float minViewWidth = 11f;
@@ -71,10 +74,75 @@ namespace PullTheWorld
             zoomVel = 0f;
         }
 
+        // ---- travel: the one time this camera moves ------------------------------------------
+        // Between levels the camera glides from the finished island's pivot to the next one's,
+        // easing in and out, zooming out through the middle so both islands sit in frame at once,
+        // then settling on the new framing. During play it is bolted down exactly as before.
+        bool travelling;
+        float travelT, travelSeconds;
+        Vector3 travelFrom, travelTo;
+        Vector2 extFrom, extTo;
+
+        public bool IsTravelling => travelling;
+        public Vector3 Focus => focus;
+        /// <summary>0 while idle, 0..1 through a glide. Read by SkyParallax for the travel parallax.</summary>
+        public static float TravelProgress { get; private set; }
+
+        /// <summary>Cut straight to a framing: level load, restart, menu.</summary>
+        public void SnapTo(Vector3 worldFocus, Vector2 extents)
+        {
+            travelling = false;
+            TravelProgress = 0f;
+            SkyParallax.TravelOffset = Vector2.zero;
+            SkyParallax.DriftBoost = 1f;
+            focus = worldFocus;
+            FrameExtents(extents);
+        }
+
+        /// <summary>Glide to a framing over <paramref name="seconds"/>. Poll <see cref="IsTravelling"/>.</summary>
+        public void TravelTo(Vector3 worldFocus, Vector2 extents, float seconds)
+        {
+            travelFrom = focus;
+            travelTo = worldFocus;
+            extFrom = new Vector2(minViewWidth, minViewHeight);
+            extTo = new Vector2(Mathf.Max(1f, extents.x), Mathf.Max(1f, extents.y));
+            travelSeconds = Mathf.Max(0.05f, seconds);
+            travelT = 0f;
+            travelling = true;
+        }
+
         void Update()
         {
             bool settling = Mathf.Abs(zoom - 1f) > 0.0005f || Mathf.Abs(zoomVel) > 0.0005f;
             if (settling) Spring.Step(ref zoom, ref zoomVel, 1f, 2.4f, 0.85f, Time.unscaledDeltaTime);
+
+            if (travelling && Application.isPlaying)
+            {
+                travelT += Time.deltaTime / travelSeconds;
+                float u = Mathf.Clamp01(travelT);
+                float e = u * u * (3f - 2f * u);                 // smoothstep: slow out, slow in
+                float bump = Mathf.Sin(u * Mathf.PI);           // 0 at both ends, 1 in the middle
+                focus = Vector3.Lerp(travelFrom, travelTo, e);
+                Vector2 ext = Vector2.Lerp(extFrom, extTo, e) * (1f + 0.55f * bump);
+                minViewWidth = ext.x;
+                minViewHeight = ext.y;
+                TravelProgress = u;
+                // The sky lags the climb and catches up (near layers most), and the clouds hurry.
+                SkyParallax.TravelOffset = new Vector2(0f, -bump * 3.2f);
+                SkyParallax.DriftBoost = 1f + 5f * bump;
+                if (u >= 1f)
+                {
+                    travelling = false;
+                    TravelProgress = 0f;
+                    SkyParallax.TravelOffset = Vector2.zero;
+                    SkyParallax.DriftBoost = 1f;
+                    focus = travelTo;
+                    minViewWidth = extTo.x;
+                    minViewHeight = extTo.y;
+                }
+                Apply();
+                return;
+            }
 
             // Otherwise only recomputes on a real resolution change, so this is free at runtime.
             if (settling || !Mathf.Approximately(lastAspect, CurrentAspect())) Apply();
@@ -126,7 +194,7 @@ namespace PullTheWorld
             Quaternion rot = Quaternion.Euler(pitch, 0f, 0f);
             transform.rotation = rot;
 
-            Vector3 target = lookTarget ? lookTarget.position : Vector3.zero;
+            Vector3 target = lookTarget ? lookTarget.position : focus;
             float viewH = orthoSize * 2f;
             float viewW = viewH * aspect;
 

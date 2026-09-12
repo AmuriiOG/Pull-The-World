@@ -502,6 +502,43 @@ Three things went wrong on the way and are worth knowing about:
   that into NaN, and bloom's default clamp (65472) inflated one NaN pixel into a block-sized glow.
   `MeshBuilder.SafeUnit`, `SafeNormalize` in the shaders and a bloom clamp of 12 close all three.
 
+## One world: levels stand in slots, the camera travels
+
+Since 2026-09-12 a finished level is not swapped for the next one at the origin. Every level has a
+**slot** in the world (`LevelManager.SlotFor`: 26 units straight up per level, with a 3.5-unit
+sideways weave), the rotating root moves to the active level's slot, and the camera frames that
+slot. Three levels exist at once:
+
+* **previous** — the level just finished, frozen where it stands as scenery;
+* **current** — the live one under the rotating root, the only thing with physics;
+* **next** — a preview of the level ahead, standing in its slot, ready for the camera.
+
+Reaching a portal: the orb is drawn in (0.9 s), the door **flares** (`ExitPortal.Flare`), the
+finished level is frozen into scenery, the preview ahead is replaced by the real level, and the
+camera **glides** (`PlaneCameraRig.TravelTo`, 1.8 s, smoothstep) from the old pivot to the new one,
+zooming out through the middle so both islands sit in frame and back in on arrival. The sky lags the
+climb and catches up (near layers most) and the clouds hurry (`SkyParallax.TravelOffset` /
+`DriftBoost`). Control returns only when the camera has settled, through `LevelManager.ArrivalGate`
+- the UI puts the interstitial there ("after a win, on the way to the next level"), and the
+level-complete card clears itself when the next level starts. Everything two or more levels away
+is destroyed, so the world costs a phone what one level did.
+
+**Scenery** (`LevelManager.StripToVisual`) is the level prefab with every collider, rigidbody,
+behaviour, light, particle system and audio source removed immediately - behaviours in
+`[RequireComponent]` dependency order so Unity never refuses a removal - leaving meshes on
+transforms that batch with the live level's. Moving platforms detach themselves in `Awake` and
+would shuttle about in the live level's frame, so `MovingPlatform.DestroyOwnedBy` removes a
+level's platforms before it is stripped.
+
+Because the active level is no longer at the origin, the fall checks in `PlayerBody`, `Enemy` and
+`DynamicProp` measure from `LevelManager.PivotOrOrigin` (the rotating root's position). That is a
+rules change, not a physics one; the ball's body is untouched. Direct loads (PLAY, restart, level
+select, the tests) still cut: `LoadLevel` moves the root, snaps the camera and rebuilds the preview.
+
+Honest limitation: with an orthographic camera the next island cannot be seen *smaller in the
+distance* during play - it stands 26 units up, out of frame, and is revealed by the zoom-out of the
+glide. Fog (linear, to the horizon's lilac) does the depth work on the far islets and ridges.
+
 ## Water
 
 A pool is a **half-height solid bed** in a floor cell with a `WaterVolume` filling the other half,

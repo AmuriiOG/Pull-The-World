@@ -251,7 +251,9 @@ namespace PullTheWorld
 
         bool BelowTheWorld()
         {
-            Vector3 p = transform.position;
+            // Measured from the ACTIVE level's pivot, not the origin: levels stand in slots up
+            // the world now (LevelManager.SlotFor). A rules check, not a physics change.
+            Vector3 p = transform.position - LevelManager.PivotOrOrigin;
             if (p.sqrMagnitude > fallRadius * fallRadius) return true;
             var lm = LevelManager.Instance;
             if (!lm || !lm.Current) return false;

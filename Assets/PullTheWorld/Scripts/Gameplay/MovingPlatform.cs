@@ -50,6 +50,16 @@ namespace PullTheWorld
         Rigidbody body;
         Transform levelRoot;
         LevelDefinition owner;
+        /// <summary>The level prefab instance this platform was authored in (it detaches from it at startup).</summary>
+        public LevelDefinition Owner => owner;
+
+        /// <summary>Remove every platform that belongs to <paramref name="level"/>: LevelManager calls this when a level stops being played.</summary>
+        public static void DestroyOwnedBy(LevelDefinition level)
+        {
+            if (!level) return;
+            for (int i = Active.Count - 1; i >= 0; i--)
+                if (Active[i] && Active[i].owner == level) Destroy(Active[i].gameObject);
+        }
         Vector3 localHome;
         Quaternion localHomeRot;
         float t;

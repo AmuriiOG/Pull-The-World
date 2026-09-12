@@ -120,7 +120,7 @@ namespace PullTheWorld
         void FixedUpdate()
         {
             if (!alive) return;
-            if (transform.position.sqrMagnitude > fallRadius * fallRadius) { Die(quiet: true); return; }
+            if ((transform.position - LevelManager.PivotOrOrigin).sqrMagnitude > fallRadius * fallRadius) { Die(quiet: true); return; }
 
             var player = PlayerBody.Instance;
             var rotator = WorldRotator.Instance;

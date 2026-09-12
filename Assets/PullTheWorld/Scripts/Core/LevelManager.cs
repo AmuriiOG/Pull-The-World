@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace PullTheWorld
@@ -7,9 +8,25 @@ namespace PullTheWorld
     public enum LevelState { Menu, Playing, Won, Failed }
 
     /// <summary>
-    /// Swaps level prefabs in and out under the rotating world root and owns the
-    /// win / fail / restart / advance flow. Adding a level is: make a prefab with a
-    /// LevelDefinition on it, drop it in the list.
+    /// Owns the levels and the win / fail / restart / advance flow - and, since the world pass,
+    /// the ONE WORLD they all stand in.
+    ///
+    /// Levels are no longer swapped in and out at the origin. Each level has a slot in the world
+    /// (<see cref="SlotFor"/>: straight up, with a gentle sideways weave), the rotating root moves
+    /// to the active level's slot, and the camera frames that slot. Three levels exist at once:
+    ///
+    ///  * PREVIOUS - the level just finished, standing where it was as scenery: no physics, no
+    ///    behaviours, no lights, no particles, just meshes (see <see cref="StripToVisual"/>).
+    ///  * CURRENT - the live one, under the rotating root, the only thing with physics.
+    ///  * NEXT - a preview of the level ahead, stripped the same way, standing in its slot so it is
+    ///    there when the camera glides up to it.
+    ///
+    /// Reaching a portal no longer cuts to the next level. The orb is drawn in, the door flares,
+    /// the finished level is frozen into scenery, the real next level replaces its preview, and
+    /// the camera glides up to it (<see cref="PlaneCameraRig.TravelTo"/>) while the sky lags and
+    /// the clouds hurry. Control comes back only when the camera has settled, through
+    /// <see cref="ArrivalGate"/> so the UI can put an interstitial there. Everything further away
+    /// than previous / next is destroyed, so the world costs the same on a phone as one level did.
     ///
     /// The one ordering rule that matters: the level is parented and the rotator is bound BEFORE
     /// the player is spawned, because the spawn point is expressed in level-local space and would
@@ -36,8 +53,17 @@ namespace PullTheWorld
         [Tooltip("Recolours the backdrop per chapter so the eighteen levels do not share one sky.")]
         [SerializeField] SkyTheme sky;
 
+        [Header("World")]
+        [Tooltip("World units between consecutive levels' pivots, straight up. Larger than any " +
+                 "level's framing so islands never overlap.")]
+        [SerializeField] float slotSpacing = 26f;
+        [Tooltip("Sideways wander of the slots (0, right, left, 0, ...) so the climb weaves.")]
+        [SerializeField] float slotWander = 3.5f;
+        [Tooltip("Seconds the camera takes to glide from a finished level to the next.")]
+        [SerializeField] float travelSeconds = 1.8f;
+
         [Header("Timing")]
-        [Tooltip("How long the celebration runs before the level-complete panel appears.")]
+        [Tooltip("How long the celebration runs before the camera sets off for the next level.")]
         [SerializeField] float winCelebrateTime = 0.9f;
         [Tooltip("Death is instant but the reset is not, so the player sees what killed them.")]
         [SerializeField] float failRestartDelay = 0.75f;
@@ -47,8 +73,6 @@ namespace PullTheWorld
         [Tooltip("Realtime seconds of slow motion on the frame of an on-screen death. Zero disables.")]
         [SerializeField] float hitStopSeconds = 0.09f;
         [SerializeField, Range(0.02f, 1f)] float hitStopScale = 0.12f;
-        [Tooltip("Off means the level-complete panel waits for a tap instead of auto-advancing.")]
-        [SerializeField] bool autoAdvance;
 
         LevelDefinition current;
         int index;
@@ -56,6 +80,11 @@ namespace PullTheWorld
         Coroutine pending;
         int keysCollected;
         int keysRequired;
+        bool travelling;
+
+        Transform stage;                 // static parent for the previous level and the next-level preview
+        GameObject previous;             // the level just left, frozen into scenery
+        GameObject preview;              // the level ahead, as scenery, standing in its slot
 
         public event Action<LevelDefinition> OnLevelLoaded;
         public event Action<LevelDefinition> OnLevelWon;
@@ -63,6 +92,13 @@ namespace PullTheWorld
         /// <summary>collected, required</summary>
         public event Action<int, int> OnKeysChanged;
         public event Action<LevelState> OnStateChanged;
+
+        /// <summary>
+        /// Set by the UI. Called when the camera has arrived at the next level with (levelIndex,
+        /// resume): show an interstitial if one is due, then call resume - which spawns the player
+        /// and hands control back. Left null, the level starts the moment the camera settles.
+        /// </summary>
+        public Action<int, Action> ArrivalGate;
 
         public LevelDefinition Current => current;
         public int CurrentIndex => index;
@@ -72,9 +108,23 @@ namespace PullTheWorld
         public int LevelCount => levels != null ? levels.Length : 0;
         public LevelState State => state;
         public bool IsPlaying => state == LevelState.Playing;
+        /// <summary>True from the moment the camera sets off for the next level until control returns.</summary>
+        public bool IsTravelling => travelling;
         public int KeysCollected => keysCollected;
         public int KeysRequired => keysRequired;
         public bool DoorUnlocked => keysCollected >= keysRequired;
+
+        /// <summary>World position of the active level's pivot. Fall checks measure from here, not from the origin.</summary>
+        public Vector3 Pivot => levelParent ? levelParent.position : Vector3.zero;
+        public static Vector3 PivotOrOrigin => Instance ? Instance.Pivot : Vector3.zero;
+
+        /// <summary>Where level <paramref name="i"/> stands in the world.</summary>
+        public Vector3 SlotFor(int i)
+        {
+            int k = ((i % 3) + 3) % 3;
+            float x = k == 1 ? slotWander : k == 2 ? -slotWander : 0f;
+            return new Vector3(x, i * slotSpacing, 0f);
+        }
 
         void Awake()
         {
@@ -84,9 +134,14 @@ namespace PullTheWorld
             if (!cameraRig) cameraRig = FindFirstObjectByType<PlaneCameraRig>();
             if (!sky) sky = FindFirstObjectByType<SkyTheme>();
             if (!levelParent && rotator) levelParent = rotator.WorldRoot;
+            stage = new GameObject("WorldStage").transform;
         }
 
-        void OnDestroy() { if (Instance == this) Instance = null; }
+        void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
+            if (stage) Destroy(stage.gameObject);
+        }
 
         void OnEnable()
         {
@@ -105,7 +160,7 @@ namespace PullTheWorld
         {
             SetState(LevelState.Menu);
             if (rotator) rotator.IdleSway = true;
-            if (cameraRig) cameraRig.FrameExtents(menuViewExtents);
+            if (cameraRig) cameraRig.SnapTo(Vector3.zero, menuViewExtents);
             // The scene opens on the menu; UiRoot decides when to actually start a level.
             //
             // The editor preview level is deliberately NOT cleared here. v1 cleared it on Start
@@ -131,6 +186,7 @@ namespace PullTheWorld
         }
 
         // -------------------------------------------------------------------- level loading --
+        /// <summary>A cut, not a glide: PLAY, restart, level select, and the tests.</summary>
         public void LoadLevel(int i)
         {
             if (levels == null || levels.Length == 0) return;
@@ -140,50 +196,44 @@ namespace PullTheWorld
             if (next != index || current == null) failsOnLevel = 0;   // a restart keeps the count
             index = next;
 
-            // Clears both the previous level and the editor preview island, which are the same
-            // kind of thing as far as the world root is concerned.
+            // Clears the previous level, the editor preview island and the scenery copies, which
+            // are all the same kind of thing as far as the world is concerned.
             ClearEditorPreview();
+            if (current) Destroy(current.gameObject);
             current = null;
+            ClearScenery();
             DynamicRegistry.Prune();
 
-            current = Instantiate(levels[index], levelParent);
-            current.transform.localPosition = Vector3.zero;
-            current.transform.localRotation = Quaternion.identity;
-            current.transform.localScale = Vector3.one;
-            current.name = levels[index].name;
-            current.EnsureWiring();
-
-            // Order matters - see the class comment.
-            if (rotator)
-            {
-                rotator.IdleSway = false;
-                rotator.BindLevel(current.startAngle, current.allowRotation, current.angleLimit);
-            }
+            PlaceRoot(SlotFor(index));
+            current = SpawnLevel(index);
 
             // Framed before the player spawns so the first frame is already composed. The kick
             // is a small zoom that settles over the first half-second: the island arrives.
             if (cameraRig)
             {
-                cameraRig.FrameExtents(current.viewExtents);
+                cameraRig.SnapTo(SlotFor(index), current.viewExtents);
                 cameraRig.Kick(1.07f);
             }
             if (sky) sky.Apply(sky.ChapterFor(index, LevelCount));
 
-            keysRequired = Mathf.Max(0, current.requiredKeys);
-            keysCollected = 0;
-            OnKeysChanged?.Invoke(keysCollected, keysRequired);
-
             if (player) player.Spawn(current.WorldSpawnPoint);
-
             SetState(LevelState.Playing);
             OnLevelLoaded?.Invoke(current);
+
+            preview = BuildScenery(index + 1, SlotFor(index + 1));
         }
 
         public void Restart() => LoadLevel(index);
 
+        /// <summary>Glide to the next level (or back to the menu after the last one). A no-op mid-glide.</summary>
         public void Next()
         {
-            if (index + 1 < LevelCount) LoadLevel(index + 1);
+            if (travelling) return;
+            if (index + 1 < LevelCount)
+            {
+                CancelPending();
+                pending = StartCoroutine(TravelRoutine());
+            }
             else ReturnToMenu();   // finished the slice; back to the menu rather than a dead end
         }
 
@@ -191,12 +241,196 @@ namespace PullTheWorld
         {
             CancelPending();
             if (current) { Destroy(current.gameObject); current = null; }
+            ClearScenery();
             DynamicRegistry.Prune();
             if (player) player.gameObject.SetActive(false);
-            if (rotator) { rotator.CancelDrive(); rotator.IdleSway = true; }
-            if (cameraRig) cameraRig.FrameExtents(menuViewExtents);
+            PlaceRoot(Vector3.zero);
+            if (rotator) { rotator.CancelDrive(); rotator.IdleSway = true; rotator.RotationAllowed = true; }
+            if (cameraRig) cameraRig.SnapTo(Vector3.zero, menuViewExtents);
             if (sky) sky.Apply(0);
+            // Something to look at behind the title: the level they will play next, as scenery.
+            if (LevelCount > 0)
+                preview = BuildScenery(Mathf.Clamp(GameProgress.UnlockedIndex, 0, LevelCount - 1), Vector3.zero);
             SetState(LevelState.Menu);
+        }
+
+        void PlaceRoot(Vector3 slot)
+        {
+            if (!levelParent) return;
+            levelParent.position = slot;
+            // BindLevel / ApplyImmediate pushes the kinematic body along and syncs PhysX.
+        }
+
+        LevelDefinition SpawnLevel(int i)
+        {
+            var lvl = Instantiate(levels[i], levelParent);
+            lvl.transform.localPosition = Vector3.zero;
+            lvl.transform.localRotation = Quaternion.identity;
+            lvl.transform.localScale = Vector3.one;
+            lvl.name = levels[i].name;
+            lvl.EnsureWiring();
+
+            // Order matters - see the class comment.
+            if (rotator)
+            {
+                rotator.IdleSway = false;
+                rotator.BindLevel(lvl.startAngle, lvl.allowRotation, lvl.angleLimit);
+            }
+
+            keysRequired = Mathf.Max(0, lvl.requiredKeys);
+            keysCollected = 0;
+            OnKeysChanged?.Invoke(keysCollected, keysRequired);
+            return lvl;
+        }
+
+        // ----------------------------------------------------------------- the journey ------
+        IEnumerator TravelRoutine()
+        {
+            travelling = true;
+            if (current && current.exit) current.exit.Flare();
+            if (rotator) { rotator.CancelDrive(); rotator.RotationAllowed = false; }
+
+            // 1. The finished level becomes scenery where it stands; whatever was scenery before it
+            //    is now two levels back and goes.
+            if (previous) Destroy(previous);
+            previous = null;
+            if (current)
+            {
+                previous = current.gameObject;
+                FreezeIntoScenery(current);
+                current = null;
+            }
+            DynamicRegistry.Prune();
+
+            // 2. The preview ahead gives way to the real level in the same slot.
+            if (preview) Destroy(preview);
+            preview = null;
+            index++;
+            failsOnLevel = 0;
+            PlaceRoot(SlotFor(index));
+            current = SpawnLevel(index);
+            if (rotator) rotator.RotationAllowed = false;             // not until the camera has settled
+            if (sky) sky.Apply(sky.ChapterFor(index, LevelCount));
+
+            // 3. The glide.
+            if (cameraRig) cameraRig.TravelTo(SlotFor(index), current.viewExtents, travelSeconds);
+            float guard = travelSeconds + 2f;
+            while (cameraRig && cameraRig.IsTravelling && guard > 0f)
+            {
+                guard -= Time.deltaTime;
+                yield return null;
+            }
+
+            // 4. Arrival. The UI may hold the door for an interstitial; either way Release lets go.
+            bool released = false;
+            void Release()
+            {
+                if (released) return;
+                released = true;
+                Arrive();
+            }
+            if (ArrivalGate != null) ArrivalGate(index, Release);
+            else Release();
+            while (!released) yield return null;
+
+            pending = null;
+            travelling = false;
+        }
+
+        void Arrive()
+        {
+            if (!current) { travelling = false; return; }
+            if (rotator) rotator.RotationAllowed = current.allowRotation;
+            if (cameraRig) cameraRig.Kick(1.04f);
+            if (player) player.Spawn(current.WorldSpawnPoint);
+            SetState(LevelState.Playing);
+            OnLevelLoaded?.Invoke(current);
+            preview = BuildScenery(index + 1, SlotFor(index + 1));
+        }
+
+        // ---------------------------------------------------------------------- scenery -----
+        /// <summary>
+        /// A level as pure scenery: the prefab, standing in a slot, with every collider, body,
+        /// behaviour, light, particle and sound removed. What is left is meshes on transforms,
+        /// which batch with the live level's and cost a phone nothing it was not already paying.
+        /// </summary>
+        GameObject BuildScenery(int i, Vector3 at)
+        {
+            if (levels == null || i < 0 || i >= levels.Length || !stage) return null;
+            var def = Instantiate(levels[i], stage);
+            def.transform.SetPositionAndRotation(at, Quaternion.AngleAxis(levels[i].startAngle, Vector3.forward));
+            def.transform.localScale = Vector3.one;
+            def.name = levels[i].name + " [scenery]";
+            // Platforms detach themselves in Awake and would shuttle about in the live level's
+            // frame; they go before the strip, which then cannot see them.
+            MovingPlatform.DestroyOwnedBy(def);
+            var go = def.gameObject;
+            StripToVisual(go);
+            DynamicRegistry.Prune();
+            return go;
+        }
+
+        /// <summary>The finished level stays exactly where and how it is, but stops being a level.</summary>
+        void FreezeIntoScenery(LevelDefinition lvl)
+        {
+            lvl.transform.SetParent(stage, true);
+            lvl.name = lvl.name + " [scenery]";
+            MovingPlatform.DestroyOwnedBy(lvl);
+            StripToVisual(lvl.gameObject);
+        }
+
+        void ClearScenery()
+        {
+            if (previous) Destroy(previous);
+            if (preview) Destroy(preview);
+            previous = preview = null;
+        }
+
+        /// <summary>
+        /// Remove everything but the renderable from a hierarchy, immediately. Behaviours go in
+        /// dependency order - anything another present component [RequireComponent]s waits for the
+        /// next pass - so Unity never refuses a removal. Particle systems take their whole object.
+        /// </summary>
+        static void StripToVisual(GameObject root)
+        {
+            foreach (var ps in root.GetComponentsInChildren<ParticleSystem>(true))
+                if (ps) DestroyImmediate(ps.gameObject);
+            foreach (var tr in root.GetComponentsInChildren<TrailRenderer>(true)) DestroyImmediate(tr);
+            foreach (var a in root.GetComponentsInChildren<AudioSource>(true)) DestroyImmediate(a);
+
+            var required = new HashSet<Type>();
+            for (int pass = 0; pass < 8; pass++)
+            {
+                var behaviours = root.GetComponentsInChildren<MonoBehaviour>(true);
+                if (behaviours.Length == 0) break;
+                required.Clear();
+                foreach (var b in behaviours)
+                {
+                    if (!b) continue;
+                    foreach (var attr in b.GetType().GetCustomAttributes(typeof(RequireComponent), true))
+                    {
+                        var rc = (RequireComponent)attr;
+                        if (rc.m_Type0 != null) required.Add(rc.m_Type0);
+                        if (rc.m_Type1 != null) required.Add(rc.m_Type1);
+                        if (rc.m_Type2 != null) required.Add(rc.m_Type2);
+                    }
+                }
+                bool removed = false;
+                foreach (var b in behaviours)
+                {
+                    if (!b) continue;
+                    bool isRequired = false;
+                    foreach (var t in required) if (t.IsAssignableFrom(b.GetType())) { isRequired = true; break; }
+                    if (isRequired) continue;
+                    DestroyImmediate(b);
+                    removed = true;
+                }
+                if (!removed) break;
+            }
+
+            foreach (var rb in root.GetComponentsInChildren<Rigidbody>(true)) DestroyImmediate(rb);
+            foreach (var c in root.GetComponentsInChildren<Collider>(true)) DestroyImmediate(c);
+            foreach (var l in root.GetComponentsInChildren<Light>(true)) DestroyImmediate(l);
         }
 
         // ---------------------------------------------------------------------- key pickups --
@@ -251,8 +485,7 @@ namespace PullTheWorld
         {
             yield return new WaitForSeconds(winCelebrateTime);
             pending = null;
-            if (autoAdvance) Next();
-            // Otherwise UiRoot has shown the level-complete panel and waits for a tap.
+            Next();                                   // the glide to the next level
         }
 
         bool hitStopActive;
@@ -266,6 +499,7 @@ namespace PullTheWorld
         {
             if (pending != null) { StopCoroutine(pending); pending = null; }
             if (hitStopActive) { Time.timeScale = 1f; hitStopActive = false; }
+            travelling = false;
         }
 
         IEnumerator FailRoutine()

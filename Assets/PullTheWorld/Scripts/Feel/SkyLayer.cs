@@ -56,7 +56,7 @@ namespace PullTheWorld
 
         void LateUpdate()
         {
-            if (Application.isPlaying && Mathf.Abs(driftSpeed) > 0.0001f) driftX += driftSpeed * Time.deltaTime;
+            if (Application.isPlaying && Mathf.Abs(driftSpeed) > 0.0001f) driftX += driftSpeed * SkyParallax.DriftBoost * Time.deltaTime;
             Fit();
         }
 
@@ -69,7 +69,7 @@ namespace PullTheWorld
             float halfH = targetCamera.orthographicSize;
             float halfW = halfH * aspect;
 
-            Vector2 shift = SkyParallax.Offset * parallax;
+            Vector2 shift = (SkyParallax.Offset + SkyParallax.TravelOffset) * parallax;
             float bob = Application.isPlaying && bobAmplitude > 0f
                 ? Mathf.Sin(Time.time * bobHz * Mathf.PI * 2f + bobPhase) * bobAmplitude
                 : 0f;

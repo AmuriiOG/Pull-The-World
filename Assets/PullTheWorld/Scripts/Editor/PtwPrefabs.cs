@@ -233,31 +233,35 @@ namespace PullTheWorld.EditorTools
             // hanging over the front edge, a few blades standing on the cap, and a flower. The
             // level builder switches them on per block with a seeded RNG, so no two blocks match
             // and the island never reads as a green slab.
-            var g = MeshNode("Block_Grass", "Mesh_BlockGrass", null, PtwArt.MStone, PtwArt.MGrass);
+            // Every block keeps its mesh on a "Visual" CHILD and its collider on the root. The level
+            // builder gives each Visual a hair of rotation and scale (PtwLevels.Block) so the wall
+            // reads as laid stones rather than a tile grid, while the physics stays a perfect grid.
+            var g = BlockShell("Block_Grass", "Mesh_BlockGrass", PtwArt.MStone, PtwArt.MGrass);
             AddTileBox(g, new Vector3(0f, -h * 0.5f, 0f), new Vector3(1f, h, 1f));
             TurfDetails(g);
             Save(g, Blocks);
 
-            var gh = MeshNode("Block_Grass_Half", "Mesh_BlockGrassHalf", null, PtwArt.MStone, PtwArt.MGrass);
+            var gh = BlockShell("Block_Grass_Half", "Mesh_BlockGrassHalf", PtwArt.MStone, PtwArt.MGrass);
             AddTileBox(gh, new Vector3(0f, -h * 0.25f, 0f), new Vector3(1f, h * 0.5f, 1f));
             TurfDetails(gh);
             Save(gh, Blocks);
 
-            var s = MeshNode("Block_Stone", "Mesh_BlockStone", null, PtwArt.MStone);
+            var s = BlockShell("Block_Stone", "Mesh_BlockStone", PtwArt.MStone);
             AddTileBox(s, new Vector3(0f, -h * 0.5f, 0f), new Vector3(1f, h, 1f));
             Save(s, Blocks);
 
-            // A slightly darker twin the builder mixes in at random, so a wall of stone has the
-            // gentle block-to-block variation of the mockup instead of one flat value.
-            var sm = MeshNode("Block_Stone_Mid", "Mesh_BlockStone", null, PtwArt.MStoneMid);
+            // Darker twins the builder mixes in - more of them the deeper a block sits - so a wall
+            // of stone has the mockup's gentle block-to-block variation and a soft shade towards
+            // its base instead of one flat value.
+            var sm = BlockShell("Block_Stone_Mid", "Mesh_BlockStone", PtwArt.MStoneMid);
             AddTileBox(sm, new Vector3(0f, -h * 0.5f, 0f), new Vector3(1f, h, 1f));
             Save(sm, Blocks);
 
-            var sd = MeshNode("Block_Stone_Dark", "Mesh_BlockStone", null, PtwArt.MStoneDark);
+            var sd = BlockShell("Block_Stone_Dark", "Mesh_BlockStone", PtwArt.MStoneDark);
             AddTileBox(sd, new Vector3(0f, -h * 0.5f, 0f), new Vector3(1f, h, 1f));
             Save(sd, Blocks);
 
-            var sl = MeshNode("Block_Stone_Light", "Mesh_BlockStone", null, PtwArt.MStoneLight);
+            var sl = BlockShell("Block_Stone_Light", "Mesh_BlockStone", PtwArt.MStoneLight);
             AddTileBox(sl, new Vector3(0f, -h * 0.5f, 0f), new Vector3(1f, h, 1f));
             Save(sl, Blocks);
 
@@ -282,6 +286,14 @@ namespace PullTheWorld.EditorTools
                        new Vector3(1f, sh, 1f / 3f));
             }
             Save(r, Blocks);
+        }
+
+        /// <summary>A block root (collider goes here) with its mesh on a child named Visual.</summary>
+        static GameObject BlockShell(string name, string meshId, params string[] mats)
+        {
+            var root = Node(name);
+            MeshNode("Visual", meshId, root.transform, mats);
+            return root;
         }
 
         /// <summary>Fringe, tufts and a flower under a grass block, all inactive until the builder picks them.</summary>

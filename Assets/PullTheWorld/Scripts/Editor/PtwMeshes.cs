@@ -101,7 +101,7 @@ namespace PullTheWorld.EditorTools
             float bodyH = height - cap;
 
             mb.AddChamferBox(0, new Vector3(0f, -height + bodyH * 0.5f, 0f),
-                             new Vector3(1f, bodyH, 1f), 0.05f);
+                             new Vector3(1f, bodyH, 1f), 0.072f);   // softer bevel, after the painting's rounded stones
             // The cap overhangs the body slightly. In the reference the grass is essentially a TOP
             // face with a small tufted fringe, so the cap is thin and the overhang throws the
             // little shadow line that separates green from stone.
@@ -121,7 +121,7 @@ namespace PullTheWorld.EditorTools
         {
             var mb = new MeshBuilder();
             mb.AddChamferBox(0, new Vector3(0f, -BlockH * 0.5f, 0f),
-                             new Vector3(1f, BlockH, 1f), 0.055f);
+                             new Vector3(1f, BlockH, 1f), 0.072f);
             return mb.ToMesh("BlockStone");
         }
 

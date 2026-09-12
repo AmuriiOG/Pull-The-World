@@ -55,6 +55,7 @@ namespace PullTheWorld
         bool consumed;
         float proximity;
         float t;
+        float flash;                // the win flare, decaying
 
         public Vector3 MouthPosition => mouth ? mouth.position : transform.position;
         public bool Locked => locked;
@@ -83,6 +84,9 @@ namespace PullTheWorld
             ApplyGlow(0f);
         }
 
+        /// <summary>The door swells with light as the camera leaves through it. Called by LevelManager on a win.</summary>
+        public void Flare() => flash = Mathf.Max(flash, 1.6f);
+
         public void SetLocked(bool value)
         {
             if (locked == value) return;
@@ -97,6 +101,7 @@ namespace PullTheWorld
         void Update()
         {
             t += Time.deltaTime;
+            flash = Mathf.Max(0f, flash - Time.deltaTime * 1.6f);
 
             var lm = LevelManager.Instance;
             var player = PlayerBody.Instance;
@@ -137,7 +142,7 @@ namespace PullTheWorld
             if (glowQuad) glowQuad.localScale = glowBaseScale * pulse * (1f + p * 0.06f);
 
             Color c = locked ? lockedColor : openColor;
-            float intensity = (locked ? 0.35f : 1f) * pulse * excite;
+            float intensity = (locked ? 0.35f : 1f) * pulse * excite * (1f + flash);
 
             if (glowRenderer)
             {
@@ -149,7 +154,7 @@ namespace PullTheWorld
                 // only the shader's core disc blooms, and the spill is the halo's and light's job.
                 mpb.SetColor(CoreColorId, locked ? c : Color.Lerp(c, Color.white, 0.60f));
                 mpb.SetColor(EdgeColorId, c);
-                mpb.SetFloat(IntensityId, (locked ? 0.55f : 1.0f) * pulse * (1f + p * 0.10f));
+                mpb.SetFloat(IntensityId, (locked ? 0.55f : 1.0f) * pulse * (1f + p * 0.10f + flash * 0.35f));
                 glowRenderer.SetPropertyBlock(mpb);
             }
             if (portalLight)

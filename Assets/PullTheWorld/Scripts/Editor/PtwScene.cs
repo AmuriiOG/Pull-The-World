@@ -32,7 +32,7 @@ namespace PullTheWorld.EditorTools
         // Pastel dawn: a warm cream sun and a bright, slightly lilac ambient. Shadows on the
         // mockup never go grey - a shaded cream face is still cream.
         static readonly Color AmbientColor = PtwArt.Hex("#E8E5E5");   // near-neutral and high: the mockup is lit almost flat, its stone is grey not pink
-        static readonly Color KeyColor = PtwArt.Hex("#FFF4E6");
+        static readonly Color KeyColor = PtwArt.Hex("#FFE7C8");   // warmer: the sun, not a white studio lamp
 
         // ==================================================================== entry point ====
         public static void Build()
@@ -391,11 +391,15 @@ namespace PullTheWorld.EditorTools
             // are clearly lit (0.47), the left faces are lit, and the right faces fall into shade.
             // That is what gives a flat-shaded chamfered cube its form, and it keeps the reference
             // sheet's "key from upper-left, shadows down and to the right" reading intact.
-            keyGo.transform.rotation = Quaternion.Euler(46f, 40f, 0f);
+            // The sun in the paintings is upper-RIGHT (it is where the backdrop draws it), and the
+            // warm light comes from that side: the right faces of the blocks and the right edge of
+            // the island pick up the warmth, the left falls to the cool fill. Yaw -40 puts the key
+            // there; the original +40 had it upper-left, against the sun.
+            keyGo.transform.rotation = Quaternion.Euler(46f, -40f, 0f);
             var key = keyGo.AddComponent<Light>();
             key.type = LightType.Directional;
             key.color = KeyColor;
-            key.intensity = 0.2f;    // top faces only ~6% brighter than fronts in the mockup; the ambient carries the frame
+            key.intensity = 0.28f;   // top faces only ~6% brighter than fronts in the mockup; the ambient carries the frame
             key.shadows = LightShadows.Soft;
             key.shadowStrength = 0.42f;          // soft, like the mockup's; the ambient fills the rest
             key.shadowBias = 0.04f;
@@ -408,11 +412,11 @@ namespace PullTheWorld.EditorTools
             // weak second directional puts a gradient back on those faces at zero shadow cost.
             // Cool rather than warm so the key stays unambiguously the sun.
             var fillGo = new GameObject("FillLight");
-            fillGo.transform.rotation = Quaternion.Euler(20f, -130f, 0f);
+            fillGo.transform.rotation = Quaternion.Euler(20f, 130f, 0f);   // from the left, opposite the sun
             var fill = fillGo.AddComponent<Light>();
             fill.type = LightType.Directional;
-            fill.color = PtwArt.Hex("#F2C8D3");   // blush fill from the sky's pink
-            fill.intensity = 0.12f;
+            fill.color = PtwArt.Hex("#D9D4F0");   // cool lilac fill from the shaded side of the sky
+            fill.intensity = 0.13f;
             fill.shadows = LightShadows.None;
             fillGo.AddComponent<UniversalAdditionalLightData>().usePipelineSettings = true;
 
@@ -425,7 +429,17 @@ namespace PullTheWorld.EditorTools
             RenderSettings.customReflectionTexture = null;
             RenderSettings.reflectionIntensity = 0.2f;
             RenderSettings.skybox = null;
-            RenderSettings.fog = false;
+
+            // Atmospheric depth, cheaply: linear fog towards the horizon's lilac. The active island
+            // sits 34 units from the camera and takes ~4%; the far islets at 46-48 take ~15%; the
+            // ridges at 68-84 take 35-50% and recede the way the painting's do. A fog keyword on
+            // URP Lit/Unlit costs nothing on a phone; the custom island shaders ignore it, which
+            // is fine at 4%.
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogColor = PtwArt.Hex("#E6DCEC");
+            RenderSettings.fogStartDistance = 30f;
+            RenderSettings.fogEndDistance = 110f;
         }
 
         // ================================================================ post processing =====

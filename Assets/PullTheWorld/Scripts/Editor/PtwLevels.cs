@@ -1038,34 +1038,60 @@ namespace PullTheWorld.EditorTools
                         tufts.gameObject.SetActive(rnd.NextDouble() < 0.5);
                         tufts.localRotation = Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f, 0f);
                     }
+                    // Flowers: a third of the cells at random, and ALWAYS the cells either side of the
+                    // doorway, leaning towards it - the painting has flowers flanking the door.
+                    bool byDoor = portalCell.HasValue && row == portalCell.Value.row + 1
+                                  && Mathf.Abs(col - portalCell.Value.col) == 1;
                     var flower = go.transform.Find("Flower");
-                    if (flower && rnd.NextDouble() < 0.3)
+                    if (flower && (byDoor || rnd.NextDouble() < 0.3))
                     {
                         flower.gameObject.SetActive(true);
-                        flower.localPosition = new Vector3(((float)rnd.NextDouble() - 0.5f) * 0.6f, 0f,
-                                                           -0.12f - (float)rnd.NextDouble() * 0.28f);
-                        flower.localScale = Vector3.one * (1.25f + (float)rnd.NextDouble() * 0.5f);   // the mockup's flowers read from arm's length
+                        float fx = byDoor ? Mathf.Sign(portalCell.Value.col - col) * 0.22f
+                                          : ((float)rnd.NextDouble() - 0.5f) * 0.6f;
+                        flower.localPosition = new Vector3(fx, 0f, -0.12f - (float)rnd.NextDouble() * 0.28f);
+                        flower.localScale = Vector3.one * ((byDoor ? 1.45f : 1.25f) + (float)rnd.NextDouble() * 0.5f);   // the mockup's flowers read from arm's length
                         flower.localRotation = Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f, 0f);
                         Petals(flower.gameObject, rnd);
                     }
 
-                    // Vines over an open side (just outside the face, pulled forward so they read),
-                    // and now and then one down the front face.
+                    // Vines over an open side (just outside the face, pulled forward so they read) -
+                    // nearly always, often two of different lengths so a corner drapes - and now and
+                    // then one down the front face.
                     for (int side = -1; side <= 1; side += 2)
-                        if (!IsSolid(at(col + side, row)) && rnd.NextDouble() < 0.8)
-                            HangVine(col + side * 0.56f, top - 0.04f, -0.22f, rnd);
-                    if (rnd.NextDouble() < 0.2)
+                        if (!IsSolid(at(col + side, row)))
+                        {
+                            if (rnd.NextDouble() < 0.92) HangVine(col + side * 0.56f, top - 0.04f, -0.22f, rnd);
+                            if (rnd.NextDouble() < 0.45) HangVine(col + side * 0.56f, top - 0.06f, 0.12f, rnd, 0.75f);
+                        }
+                    if (rnd.NextDouble() < 0.3)
                         HangVine(col + ((float)rnd.NextDouble() - 0.5f) * 0.6f, top - 0.03f, -0.53f, rnd);
+
+                    // Small life on the cap, sparingly: a low bush now and then, a pebble at the
+                    // front edge rarer still. Never next to the door (the flowers own that spot).
+                    if (!byDoor && rnd.NextDouble() < 0.07)
+                    {
+                        var bush = Prop("Prop_Bush", col + ((float)rnd.NextDouble() - 0.5f) * 0.5f, top, Rnd(col, row));
+                        if (bush) { bush.transform.localScale = Vector3.one * (0.42f + (float)rnd.NextDouble() * 0.16f); bush.transform.localPosition += new Vector3(0f, 0f, -0.1f); }
+                    }
+                    else if (!byDoor && rnd.NextDouble() < 0.05)
+                    {
+                        var stone = Prop("Prop_RockDeco", col + ((float)rnd.NextDouble() - 0.5f) * 0.6f, top, Rnd(col, row));
+                        if (stone) { stone.transform.localScale = Vector3.one * (0.38f + (float)rnd.NextDouble() * 0.14f); stone.transform.localPosition += new Vector3(0f, 0f, -0.28f); }
+                    }
                 }
             }
 
-            void HangVine(float x, float y, float z, System.Random rnd)
+            (int col, int row)? portalCell;
+
+            void HangVine(float x, float y, float z, System.Random rnd, float scale = 1f)
             {
                 var go = Prop(rnd.NextDouble() < 0.5 ? "Prop_Vine" : "Prop_VineShort", x, y);
                 if (!go) return;
                 go.transform.localPosition = new Vector3(x, y, z);
                 go.transform.localRotation = Quaternion.Euler(0f, (float)rnd.NextDouble() * 360f,
                                                               ((float)rnd.NextDouble() - 0.5f) * 10f);
+                // Length varies vine to vine, so a row of them never reads as one repeated strip.
+                go.transform.localScale = new Vector3(1f, scale * (0.8f + (float)rnd.NextDouble() * 0.45f), 1f);
             }
 
             static void Petals(GameObject flower, System.Random rnd)
@@ -1114,9 +1140,15 @@ namespace PullTheWorld.EditorTools
                         // green cap on it produces a stripe of grass running through solid rock,
                         // which is the single fastest way to make a generated island look wrong.
                         bool exposed = !IsSolid(at(col, row - 1));
-                        // Buried stone alternates two close values by a stable hash, for the
-                        // mockup's gentle block-to-block variation.
-                        string stoneId = Rnd(col, row) % 360f < 100f ? "Block_Stone_Mid" : "Block_Stone";
+                        // Buried stone mixes three close values by a stable hash, darker the deeper
+                        // it sits: the mockup's gentle block-to-block variation, and the soft shade
+                        // a wall has towards its base without any extra lighting.
+                        int depth = 0;
+                        while (depth < 6 && IsSolid(at(col, row - 1 - depth))) depth++;
+                        float pick = Rnd(col, row) / 360f;
+                        string stoneId = depth <= 1 ? (pick < 0.30f ? "Block_Stone_Mid" : "Block_Stone")
+                                       : depth == 2 ? (pick < 0.12f ? "Block_Stone_Dark" : pick < 0.60f ? "Block_Stone_Mid" : "Block_Stone")
+                                                    : (pick < 0.30f ? "Block_Stone_Dark" : pick < 0.80f ? "Block_Stone_Mid" : "Block_Stone");
                         var go = Block(exposed ? "Block_Grass" : stoneId, col, top);
                         if (exposed && go) grassAt[(col, row)] = go;
                         break;
@@ -1149,6 +1181,7 @@ namespace PullTheWorld.EditorTools
 
                     case 'D':
                         portal = Prop("ExitPortal_Door", col, bottom)?.GetComponent<ExitPortal>();
+                        portalCell = (col, row);
                         break;
 
                     case 'K':
@@ -1213,6 +1246,20 @@ namespace PullTheWorld.EditorTools
                 if (!src) { Debug.LogWarning("PTW: missing block " + prefab); return null; }
                 var go = (GameObject)PrefabUtility.InstantiatePrefab(src, root.transform);
                 go.transform.localPosition = new Vector3(col, topY, 0f);
+
+                // Laid stone, not tile grid: the block's VISUAL child (the collider stays on the
+                // root and on the grid) gets a hair of tilt and scale, stable per cell and level.
+                // Under two degrees and two percent - enough that no two edges are parallel, not
+                // enough to read as broken or to poke visibly out of the collider.
+                var v = go.transform.Find("Visual");
+                if (v)
+                {
+                    uint h = (uint)(col * 73856093 ^ (int)(topY * 4f) * 19349663 ^ number * 83492791);
+                    float U(uint k) { k ^= k >> 13; k *= 0x5bd1e995; k ^= k >> 15; return (k & 0xFFFF) / 65535f; }
+                    v.localRotation = Quaternion.Euler((U(h) - 0.5f) * 1.4f, (U(h * 7) - 0.5f) * 2.4f, (U(h * 13) - 0.5f) * 2.0f);
+                    float s = 0.985f + U(h * 29) * 0.03f;
+                    v.localScale = new Vector3(s, 1f, 0.985f + U(h * 31) * 0.03f);
+                }
                 return go;
             }
 

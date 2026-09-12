@@ -171,6 +171,40 @@ namespace PullTheWorld.Tests
         }
 
         /// <summary>
+        /// Finishing a level is a journey, not a cut: the camera glides up the world to the next
+        /// level, which was already standing in its slot, and only then does the orb drop in. The
+        /// finished level stays behind as scenery with no physics left on it.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator PortalTravelsToTheNextLevel()
+        {
+            yield return LoadLevel(0);
+            Vector3 camBefore = cam.transform.position;
+            Assert.IsNotNull(GameObject.Find("Level_02 [scenery]"), "The next level is not standing in the world ahead");
+
+            levels.ReportWin();
+            yield return WaitUntil(() => levels.IsTravelling, 3f, "the camera to set off");
+            Assert.IsFalse(levels.IsPlaying, "Control was handed back before the camera arrived");
+            // Half way up: both islands in frame, the sky lagging. The one frame of the whole game
+            // that no other capture shows.
+            yield return Wait(0.85f);
+            yield return Grab(Path.Combine(Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Captures")), "travel_01_to_02_mid.png"));
+            yield return WaitUntil(() => levels.IsPlaying && !levels.IsTravelling, 6f, "the next level to start");
+
+            Assert.AreEqual(1, levels.CurrentIndex, "Did not arrive at level 2");
+            Assert.Greater(cam.transform.position.y - camBefore.y, 10f, "The camera did not glide up to the next level");
+            Assert.IsTrue(player.IsAlive && player.gameObject.activeInHierarchy, "The orb did not drop into the next level");
+            Assert.Less(Vector3.Distance(player.transform.position, levels.Current.WorldSpawnPoint), 3f,
+                        "The orb did not spawn at the next level");
+
+            var scenery = GameObject.Find("Level_01 [scenery]");
+            Assert.IsNotNull(scenery, "The finished level did not stay behind as scenery");
+            Assert.AreEqual(0, scenery.GetComponentsInChildren<Collider>(true).Length, "Scenery still has colliders");
+            Assert.AreEqual(0, scenery.GetComponentsInChildren<MonoBehaviour>(true).Length, "Scenery still has behaviours");
+            Assert.IsNotNull(GameObject.Find("Level_03 [scenery]"), "The level after next was not prepared");
+        }
+
+        /// <summary>
         /// Gravity is a constant. v1's mechanic was "rotation re-aims gravity"; v2's is "rotation
         /// moves the level while gravity stays put". If anything ever starts writing Physics.gravity
         /// again, the whole readability argument collapses and this test is the tripwire.
@@ -305,7 +339,7 @@ namespace PullTheWorld.Tests
 
                 Assert.IsTrue(IsFinite(player.transform.position),
                               $"Level {i + 1}: player position went non-finite");
-                Assert.Less(player.transform.position.magnitude, 200f,
+                Assert.Less((player.transform.position - levels.Pivot).magnitude, 200f,
                             $"Level {i + 1}: player was launched out of the world");
 
                 foreach (var rb in DynamicRegistry.Bodies)
@@ -329,7 +363,7 @@ namespace PullTheWorld.Tests
 
             // Teleport below everything rather than trying to physically roll off an edge, which
             // would make the test a level-design assertion instead of a rules assertion.
-            player.Body.position = new Vector3(0f, -60f, 0f);
+            player.Body.position = levels.Pivot + new Vector3(0f, -60f, 0f);
             yield return WaitUntil(() => !player.IsAlive || levels.State != LevelState.Playing,
                                    2f, "the fall to register as a failure");
 
@@ -458,7 +492,7 @@ namespace PullTheWorld.Tests
             // The player rolls too, and may die in the flame before the pour lands. Park it out of
             // the way so this stays a test of the water rule rather than of the race.
             player.Freeze();
-            player.Body.position = new Vector3(0f, 12f, 0f);
+            player.Body.position = levels.Pivot + new Vector3(0f, 12f, 0f);   // levels stand in slots up the world
 
             yield return RotateTo(-50f, 3f);                // door side down
             yield return WaitUntil(() => fire.Smothered, 3f, "the fire to be doused");
@@ -657,7 +691,7 @@ namespace PullTheWorld.Tests
             Assert.IsNotNull(rock, "Level 22 has no rock");
             Vector3 home = rock.position;
 
-            rock.position = new Vector3(0f, -60f, 0f);      // well past the fall radius
+            rock.position = levels.Pivot + new Vector3(0f, -60f, 0f);      // well past the fall radius
             yield return WaitUntil(() => rock.position.y > -20f, 2f, "the rock to respawn");
 
             Assert.Less(Vector3.Distance(rock.position, home), 1.5f,
@@ -802,7 +836,7 @@ namespace PullTheWorld.Tests
         void ParkPlayer()
         {
             player.Freeze();
-            player.Body.position = new Vector3(0f, 12f, 0f);
+            player.Body.position = levels.Pivot + new Vector3(0f, 12f, 0f);   // above the ACTIVE level, wherever it stands
         }
 
         // ------------------------------------------------------------- capture encoding -----

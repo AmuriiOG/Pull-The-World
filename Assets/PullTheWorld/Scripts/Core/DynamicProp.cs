@@ -138,7 +138,7 @@ namespace PullTheWorld
         {
             if (!rb || rb.isKinematic) return;
 
-            if (respawnIfLost && rb.position.sqrMagnitude > fallRadius * fallRadius)
+            if (respawnIfLost && (rb.position - LevelManager.PivotOrOrigin).sqrMagnitude > fallRadius * fallRadius)
             {
                 Respawn();
                 return;

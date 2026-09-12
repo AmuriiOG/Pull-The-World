@@ -145,6 +145,7 @@ namespace PullTheWorld
                 levels.OnLevelWon += HandleWon;
                 levels.OnLevelFailed += HandleFailed;
                 levels.OnKeysChanged += HandleKeysChanged;
+                levels.ArrivalGate = ArrivalGate;
             }
         }
 
@@ -156,6 +157,7 @@ namespace PullTheWorld
                 levels.OnLevelWon -= HandleWon;
                 levels.OnLevelFailed -= HandleFailed;
                 levels.OnKeysChanged -= HandleKeysChanged;
+                if (levels.ArrivalGate == (System.Action<int, System.Action>)ArrivalGate) levels.ArrivalGate = null;
             }
             SetPaused(false);
         }
@@ -220,13 +222,23 @@ namespace PullTheWorld
 
         void OnContinue()
         {
+            // The camera is already on its way to the next level (LevelManager glides there after
+            // the celebration); CONTINUE just clears the card early. The panel also clears itself
+            // when the next level starts.
             Click();
-            // The only place an interstitial can ever appear: after a win, on the way to the next
-            // level, and only when AdsManager's cadence says so. Never on a death.
+            GoTo(Screen.Playing);
+        }
+
+        /// <summary>
+        /// The only place an interstitial can ever appear: after a win, on the way to the next
+        /// level - the camera has just arrived and the orb has not dropped in yet - and only when
+        /// AdsManager's cadence says so. Never on a death. Resume hands control back either way.
+        /// </summary>
+        void ArrivalGate(int levelIndex, System.Action resume)
+        {
+            GoTo(Screen.Playing);
             var ads = PullTheWorld.Ads.AdsManager.Instance;
-            int idx = levels ? levels.CurrentIndex : 0;
-            System.Action advance = () => { GoTo(Screen.Playing); if (levels) levels.Next(); };
-            if (ads) ads.TryShowInterstitial(idx, advance); else advance();
+            if (ads) ads.TryShowInterstitial(levelIndex, resume); else resume();
         }
 
         // ---------------------------------------------------------------------- ads ----------

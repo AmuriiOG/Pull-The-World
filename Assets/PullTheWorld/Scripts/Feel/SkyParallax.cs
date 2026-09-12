@@ -21,6 +21,10 @@ namespace PullTheWorld
     public class SkyParallax : MonoBehaviour
     {
         public static Vector2 Offset { get; private set; }
+        /// <summary>Extra shift during a level-to-level camera glide, set by PlaneCameraRig. Zero otherwise.</summary>
+        public static Vector2 TravelOffset;
+        /// <summary>Cloud drift multiplier during a glide, set by PlaneCameraRig. One otherwise.</summary>
+        public static float DriftBoost = 1f;
 
         [Tooltip("World units the nearest layer (parallax 1) slides sideways at a quarter turn.")]
         [SerializeField] float tiltShift = 1.1f;

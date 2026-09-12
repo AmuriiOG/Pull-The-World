@@ -269,7 +269,7 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!1 &9113800320568471729
+--- !u!1 &8468835011077658955
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -277,50 +277,46 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 717530216838093574}
-  - component: {fileID: 1236105275005336351}
-  - component: {fileID: 7896821263702271430}
-  - component: {fileID: 579478175853956937}
+  - component: {fileID: 3230894290918951300}
+  - component: {fileID: 1910450378779114725}
+  - component: {fileID: 4855849915903628228}
   m_Layer: 0
-  m_Name: Block_Grass_Half
+  m_Name: Visual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &717530216838093574
+--- !u!4 &3230894290918951300
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9113800320568471729}
+  m_GameObject: {fileID: 8468835011077658955}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 5258934690164172580}
-  - {fileID: 4678670254532830165}
-  - {fileID: 1766209468432958948}
-  m_Father: {fileID: 0}
+  m_Children: []
+  m_Father: {fileID: 717530216838093574}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &1236105275005336351
+--- !u!33 &1910450378779114725
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9113800320568471729}
+  m_GameObject: {fileID: 8468835011077658955}
   m_Mesh: {fileID: 4300000, guid: a27bfc8d9464cda4db6d5cdb7cb849fb, type: 2}
---- !u!23 &7896821263702271430
+--- !u!23 &4855849915903628228
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9113800320568471729}
+  m_GameObject: {fileID: 8468835011077658955}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -363,6 +359,42 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!1 &9113800320568471729
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 717530216838093574}
+  - component: {fileID: 579478175853956937}
+  m_Layer: 0
+  m_Name: Block_Grass_Half
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &717530216838093574
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9113800320568471729}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 3230894290918951300}
+  - {fileID: 5258934690164172580}
+  - {fileID: 4678670254532830165}
+  - {fileID: 1766209468432958948}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!65 &579478175853956937
 BoxCollider:
   m_ObjectHideFlags: 0
