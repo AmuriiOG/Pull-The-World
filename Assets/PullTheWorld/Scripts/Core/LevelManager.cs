@@ -16,14 +16,17 @@ namespace PullTheWorld
     /// +Z, a little lower (the camera looks down, so a deeper island at the same height would
     /// climb up the screen) and weaving a little sideways. Seen through the narrow perspective
     /// lens (see <see cref="PlaneCameraRig"/>) that puts the next level in the upper part of the
-    /// frame at about a third of the size, and the one after it smaller again above and beside it
-    /// - the mockup's far islands, except that they are the real levels. Four things exist at once:
+    /// frame at about a third of the size - the mockup's far island, except that it is the real
+    /// level. What exists at once:
     ///
     ///  * CURRENT - the live one, under the rotating root, the only thing with physics.
-    ///  * NEXT and the one AFTER - the complete prefabs, stripped to their meshes (see
-    ///    <see cref="StripToVisual"/>), standing in their slots in the distance.
+    ///  * NEXT (<see cref="lookAhead"/> of them) - the complete prefab, stripped to its meshes (see
+    ///    <see cref="StripToVisual"/>), standing in its slot in the distance. The one after it
+    ///    stands up as the push begins, so it is there on arrival without ever appearing.
     ///  * PREVIOUS - only for the length of the journey: the finished level, frozen where it
     ///    stands, so the camera has something to sail over. It ends up behind the lens and goes.
+    ///  * A couple of small floating rocks per level (<see cref="EnsureDecor"/>), so the sky is
+    ///    not empty, standing low beside each level where they cannot be mistaken for one.
     ///
     /// Reaching a portal no longer cuts to the next level. The orb is drawn in, the door flares,
     /// the finished level is frozen, the real next level replaces its stand-in in the same slot,
@@ -495,7 +498,7 @@ namespace PullTheWorld
                 // behind that level's island rather than floating loose in its sky.
                 bool right = ((k + i) & 1) == 0;
                 float x = (right ? 1f : -1f) * R(5.4f, 6.6f);
-                float y = -R(24f, 25.5f) - k * 1.5f;
+                float y = -R(25f, 26.5f) - k * 1.5f;
                 float z = R(36f, 40f) + k * 4f;
                 BuildRock(group, new Vector3(x, y, z), rnd);
             }
@@ -530,11 +533,12 @@ namespace PullTheWorld
                 }
             }
 
-            // One prop at most: a small tree or a bush on top, or a vine down a side.
+            // One LOW prop at most: a bush or a flower on top, or a vine down a side. Nothing
+            // tall - a tree on a rock behind the island poked its tip over the grass line.
             if (decorProps != null && decorProps.Length > 0 && rnd.NextDouble() < 0.75)
             {
                 var src = decorProps[rnd.Next(decorProps.Length)];
-                if (src)
+                if (src && !src.name.Contains("Tree"))
                 {
                     var p = Instantiate(src, rock);
                     bool vine = src.name.Contains("Vine");
