@@ -224,6 +224,7 @@ namespace PullTheWorld.EditorTools
         public static void BatchBootstrap() => RunBatch(Bootstrap);
         public static void BatchArt() => RunBatch(() => { BuildArt(); BuildPrefabs(); });
         public static void BatchLevelsAndScene() => RunBatch(() => { BuildLevels(); BuildScene(); });
+        public static void BatchScene() => RunBatch(BuildScene);
         public static void BatchAll() => RunBatch(BuildEverything);
 
         static void RunBatch(Action action)

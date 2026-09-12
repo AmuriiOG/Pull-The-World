@@ -940,35 +940,42 @@ namespace PullTheWorld.EditorTools
             es.AddComponent<UnityEngine.EventSystems.EventSystem>();
             es.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
 
-            var shadowBold = MakeTmpShadowMaterial(bold, "TMP_PoppinsBold_Shadow");
-            var shadowSemi = MakeTmpShadowMaterial(semi, "TMP_PoppinsSemi_Shadow");
+            // The drawn labels (PLAY.png, CLOSE.png) are cream with a hard sage drop shadow; the
+            // typed labels on the other pills get the same treatment from this material.
+            var dropBold = MakeTmpDropMaterial(bold, "TMP_PoppinsBold_Drop", PtwUiAssets.LabelShadow);
+            var dropSemi = MakeTmpDropMaterial(semi, "TMP_PoppinsSemi_Drop", PtwUiAssets.LabelShadow);
             // The title's look from the mockup: sage letters with a soft cream halo.
             var titleMat = MakeTmpOutlineMaterial(bold, "TMP_PoppinsBold_Title", PtwArt.Hex("#FBF3E8"), 0.14f);
 
             // ================================================================== HUD =========
-            // No scrims: the pastel sky is light, so the HUD is dark-on-light like the mockup -
-            // sage type, cream discs - and needs nothing under it.
+            // Laid out from the gameplay mockup (Art/UI/Layer 3.png, 940 px wide; canvas units are
+            // mockup px x 1.149). No scrims: the sky is light, so the HUD is dark-on-light and
+            // needs nothing under it.
             var hudPanel = Panel(canvasGo.transform, "HudPanel", out var hudGroup, popFrom: 1f);
 
-            var levelLabel = Text(hudPanel.transform, "LevelLabel", "LEVEL 1", semi, 46f,
-                                  new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(48f, -58f),
-                                  new Vector2(420f, 64f), TextAlignmentOptions.TopLeft,
+            // Cap height 39 with its top 46 px down and 50 px in. TMP's TopLeft puts the
+            // ascender at the rect top, and Poppins' ascender sits 0.35 em above its caps.
+            var levelLabel = Text(hudPanel.transform, "LevelLabel", "LEVEL 1", semi, 56f,
+                                  new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(50f, -28f),
+                                  new Vector2(520f, 76f), TextAlignmentOptions.TopLeft,
                                   UiInk, null);
-            levelLabel.characterSpacing = 8f;
+            levelLabel.characterSpacing = 4f;
             levelLabel.gameObject.AddComponent<Punch>();   // punched on every level load
 
             // The level's name under its number, small and widely tracked like the mockup's
-            // "FIND THE PORTAL".
-            var levelTitle = Text(hudPanel.transform, "LevelTitle", "TIP IT OVER", semi, 24f,
-                                  new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(50f, -118f),
-                                  new Vector2(560f, 36f), TextAlignmentOptions.TopLeft,
+            // "FIND THE PORTAL" (cap 18, top at 110).
+            var levelTitle = Text(hudPanel.transform, "LevelTitle", "TIP IT OVER", semi, 26f,
+                                  new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(49f, -101f),
+                                  new Vector2(620f, 40f), TextAlignmentOptions.TopLeft,
                                   UiInkSoft, null);
             levelTitle.characterSpacing = 12f;
 
+            // Two 86 px cream discs, centres 67 down and 201 / 76 in from the right, with the
+            // mockup's hairline glyphs: a circular arrow and a ringed pause.
             var restartBtn = RoundButton(hudPanel.transform, "RestartButton", new Vector2(1f, 1f),
-                                         new Vector2(-156f, -52f), 96f, MakeRestartSprite());
+                                         new Vector2(-201f, -67f), 86f, MakeRestartSprite(), 0.72f, UiIcon);
             var pauseBtn = RoundButton(hudPanel.transform, "PauseButton", new Vector2(1f, 1f),
-                                       new Vector2(-44f, -52f), 96f, MakePauseSprite());
+                                       new Vector2(-76f, -67f), 86f, MakePauseSprite(), 0.84f, UiIcon);
 
             // Key counter. Hidden unless the level actually needs keys - a permanent 0/0 on screen
             // is exactly the sort of clutter the brief asked to avoid.
@@ -1007,36 +1014,39 @@ namespace PullTheWorld.EditorTools
             var rotGroupGo = new GameObject("RotateHint", typeof(RectTransform), typeof(CanvasGroup));
             rotGroupGo.transform.SetParent(onboardGo.transform, false);
             var rgRt = rotGroupGo.GetComponent<RectTransform>();
-            rgRt.anchorMin = rgRt.anchorMax = new Vector2(0.5f, 0.5f);
+            // The gesture lives at the FOOT of the screen like the mockup's "TILT TO GUIDE", so it
+            // is anchored to the bottom edge. The mockup's arrow is a shallow 332 px chord bowing
+            // 30 px - a circle of radius 513 spanning +-19 degrees - whose lowest point is 156 px
+            // up. The pivot is that circle's centre (669 up), and the finger rides the same circle.
+            rgRt.anchorMin = rgRt.anchorMax = new Vector2(0.5f, 0f);
             rgRt.pivot = new Vector2(0.5f, 0.5f);
-            // The gesture lives at the BOTTOM of the screen like the mockup's "TILT TO GUIDE": the
-            // pivot sits low, and the finger's arc (radius 235, centred straight below the pivot)
-            // lands over the arrow.
-            rgRt.anchoredPosition = new Vector2(0f, -560f);
+            rgRt.anchoredPosition = new Vector2(0f, 156f + ArcRadius);
             rgRt.sizeDelta = new Vector2(10f, 10f);
             var rotGroup = rotGroupGo.GetComponent<CanvasGroup>();
             rotGroup.alpha = 0f;
             rotGroup.blocksRaycasts = false;
             rotGroup.interactable = false;
 
-            // A thin two-headed arc for the direction, and the words under it.
+            // A hairline two-headed arc for the direction, and the words under it. The sprite is
+            // painted at 1:1 canvas pixels with its circle centre ArcCentreAboveSprite px above
+            // its own centre, so it hangs that far below the pivot.
             var arc = new GameObject("Arc", typeof(RectTransform), typeof(Image));
             arc.transform.SetParent(rotGroupGo.transform, false);
             var aRt = arc.GetComponent<RectTransform>();
             aRt.anchorMin = aRt.anchorMax = new Vector2(0.5f, 0.5f);
             aRt.pivot = new Vector2(0.5f, 0.5f);
-            // The sprite's arc bows down from ITS centre to radius 0.82 * 260 px, so centring it on
-            // the pivot puts the arc exactly under the finger's sweep (radius 235).
-            aRt.anchoredPosition = Vector2.zero;
-            aRt.sizeDelta = new Vector2(560f, 560f);
+            aRt.anchoredPosition = new Vector2(0f, -ArcCentreAboveSprite);
+            aRt.sizeDelta = new Vector2(ArcSpriteWidth, ArcSpriteHeight);
             var aImg = arc.GetComponent<Image>();
             aImg.sprite = MakeArcArrowSprite();
             aImg.color = UiInk;
             aImg.raycastTarget = false;
 
-            var tilt = Text(rotGroupGo.transform, "TiltLabel", "TILT TO GUIDE", semi, 30f,
-                            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -305f),
-                            new Vector2(600f, 44f), TextAlignmentOptions.Center, UiInk, null);
+            // Cap 17, centred 112 px above the bottom edge.
+            var tilt = Text(rotGroupGo.transform, "TiltLabel", "TILT TO GUIDE", semi, 25f,
+                            new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                            new Vector2(0f, 112f - (156f + ArcRadius)),
+                            new Vector2(700f, 44f), TextAlignmentOptions.Center, UiInk, null);
             tilt.characterSpacing = 14f;
 
             var finger = new GameObject("Finger", typeof(RectTransform), typeof(Image));
@@ -1075,54 +1085,60 @@ namespace PullTheWorld.EditorTools
             var onboarding = onboardGo.AddComponent<OnboardingHint>();
             PtwPrefabs.Wire(onboarding, "rotateGroup", rotGroup);
             PtwPrefabs.Wire(onboarding, "rotateFinger", fRt);
+            PtwPrefabs.Wire(onboarding, "arcRadius", ArcRadius);
+            PtwPrefabs.Wire(onboarding, "arcSweep", ArcHalfAngle * 2f);
             PtwPrefabs.Wire(onboarding, "pointGroup", pointGroup);
             PtwPrefabs.Wire(onboarding, "pointRing", ringRt);
             PtwPrefabs.Wire(onboarding, "worldCamera", cam);
 
             // ============================================================ main menu =========
-            // No dim: the mockup's menu is the sky and the island with the type sitting on them.
+            // Laid out from the menu mockup (Art/UI/Layer 10.png). No dim: the menu is the sky
+            // and the island with the type sitting on them. The title hangs from the top edge
+            // and the PLAY / progress / gear stack stands on the bottom one, so on a taller or
+            // squarer screen each group keeps its distance from its own edge and only the sky
+            // between them changes.
             var menuPanel = Panel(canvasGo.transform, "MainMenuPanel", out var menuGroup);
 
-            // "PULL" larger than "THE WORLD", sage with a cream halo, high in the frame.
-            var title = Text(menuPanel.transform, "Title", "<size=132>PULL</size>\n<size=100>THE WORLD</size>",
-                             bold, 100f, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                             new Vector2(0f, 620f), new Vector2(1000f, 380f),
-                             TextAlignmentOptions.Center, UiSage, titleMat);
-            title.characterSpacing = 1f;
-            title.lineSpacing = -26f;
-            title.richText = true;
+            // The carved-stone logo (Art/UI/Layer 9.png). In the PSD the artist painted the
+            // mockup's typed title out with sky and set this over it, nearly full width, its foot
+            // just clearing the portal: centre 377 down, 971 x 428.
+            SpriteImage(menuPanel.transform, "Logo", PtwUiAssets.Logo, new Vector2(0.5f, 1f),
+                        new Vector2(0f, -377f), new Vector2(971f, 428f));
 
             // PLAY breathes. The pulse lives on a wrapper so it does not fight the press-juice
-            // on the button itself - two components driving one localScale would tear. It sits
-            // well below the island like the mockup's, with room to breathe around it.
+            // on the button itself - two components driving one localScale would tear. The pill
+            // is 531 x 146 with its centre 438 up; the drawn PLAY label is 260 wide inside it.
             var playWrap = new GameObject("PlayPulse", typeof(RectTransform));
             playWrap.transform.SetParent(menuPanel.transform, false);
             var pwRt = playWrap.GetComponent<RectTransform>();
-            pwRt.anchorMin = pwRt.anchorMax = new Vector2(0.5f, 0.5f);
+            pwRt.anchorMin = pwRt.anchorMax = new Vector2(0.5f, 0f);
             pwRt.pivot = new Vector2(0.5f, 0.5f);
-            pwRt.anchoredPosition = new Vector2(0f, -400f);
-            pwRt.sizeDelta = new Vector2(600f, 176f);
+            pwRt.anchoredPosition = new Vector2(0f, 438f);
+            pwRt.sizeDelta = new Vector2(531f, 146f);
             playWrap.AddComponent<UiPulse>();
 
-            var playBtn = PillButton(playWrap.transform, "PlayButton", "PLAY", bold, 68f,
-                                     Vector2.zero, new Vector2(600f, 176f),
-                                     UiGreen, shadowBold, UiCream);
+            var playBtn = PillButton(playWrap.transform, "PlayButton", PtwUiAssets.Pill,
+                                     Vector2.zero, new Vector2(531f, 146f));
+            SpriteImage(playBtn.transform, "Label", PtwUiAssets.PlayLabel, new Vector2(0.5f, 0.5f),
+                        new Vector2(0f, 1f), new Vector2(260f, 79f));
 
+            // "LEVEL 14" under PLAY: cap 31, centred 302 up.
             var progressLabel = Text(menuPanel.transform, "ProgressLabel", "LEVEL 1", bold, 44f,
-                                     new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                                     new Vector2(0f, -540f), new Vector2(600f, 60f),
+                                     new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                                     new Vector2(0f, 302f - 30f), new Vector2(700f, 60f),
                                      TextAlignmentOptions.Center, UiSage, null);
-            progressLabel.characterSpacing = 6f;
+            progressLabel.characterSpacing = 4f;
 
-            // Level picker entry. Small, cream, under the progress line: a convenience, not the
-            // main verb - a first-time player should still just hit PLAY.
-            var levelsBtn = PillButton(menuPanel.transform, "LevelsButton", "LEVELS", semi, 32f,
-                                       new Vector2(0f, -640f), new Vector2(300f, 84f),
-                                       UiCream, null, UiSage);
-
+            // The gear on a 124 px disc, centred 173 up.
             var menuSettingsBtn = RoundButton(menuPanel.transform, "SettingsButton",
-                                              new Vector2(0.5f, 0.5f), new Vector2(0f, -780f),
-                                              116f, MakeGearSprite());
+                                              new Vector2(0.5f, 0f), new Vector2(0f, 173f),
+                                              124f, PtwUiAssets.Gear, 0.56f, Color.white);
+
+            // Level picker entry. The mockup has no such button, but the artist supplied the
+            // square (LevelsButton.png), so it goes where the HUD keeps its utility buttons - the
+            // top-right corner, same centre as PAUSE - leaving the mockup's centre column intact.
+            var levelsBtn = SquareButton(menuPanel.transform, "LevelsButton", new Vector2(1f, 1f),
+                                         new Vector2(-76f, -67f), 92f, MakeGridSprite(), 0.5f, UiCream);
 
             // ======================================================= level complete =========
             var donePanel = Panel(canvasGo.transform, "LevelCompletePanel", out var doneGroup);
@@ -1141,9 +1157,9 @@ namespace PullTheWorld.EditorTools
                                TextAlignmentOptions.Center, UiInk, null);
             doneSub.characterSpacing = 10f;
 
-            var continueBtn = PillButton(donePanel.transform, "ContinueButton", "CONTINUE",
-                                         bold, 54f, new Vector2(0f, -430f), new Vector2(620f, 150f),
-                                         UiGreen, shadowBold, UiCream);
+            var continueBtn = PillButton(donePanel.transform, "ContinueButton", PtwUiAssets.Pill,
+                                         new Vector2(0f, -430f), new Vector2(531f, 146f));
+            Label(continueBtn.transform, "CONTINUE", bold, 54f, dropBold);
 
             // Confetti lives in the WORLD, parented to the camera just inside the UI plane, so it
             // draws in front of the panel. A ParticleSystem under a ScreenSpaceCamera canvas
@@ -1154,58 +1170,50 @@ namespace PullTheWorld.EditorTools
             var setPanel = Panel(canvasGo.transform, "SettingsPanel", out var setGroup);
             Dim(setPanel.transform, "Dim", UiHaze);
 
+            // Laid out from the settings mockup (Art/UI/Layer 16.png, a 626 px crop that stands in
+            // for the screen width; canvas units are mockup px x 1.725). The card is 916 x 1182
+            // with 80 px corners, cream, flat, with a soft shadow. Dropped a little so its top
+            // edge sits below the logo's midline on the menu.
             var card = new GameObject("Card", typeof(RectTransform), typeof(Image));
             card.transform.SetParent(setPanel.transform, false);
             var cardRt = card.GetComponent<RectTransform>();
             cardRt.anchorMin = cardRt.anchorMax = new Vector2(0.5f, 0.5f);
             cardRt.pivot = new Vector2(0.5f, 0.5f);
-            // Dropped 90px so the card's top edge clears the "THE WORLD" title behind it on the
-            // menu; centred, the rim sliced straight through the letters.
-            cardRt.anchoredPosition = new Vector2(0f, -90f);
-            cardRt.sizeDelta = new Vector2(880f, 1080f);
+            cardRt.anchoredPosition = new Vector2(0f, -60f);
+            cardRt.sizeDelta = new Vector2(916f, 1182f);
             var cardImg = card.GetComponent<Image>();
             cardImg.sprite = MakePanelSprite();
-            cardImg.color = UiCard;                     // cream card on the haze, like paper
-            Gloss(card, 0.95f, 0.10f, -14f);
+            cardImg.type = Image.Type.Sliced;           // true circular corners at any card size
+            cardImg.color = UiCard;
+            Gloss(card, 0.985f, 0.06f, -16f);
 
-            // A faint rim behind the card so its edge is defined against the dim rather than
-            // dissolving into it.
-            var rim = new GameObject("Rim", typeof(RectTransform), typeof(Image));
-            rim.transform.SetParent(card.transform, false);
-            var rimRt = rim.GetComponent<RectTransform>();
-            Stretch(rimRt);
-            rimRt.offsetMin = new Vector2(-6f, -6f);
-            rimRt.offsetMax = new Vector2(6f, 6f);
-            var rimImg = rim.GetComponent<Image>();
-            rimImg.sprite = MakePanelSprite();
-            rimImg.color = new Color(0.36f, 0.48f, 0.42f, 0.10f);
-            rimImg.raycastTarget = false;
-            rim.transform.SetAsFirstSibling();
+            // Title: cap 62, centred 99 px below the card's top edge.
+            Text(card.transform, "SettingsTitle", "SETTINGS", bold, 89f,
+                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 492f),
+                 new Vector2(800f, 120f), TextAlignmentOptions.Center, UiSettingsInk, null)
+                .characterSpacing = 4f;
 
-            Text(card.transform, "SettingsTitle", "SETTINGS", bold, 60f,
-                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 430f),
-                 new Vector2(700f, 90f), TextAlignmentOptions.Center, UiSage, null)
-                .characterSpacing = 8f;
+            // Three rows 147 px apart; label cap 41 at 76 px in, switch right edge 71 px in.
+            var soundToggle = ToggleRow(card.transform, "SoundToggle", "SOUND", bold, 335f);
+            var musicToggle = ToggleRow(card.transform, "MusicToggle", "MUSIC", bold, 187f);
+            var hapticsToggle = ToggleRow(card.transform, "HapticsToggle", "HAPTICS", bold, 40f);
 
-            var soundToggle = ToggleRow(card.transform, "SoundToggle", "SOUND", semi, 250f, shadowSemi);
-            var musicToggle = ToggleRow(card.transform, "MusicToggle", "MUSIC", semi, 120f, shadowSemi);
-            var hapticsToggle = ToggleRow(card.transform, "HapticsToggle", "HAPTICS", semi, -10f, shadowSemi);
-
-            // Destructive, so it is coloured like one and sits apart from the toggles. UiRoot makes
-            // it a two-tap confirm; the label text is swapped to say so.
-            var restartAllBtn = PillButton(card.transform, "RestartAllButton", "RESTART ALL LEVELS",
-                                           bold, 36f, new Vector2(0f, -175f), new Vector2(660f, 118f),
-                                           PtwArt.Hex("#D3928A"), shadowBold, UiCream);
+            // Two wide pills (707 x 133), then a shorter CLOSE (452 x 117) with 59 px under it.
+            // Destructive, so UiRoot makes RESTART a two-tap confirm and swaps the label to say so.
+            var restartAllBtn = PillButton(card.transform, "RestartAllButton", PtwUiAssets.PillWide,
+                                           new Vector2(0f, -140f), new Vector2(707f, 133f));
+            Label(restartAllBtn.transform, "RESTART ALL LEVELS", bold, 46f, dropBold);
 
             // Development convenience: opens every level in the picker so a build can be tested
             // from any point. UiRoot hides it when showDevUnlock is off - flip that for release.
-            var unlockAllBtn = PillButton(card.transform, "UnlockAllButton", "UNLOCK ALL LEVELS  (DEV)",
-                                          semi, 30f, new Vector2(0f, -292f), new Vector2(660f, 100f),
-                                          PtwArt.Hex("#9BBDB2"), shadowSemi, UiCream);
+            var unlockAllBtn = PillButton(card.transform, "UnlockAllButton", PtwUiAssets.PillWide,
+                                          new Vector2(0f, -301f), new Vector2(707f, 133f));
+            Label(unlockAllBtn.transform, "UNLOCK ALL LEVELS (DEV)", bold, 44f, dropBold);
 
-            var closeBtn = PillButton(card.transform, "CloseButton", "CLOSE", bold, 48f,
-                                      new Vector2(0f, -445f), new Vector2(520f, 132f),
-                                      UiGreen, shadowBold, UiCream);
+            var closeBtn = PillButton(card.transform, "CloseButton", PtwUiAssets.PillClose,
+                                      new Vector2(0f, -472f), new Vector2(452f, 117f));
+            SpriteImage(closeBtn.transform, "Label", PtwUiAssets.CloseLabel, new Vector2(0.5f, 0.5f),
+                        new Vector2(0f, 1f), new Vector2(166f, 42f));
 
             // ================================================================= flash =========
             var flashGo = new GameObject("Flash", typeof(RectTransform), typeof(Image));
@@ -1258,27 +1266,30 @@ namespace PullTheWorld.EditorTools
             scroll.scrollSensitivity = 30f;
 
             var grid = gridGo.GetComponent<GridLayoutGroup>();
-            grid.cellSize = new Vector2(150f, 150f);
+            grid.cellSize = new Vector2(150f, 160f);      // the square asset is 173 x 184 with its foot
             grid.spacing = new Vector2(22f, 22f);
             grid.padding = new RectOffset(0, 0, 0, 40);
             grid.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
             grid.constraintCount = 5;
             grid.childAlignment = TextAnchor.UpperCenter;
 
-            var tile = PillButton(gridGo.transform, "TileTemplate", "1", bold, 52f, Vector2.zero,
-                                  new Vector2(150f, 150f), UiGreen, shadowBold, UiCream);
+            // The artists' rounded square (LevelsButton.png), numbered in the drawn-label style.
+            var tile = SquareButton(gridGo.transform, "TileTemplate", new Vector2(0.5f, 0.5f),
+                                    Vector2.zero, 150f, null, 0f, Color.white);
+            Label(tile.transform, "1", bold, 52f, dropBold);
             tile.gameObject.SetActive(false);
 
-            var closePickBtn = PillButton(pickPanel.transform, "CloseLevelsButton", "CLOSE", bold, 48f,
-                                          new Vector2(0f, -760f), new Vector2(420f, 120f),
-                                          UiCream, null, UiSage);
+            var closePickBtn = PillButton(pickPanel.transform, "CloseLevelsButton", PtwUiAssets.PillClose,
+                                          new Vector2(0f, -760f), new Vector2(452f, 117f));
+            SpriteImage(closePickBtn.transform, "Label", PtwUiAssets.CloseLabel, new Vector2(0.5f, 0.5f),
+                        new Vector2(0f, 1f), new Vector2(166f, 42f));
 
             // ================================================================= skip (ad) =======
             // Lives in the HUD, hidden. UiRoot shows it only after AdsManager.SkipAfterFails deaths
             // on one level: an offer to a stuck player, never a toll.
-            var skipBtn = PillButton(hudPanel.transform, "SkipButton", "STUCK?  SKIP LEVEL  ▶", semi, 34f,
-                                     new Vector2(0f, -790f), new Vector2(620f, 100f),
-                                     PtwArt.Hex("#E4BC84"), shadowSemi, UiCream);
+            var skipBtn = PillButton(hudPanel.transform, "SkipButton", PtwUiAssets.PillWide,
+                                     new Vector2(0f, -790f), new Vector2(620f, 110f));
+            Label(skipBtn.transform, "STUCK?  SKIP LEVEL  ▶", semi, 34f, dropSemi);
             skipBtn.gameObject.AddComponent<Punch>();
             skipBtn.gameObject.SetActive(false);
 
@@ -1358,6 +1369,36 @@ namespace PullTheWorld.EditorTools
             PtwPrefabs.Wire(root, "flashImage", flash);
             PtwPrefabs.Wire(root, "levels", levels);
             PtwPrefabs.Wire(root, "onboarding", onboarding);
+
+            PutUiAboveTheWorld(canvasGo);
+        }
+
+        /// <summary>
+        /// A Screen Space - Camera canvas is sorted in with the world's transparents: by material
+        /// render queue first, distance second. The stock UI material sits at 3000, and the orb's
+        /// glass and star are deliberately at Transparent+2 / +3 (see PtwArt), so the star drew
+        /// straight through the paused settings card. One shared UI material a hundred above
+        /// Transparent, on every Image, and the same queue on the TMP materials (which are
+        /// assets), puts the whole canvas after everything in the world without touching the
+        /// world's own ordering.
+        /// </summary>
+        const int UiQueue = (int)RenderQueue.Transparent + 100;
+
+        static void PutUiAboveTheWorld(GameObject canvasGo)
+        {
+            var shader = Shader.Find("UI/Default");
+            var uiMat = SaveTmpMaterial(new Material(shader) { name = "M_UiDefault", renderQueue = UiQueue }, "M_UiDefault");
+            foreach (var img in canvasGo.GetComponentsInChildren<Image>(true))
+                img.material = uiMat;
+
+            foreach (var t in canvasGo.GetComponentsInChildren<TMP_Text>(true))
+            {
+                var m = t.fontSharedMaterial;
+                if (m == null || m.renderQueue == UiQueue) continue;
+                m.renderQueue = UiQueue;
+                EditorUtility.SetDirty(m);
+            }
+            AssetDatabase.SaveAssets();
         }
 
         // ================================================================= ui helpers =======
@@ -1372,15 +1413,23 @@ namespace PullTheWorld.EditorTools
         /// None of this touches TMP text: TextMeshPro does not go through VertexHelper, so mesh
         /// effects silently do nothing on it. Text legibility is the shadow material's job.
         /// </summary>
-        // The UI palette, from the mockups: sage type, cream surfaces, a muted green for the one
-        // button that matters, and a warm haze instead of a dark dim behind popups.
-        static readonly Color UiSage = PtwArt.Hex("#4F7A5E");     // titles, PLAY-adjacent labels
-        static readonly Color UiInk = PtwArt.Hex("#5A716D");      // HUD and body text
-        static readonly Color UiInkSoft = PtwArt.Hex("#748985");  // secondary text
-        static readonly Color UiGreen = PtwArt.Hex("#7FA37A");    // PLAY, CONTINUE, toggles on
-        static readonly Color UiCream = PtwArt.Hex("#F8F2E6");    // discs, small pills, labels on green
-        static readonly Color UiCard = PtwArt.Hex("#FBF6EE");     // popup cards
+        // The UI palette, sampled from the mockups in Art/UI: sage type, cream surfaces, and a
+        // warm haze instead of a dark dim behind popups. The pills, discs, switches, gear and
+        // drawn labels are the artists' PNGs (PtwUiAssets) and carry their own colour.
+        static readonly Color UiSage = PtwArt.Hex("#5C7061");        // menu type ("LEVEL 14", titles)
+        static readonly Color UiInk = PtwArt.Hex("#5A716D");         // HUD text
+        static readonly Color UiInkSoft = PtwArt.Hex("#748985");     // HUD secondary text
+        static readonly Color UiSettingsInk = PtwArt.Hex("#46594F"); // settings title and row labels
+        static readonly Color UiIcon = PtwArt.Hex("#636E68");        // hairline glyphs on the cream discs
+        static readonly Color UiCream = PtwArt.Hex("#F8F2E6");       // drawn icons on green
+        static readonly Color UiCard = PtwArt.Hex("#F6EDDE");        // the settings card
         static readonly Color UiHaze = new Color(0.99f, 0.91f, 0.89f, 0.42f);   // a blush veil, not a grey one
+
+        // The tilt cue's geometry, shared by the arc sprite and the onboarding finger.
+        const float ArcRadius = 513f;            // canvas px
+        const float ArcHalfAngle = 19f;          // degrees either side of straight down
+        const float ArcSpriteWidth = 440f, ArcSpriteHeight = 100f;
+        const float ArcCentreAboveSprite = ArcRadius - 30f;   // the arc's low point is 30 px below the sprite centre
 
         static void Gloss(GameObject go, float bottom = 0.86f, float outlineAlpha = 0.14f,
                           float shadowY = -6f)
@@ -1440,41 +1489,122 @@ namespace PullTheWorld.EditorTools
             return img;
         }
 
+        /// <summary>A non-interactive image at its drawn aspect: logos, drawn labels, icons.</summary>
+        static Image SpriteImage(Transform parent, string name, Sprite sprite, Vector2 anchor,
+                                 Vector2 pos, Vector2 size)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = size;
+            var img = go.GetComponent<Image>();
+            img.sprite = sprite;
+            img.preserveAspect = true;
+            img.raycastTarget = false;
+            return img;
+        }
+
+        /// <summary>
+        /// A typed label in the style of the drawn ones (PLAY.png, CLOSE.png): cream Poppins with
+        /// a hard sage drop shadow, centred over its parent.
+        /// </summary>
+        static TMP_Text Label(Transform parent, string text, TMP_FontAsset font, float size, Material drop)
+        {
+            var t = Text(parent, "Label", text, font, size, Vector2.zero, Vector2.one, Vector2.zero,
+                         Vector2.zero, TextAlignmentOptions.Center, PtwUiAssets.LabelCream, drop);
+            var rt = t.rectTransform;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = new Vector2(0f, 2f);   // the drawn labels sit a hair above centre
+            t.characterSpacing = 4f;
+            return t;
+        }
+
+        static void PressFeedback(Selectable s)
+        {
+            // A visible press state matters more on mobile than anywhere else - there is no
+            // hover, so the tap flash is the only confirmation the button was hit.
+            var colors = s.colors;
+            colors.pressedColor = new Color(0.84f, 0.84f, 0.84f, 1f);
+            colors.selectedColor = Color.white;
+            colors.fadeDuration = 0.08f;
+            s.colors = colors;
+            s.gameObject.AddComponent<UiButtonJuice>();   // shrink on press, pop on release
+        }
+
+        static void Icon(Transform parent, Sprite icon, float size, Color color)
+        {
+            if (!icon) return;
+            var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
+            iconGo.transform.SetParent(parent, false);
+            var irt = iconGo.GetComponent<RectTransform>();
+            irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 0.5f);
+            irt.pivot = new Vector2(0.5f, 0.5f);
+            // The disc and square assets carry a shadow along their foot, so their visual centre
+            // is a little above the rect centre; the glyph follows it.
+            irt.anchoredPosition = new Vector2(0f, size * 0.04f);
+            irt.sizeDelta = new Vector2(size, size);
+            var iimg = iconGo.GetComponent<Image>();
+            iimg.sprite = icon;
+            iimg.preserveAspect = true;
+            iimg.color = color;
+            iimg.raycastTarget = false;
+        }
+
+        /// <summary>
+        /// The artists' cream disc (Ellipse 1 copy.png, 166 x 172 with its shadow) with a glyph on
+        /// it. <paramref name="pos"/> is the disc CENTRE relative to the anchor.
+        /// </summary>
         static Button RoundButton(Transform parent, string name, Vector2 anchor, Vector2 pos,
-                                  float size, Sprite icon)
+                                  float diameter, Sprite icon, float iconScale, Color iconColor)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(parent, false);
             var rt = go.GetComponent<RectTransform>();
             rt.anchorMin = rt.anchorMax = anchor;
-            rt.pivot = anchor;
+            rt.pivot = new Vector2(0.5f, 0.5f);
             rt.anchoredPosition = pos;
-            rt.sizeDelta = new Vector2(size, size);
+            rt.sizeDelta = new Vector2(diameter, diameter * 172f / 166f);
 
             var img = go.GetComponent<Image>();
-            img.sprite = MakeDiscSprite();
-            // A translucent cream disc with a sage icon, like the mockup's restart and pause.
-            img.color = new Color(1f, 0.99f, 0.97f, 0.86f);
-            Gloss(go, 0.9f, 0.10f, -3f);
+            img.sprite = PtwUiAssets.Disc;
+            img.preserveAspect = true;
 
-            var iconGo = new GameObject("Icon", typeof(RectTransform), typeof(Image));
-            iconGo.transform.SetParent(go.transform, false);
-            var irt = iconGo.GetComponent<RectTransform>();
-            irt.anchorMin = irt.anchorMax = new Vector2(0.5f, 0.5f);
-            irt.pivot = new Vector2(0.5f, 0.5f);
-            irt.sizeDelta = new Vector2(size * 0.52f, size * 0.52f);
-            var iimg = iconGo.GetComponent<Image>();
-            iimg.sprite = icon;
-            iimg.color = UiSage;
-            iimg.raycastTarget = false;
-
-            go.AddComponent<UiButtonJuice>();
+            Icon(go.transform, icon, diameter * iconScale, iconColor);
+            PressFeedback(go.GetComponent<Button>());
             return go.GetComponent<Button>();
         }
 
-        static Button PillButton(Transform parent, string name, string label, TMP_FontAsset font,
-                                 float fontSize, Vector2 pos, Vector2 size, Color tint,
-                                 Material shadowMat, Color? labelColor = null)
+        /// <summary>The artists' rounded square (LevelsButton.png, 173 x 184 with its foot).</summary>
+        static Button SquareButton(Transform parent, string name, Vector2 anchor, Vector2 pos,
+                                   float width, Sprite icon, float iconScale, Color iconColor)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(width, width * 184f / 173f);
+
+            var img = go.GetComponent<Image>();
+            img.sprite = PtwUiAssets.Square;
+            img.preserveAspect = true;
+
+            Icon(go.transform, icon, width * iconScale, iconColor);
+            PressFeedback(go.GetComponent<Button>());
+            return go.GetComponent<Button>();
+        }
+
+        /// <summary>
+        /// One of the artists' pills drawn at an arbitrary size. 9-sliced, with the pixel scale
+        /// set from the height so the round caps are scaled circles and only the straight middle
+        /// stretches - the mockups draw the same pill at three different aspect ratios.
+        /// The caller adds the label (a drawn one via SpriteImage, or a typed one via Label).
+        /// </summary>
+        static Button PillButton(Transform parent, string name, Sprite pill, Vector2 pos, Vector2 size)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(parent, false);
@@ -1485,91 +1615,82 @@ namespace PullTheWorld.EditorTools
             rt.sizeDelta = size;
 
             var img = go.GetComponent<Image>();
-            // A very round sprite stretched wide reads as a proper pill, which is why this does
-            // not need 9-slicing.
-            img.sprite = MakePillSprite();
-            img.color = tint;
-            Gloss(go);
+            img.sprite = pill;
+            img.type = Image.Type.Sliced;
+            if (pill) img.pixelsPerUnitMultiplier = pill.rect.height / size.y;
 
-            var t = Text(go.transform, "Label", label, font, fontSize,
-                         new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero,
-                         size, TextAlignmentOptions.Center, labelColor ?? Color.white, shadowMat);
-            t.characterSpacing = 6f;
-
-            var btn = go.GetComponent<Button>();
-            // A visible press state matters more on mobile than anywhere else - there is no
-            // hover, so the tap flash is the only confirmation the button was hit.
-            var colors = btn.colors;
-            colors.pressedColor = new Color(0.82f, 0.82f, 0.82f, 1f);
-            colors.selectedColor = Color.white;
-            colors.fadeDuration = 0.08f;
-            btn.colors = colors;
-            go.AddComponent<UiButtonJuice>();   // shrink on press, pop on release
-            return btn;
+            PressFeedback(go.GetComponent<Button>());
+            return go.GetComponent<Button>();
         }
 
-        /// <summary>A label plus a pill-shaped on/off switch, laid out as one row inside a card.</summary>
-        static Toggle ToggleRow(Transform parent, string name, string label, TMP_FontAsset font,
-                                float y, Material shadowMat)
+        /// <summary>
+        /// A settings row: label at the left, a sliding switch at the right, in the artists'
+        /// assets (Settingson.png / Settingson 2.png tracks, Ellipse 1.png knob). The row spans
+        /// the card and the whole of it is tappable, so a thumb on the word toggles it too.
+        /// UiSwitch moves the knob and cross-fades the tracks; the Toggle only holds the value.
+        /// </summary>
+        static Toggle ToggleRow(Transform parent, string name, string label, TMP_FontAsset font, float y)
         {
-            var row = new GameObject(name, typeof(RectTransform), typeof(Toggle));
+            var row = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Toggle));
             row.transform.SetParent(parent, false);
             var rt = row.GetComponent<RectTransform>();
             rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.pivot = new Vector2(0.5f, 0.5f);
             rt.anchoredPosition = new Vector2(0f, y);
-            rt.sizeDelta = new Vector2(700f, 110f);
+            rt.sizeDelta = new Vector2(916f, 120f);
+            row.GetComponent<Image>().color = Color.clear;   // invisible, but catches the tap
 
-            Text(row.transform, "Label", label, font, 42f,
-                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(20f, 0f),
-                 new Vector2(400f, 80f), TextAlignmentOptions.Left,
-                 UiInk, null).characterSpacing = 6f;
+            Text(row.transform, "Label", label, font, 59f,
+                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(76f, 0f),
+                 new Vector2(560f, 90f), TextAlignmentOptions.Left,
+                 UiSettingsInk, null).characterSpacing = 2f;
 
-            // Track
+            // Track: 181 x 78, right edge 71 px in. The clay "off" track underneath, the sage
+            // "on" track on top with its alpha driven by UiSwitch.
             var track = new GameObject("Track", typeof(RectTransform), typeof(Image));
             track.transform.SetParent(row.transform, false);
             var trRt = track.GetComponent<RectTransform>();
             trRt.anchorMin = trRt.anchorMax = new Vector2(1f, 0.5f);
             trRt.pivot = new Vector2(1f, 0.5f);
-            trRt.anchoredPosition = new Vector2(-20f, 0f);
-            trRt.sizeDelta = new Vector2(150f, 74f);
-            var trImg = track.GetComponent<Image>();
-            trImg.sprite = MakePillSprite();
-            trImg.color = PtwArt.Hex("#DDD4C7");   // off: warm grey-cream
-            Gloss(track, 0.9f, 0.12f, 0f);
+            trRt.anchoredPosition = new Vector2(-71f, 0f);
+            trRt.sizeDelta = new Vector2(181f, 78f);
+            var offImg = track.GetComponent<Image>();
+            offImg.sprite = PtwUiAssets.TrackOff;
+            offImg.preserveAspect = true;
 
-            // ON is a green FILL over the whole track, not a knob that slides.
-            //
-            // The obvious version - a grey knob at the left and a green one at the right, with the
-            // green one as the Toggle's graphic - does not work, and the first capture showed why:
-            // a plain Toggle only shows and hides its `graphic`, it cannot move anything. So in the
-            // ON state BOTH knobs are visible and the control reads as two unrelated dots rather
-            // than as a switch. Animating a thumb would need a script per row. A pill that lights
-            // up green is unambiguous with no moving parts.
-            var fill = new GameObject("Fill", typeof(RectTransform), typeof(Image));
-            fill.transform.SetParent(track.transform, false);
-            Stretch(fill.GetComponent<RectTransform>());
-            var fillImg = fill.GetComponent<Image>();
-            fillImg.sprite = MakePillSprite();
-            fillImg.color = UiGreen;
-            fillImg.raycastTarget = false;
+            var on = new GameObject("On", typeof(RectTransform), typeof(Image));
+            on.transform.SetParent(track.transform, false);
+            Stretch(on.GetComponent<RectTransform>());
+            var onImg = on.GetComponent<Image>();
+            onImg.sprite = PtwUiAssets.TrackOn;
+            onImg.preserveAspect = true;
+            onImg.raycastTarget = false;
 
-            var pip = new GameObject("Pip", typeof(RectTransform), typeof(Image));
-            pip.transform.SetParent(fill.transform, false);
-            var pipRt = pip.GetComponent<RectTransform>();
-            pipRt.anchorMin = pipRt.anchorMax = new Vector2(1f, 0.5f);
-            pipRt.pivot = new Vector2(1f, 0.5f);
-            pipRt.anchoredPosition = new Vector2(-8f, 0f);
-            pipRt.sizeDelta = new Vector2(46f, 46f);
-            var pipImg = pip.GetComponent<Image>();
-            pipImg.sprite = MakeDiscSprite();
-            pipImg.color = new Color(1f, 1f, 1f, 0.92f);
-            pipImg.raycastTarget = false;
+            // Knob: 59 px disc with a 7 px margin to either end, riding a hair high because the
+            // asset's shadow hangs below it.
+            var knob = new GameObject("Knob", typeof(RectTransform), typeof(Image));
+            knob.transform.SetParent(track.transform, false);
+            var knobRt = knob.GetComponent<RectTransform>();
+            knobRt.anchorMin = knobRt.anchorMax = new Vector2(0.5f, 0.5f);
+            knobRt.pivot = new Vector2(0.5f, 0.5f);
+            knobRt.anchoredPosition = new Vector2(54f, 2f);
+            knobRt.sizeDelta = new Vector2(59f, 63f);
+            var knobImg = knob.GetComponent<Image>();
+            knobImg.sprite = PtwUiAssets.Knob;
+            knobImg.preserveAspect = true;
+            knobImg.raycastTarget = false;
 
             var toggle = row.GetComponent<Toggle>();
-            toggle.targetGraphic = trImg;
-            toggle.graphic = fillImg;      // whole fill (and its pip) hides when off
+            toggle.targetGraphic = offImg;
+            toggle.graphic = null;         // UiSwitch owns the visuals
             toggle.isOn = true;
+            PressFeedback(toggle);
+
+            var sw = row.AddComponent<UiSwitch>();
+            PtwPrefabs.Wire(sw, "toggle", toggle);
+            PtwPrefabs.Wire(sw, "trackOn", onImg);
+            PtwPrefabs.Wire(sw, "knob", knobRt);
+            PtwPrefabs.Wire(sw, "travel", 54f);
             return toggle;
         }
 
@@ -1628,26 +1749,40 @@ namespace PullTheWorld.EditorTools
         }
 
         // ================================================================== ui sprites ======
-        static Sprite pillSprite;
-        /// <summary>Stadium shape. Stretched wide it stays a pill, so it needs no 9-slicing.</summary>
-        static Sprite MakePillSprite()
-        {
-            if (pillSprite) return pillSprite;
-            return pillSprite = PaintSpriteXY("Tex_Pill", 128, p =>
-            {
-                float d = RoundedBox(p, new Vector2(0.62f, 0.62f), 0.36f);
-                return Mathf.Clamp01(-d / 0.03f);
-            });
-        }
+        // Only the glyphs and the card are still painted here; the pills, discs, switch parts,
+        // gear and the PLAY / CLOSE words are the artists' PNGs, see PtwUiAssets.
 
         static Sprite panelSprite;
+        /// <summary>
+        /// The settings card: an 80 px-radius rounded rectangle painted at 1:1 and 9-sliced, so
+        /// the corners are true circles at any card size. (Stretching a small square sprite, as
+        /// before, made them ellipses.)
+        /// </summary>
         static Sprite MakePanelSprite()
         {
             if (panelSprite) return panelSprite;
-            return panelSprite = PaintSpriteXY("Tex_Panel", 128, p =>
+            const int s = 256;
+            const float radius = 80f, inset = 2f;
+            return panelSprite = PaintSpriteXY("Tex_Panel", s, p =>
             {
-                float d = RoundedBox(p, new Vector2(0.86f, 0.86f), 0.12f);
-                return Mathf.Clamp01(-d / 0.02f);
+                float d = RoundedBox(p * (s * 0.5f), Vector2.one * (s * 0.5f - inset), radius);
+                return Mathf.Clamp01(0.5f - d);          // one texel of anti-aliasing
+            }, border: Vector4.one * (radius + 16f));
+        }
+
+        static Sprite gridSprite;
+        /// <summary>Four rounded squares: the level-select glyph on the menu's square button.</summary>
+        static Sprite MakeGridSprite()
+        {
+            if (gridSprite) return gridSprite;
+            return gridSprite = PaintSpriteXY("Tex_Grid", 128, p =>
+            {
+                float d = 1f;
+                for (int i = -1; i <= 1; i += 2)
+                    for (int j = -1; j <= 1; j += 2)
+                        d = Mathf.Min(d, RoundedBox(p - new Vector2(i, j) * 0.47f,
+                                                    new Vector2(0.36f, 0.36f), 0.12f));
+                return Mathf.Clamp01(0.5f - d / 0.016f);
             });
         }
 
@@ -1675,7 +1810,6 @@ namespace PullTheWorld.EditorTools
         static Material MakeTmpOutlineMaterial(TMP_FontAsset font, string id, Color outline, float width)
         {
             if (font == null || font.material == null) return null;
-            string path = $"{PtwArt.MatDir}/{id}.mat";
             var m = new Material(font.material) { name = id };
             m.EnableKeyword("OUTLINE_ON");
             m.SetColor("_OutlineColor", outline);
@@ -1686,82 +1820,59 @@ namespace PullTheWorld.EditorTools
             m.SetFloat("_UnderlayOffsetY", -0.35f);
             m.SetFloat("_UnderlayDilate", 0.35f);
             m.SetFloat("_UnderlaySoftness", 0.55f);
-
-            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
-            if (existing != null)
-            {
-                EditorUtility.CopySerialized(m, existing);
-                UnityEngine.Object.DestroyImmediate(m);
-                EditorUtility.SetDirty(existing);
-                return existing;
-            }
-            PtwPaths.EnsureFolder(PtwArt.MatDir);
-            AssetDatabase.CreateAsset(m, path);
-            return m;
+            return SaveTmpMaterial(m, id);
         }
 
         static Sprite pauseSprite;
-        /// <summary>Two rounded bars: the pause glyph, drawn so it can never be tofu.</summary>
+        /// <summary>
+        /// The mockup's pause glyph: a hairline ring with two short bars inside. Drawn at 0.84 of
+        /// the 86 px disc, so the ring is 64 px across with a 2.3 px stroke and the bars are
+        /// 4.6 x 30, centred 7.5 px either side.
+        /// </summary>
         static Sprite MakePauseSprite()
         {
             if (pauseSprite) return pauseSprite;
             return pauseSprite = PaintSpriteXY("Tex_Pause", 128, p =>
             {
-                float d1 = RoundedBox(p - new Vector2(-0.30f, 0f), new Vector2(0.17f, 0.62f), 0.14f);
-                float d2 = RoundedBox(p - new Vector2(0.30f, 0f), new Vector2(0.17f, 0.62f), 0.14f);
-                return Mathf.Clamp01(-Mathf.Min(d1, d2) / 0.04f);
+                const float aa = 0.016f;                  // one texel
+                float ring = Mathf.Clamp01((0.032f - Mathf.Abs(p.magnitude - 0.865f)) / aa + 0.5f);
+                float d1 = RoundedBox(p - new Vector2(-0.21f, 0f), new Vector2(0.064f, 0.415f), 0.05f);
+                float d2 = RoundedBox(p - new Vector2(0.21f, 0f), new Vector2(0.064f, 0.415f), 0.05f);
+                float bars = Mathf.Clamp01(-Mathf.Min(d1, d2) / aa + 0.5f);
+                return Mathf.Max(ring, bars);
             });
         }
 
         static Sprite arcArrowSprite;
         /// <summary>
-        /// A thin arc with an arrowhead at each end, the mockup's tilt cue. Centred on the sprite's
-        /// centre with the arc bowing DOWN below it (the finger sweeps the same arc).
+        /// The mockup's tilt cue: a hairline arc with a filled arrowhead at each end. Painted at
+        /// 1:1 canvas pixels in a 440 x 100 sprite, with the arc's circle centre
+        /// ArcCentreAboveSprite px above the sprite's centre - which is where OnboardingHint's
+        /// pivot goes, so the finger sweeps exactly this arc.
         /// </summary>
         static Sprite MakeArcArrowSprite()
         {
             if (arcArrowSprite) return arcArrowSprite;
-            const float r = 0.82f, band = 0.028f, half = 34f;   // degrees either side of straight down
-            return arcArrowSprite = PaintSpriteXY("Tex_ArcArrow", 256, p =>
+            const float stroke = 3f, headLength = 39f, headHalfWidth = 14f;
+            var centre = new Vector2(0f, ArcCentreAboveSprite);
+            return arcArrowSprite = PaintSpriteRect("Tex_ArcArrow", (int)ArcSpriteWidth, (int)ArcSpriteHeight, p =>
             {
-                float d = p.magnitude;
-                float ang = Mathf.Atan2(p.y, p.x) * Mathf.Rad2Deg;   // -90 is straight down
-                float off = Mathf.DeltaAngle(-90f, ang);
+                Vector2 q = p - centre;
+                float ang = Mathf.Atan2(q.x, -q.y) * Mathf.Rad2Deg;   // 0 = straight down, + = right
                 float a = 0f;
-                if (Mathf.Abs(off) <= half)
-                    a = Mathf.Clamp01((band - Mathf.Abs(d - r)) / 0.012f);
+                if (Mathf.Abs(ang) <= ArcHalfAngle)
+                    a = Mathf.Clamp01(stroke * 0.5f + 0.5f - Mathf.Abs(q.magnitude - ArcRadius));
 
-                // Arrowheads: small triangles at both ends pointing along the tangent, outward.
                 for (int s = -1; s <= 1; s += 2)
                 {
-                    float endRad = (-90f + s * half) * Mathf.Deg2Rad;
-                    var c = new Vector2(Mathf.Cos(endRad), Mathf.Sin(endRad)) * r;
-                    var tangent = new Vector2(-Mathf.Sin(endRad), Mathf.Cos(endRad)) * s;
-                    var radial = c.normalized;
-                    var tip = c + tangent * 0.16f;
-                    if (InTriangle(p, tip, c + radial * 0.085f, c - radial * 0.085f)) a = 1f;
+                    float rad = s * ArcHalfAngle * Mathf.Deg2Rad;
+                    var end = centre + new Vector2(Mathf.Sin(rad), -Mathf.Cos(rad)) * ArcRadius;
+                    var tangent = new Vector2(Mathf.Cos(rad), Mathf.Sin(rad)) * s;   // outward along the arc
+                    var normal = new Vector2(-tangent.y, tangent.x);
+                    if (InTriangle(p, end + tangent * headLength,
+                                   end + normal * headHalfWidth, end - normal * headHalfWidth)) a = 1f;
                 }
                 return a;
-            });
-        }
-
-        static Sprite gearSprite;
-        /// <summary>
-        /// A cog, drawn rather than typed. Poppins has no gear glyph, and v1 already learned that
-        /// a missing glyph renders as a silent tofu box rather than as an error.
-        /// </summary>
-        static Sprite MakeGearSprite()
-        {
-            if (gearSprite) return gearSprite;
-            const int teeth = 8;
-            return gearSprite = PaintSprite("Tex_Gear", 128, (d, ang) =>
-            {
-                // Outer radius pulses with angle to make the teeth.
-                float wave = Mathf.Cos(ang * Mathf.Deg2Rad * teeth);
-                float outer = 0.72f + 0.16f * Mathf.Clamp01(wave * 2f);
-                float body = Mathf.Clamp01((outer - d) / 0.05f);
-                float hole = Mathf.Clamp01((d - 0.3f) / 0.05f);
-                return body * hole;
             });
         }
 
@@ -1778,38 +1889,6 @@ namespace PullTheWorld.EditorTools
             });
         }
 
-        /// <summary>Soft dark gradient bar, so overlaid text always has something to sit on.</summary>
-        static void AddScrim(Transform parent, string name, bool top, float height)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-            go.transform.SetParent(parent, false);
-            var rt = go.GetComponent<RectTransform>();
-            rt.anchorMin = new Vector2(0f, top ? 1f : 0f);
-            rt.anchorMax = new Vector2(1f, top ? 1f : 0f);
-            rt.pivot = new Vector2(0.5f, top ? 1f : 0f);
-            rt.anchoredPosition = Vector2.zero;
-            rt.sizeDelta = new Vector2(0f, height);
-
-            var img = go.GetComponent<Image>();
-            img.sprite = MakeScrimSprite("Tex_Scrim" + (top ? "Top" : "Bottom"), top);
-            img.color = new Color(0.055f, 0.085f, 0.125f, 0.24f);
-            img.raycastTarget = false;
-        }
-
-        static readonly Dictionary<string, Sprite> scrimCache = new Dictionary<string, Sprite>();
-        static Sprite MakeScrimSprite(string id, bool opaqueAtTop)
-        {
-            if (scrimCache.TryGetValue(id, out var s) && s) return s;
-            s = PaintSpriteXY(id, 64, p =>
-            {
-                float t = (p.y + 1f) * 0.5f;                 // 0 bottom -> 1 top
-                float a = opaqueAtTop ? t : 1f - t;
-                return Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(a));
-            });
-            scrimCache[id] = s;
-            return s;
-        }
-
         /// <summary>
         /// A shared TMP material with the underlay (drop shadow) feature on. Shared rather than
         /// per-text so it stays a real asset - touching TMP_Text.fontMaterial would spawn scene-only
@@ -1818,7 +1897,6 @@ namespace PullTheWorld.EditorTools
         static Material MakeTmpShadowMaterial(TMP_FontAsset font, string id)
         {
             if (font == null || font.material == null) return null;
-            string path = $"{PtwArt.MatDir}/{id}.mat";
             var m = new Material(font.material) { name = id };
             // A soft warm-dark underlay: on the pastel sky a hard black shadow reads as a sticker.
             m.EnableKeyword("UNDERLAY_ON");
@@ -1827,7 +1905,31 @@ namespace PullTheWorld.EditorTools
             m.SetFloat("_UnderlayOffsetY", -0.5f);
             m.SetFloat("_UnderlayDilate", 0.1f);
             m.SetFloat("_UnderlaySoftness", 0.4f);
+            return SaveTmpMaterial(m, id);
+        }
 
+        /// <summary>
+        /// The drawn labels' look for typed text: a hard, unblurred drop shadow straight below,
+        /// in the sage the artist used under PLAY and CLOSE. Offset -0.45 is about 4.5% of the em,
+        /// which is where the shadow sits on PLAY.png.
+        /// </summary>
+        static Material MakeTmpDropMaterial(TMP_FontAsset font, string id, Color shadow)
+        {
+            if (font == null || font.material == null) return null;
+            var m = new Material(font.material) { name = id };
+            m.EnableKeyword("UNDERLAY_ON");
+            m.SetColor("_UnderlayColor", new Color(shadow.r, shadow.g, shadow.b, 1f));
+            m.SetFloat("_UnderlayOffsetX", 0f);
+            m.SetFloat("_UnderlayOffsetY", -0.45f);
+            m.SetFloat("_UnderlayDilate", 0.05f);
+            m.SetFloat("_UnderlaySoftness", 0.02f);
+            return SaveTmpMaterial(m, id);
+        }
+
+        /// <summary>Write a TMP material variant as a shared asset, updating it in place if it exists.</summary>
+        static Material SaveTmpMaterial(Material m, string id)
+        {
+            string path = $"{PtwArt.MatDir}/{id}.mat";
             var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
             if (existing != null)
             {
@@ -1876,32 +1978,27 @@ namespace PullTheWorld.EditorTools
             });
         }
 
-        static Sprite discSprite;
-        static Sprite MakeDiscSprite()
-        {
-            if (discSprite) return discSprite;
-            return discSprite = PaintSprite("Tex_Disc", 128, (d, ang) =>
-                Mathf.Clamp01((1f - d) / 0.06f));   // soft-edged filled circle
-        }
-
         static Sprite restartSprite;
-        /// <summary>A circular arrow, drawn rather than typed, so it can never render as tofu.</summary>
+        /// <summary>
+        /// The mockup's restart glyph: a thin circular arrow, open at the top right. Drawn at 0.72
+        /// of the 86 px disc, so the loop is ~48 px across with a 4.6 px stroke.
+        /// </summary>
         static Sprite MakeRestartSprite()
         {
             if (restartSprite) return restartSprite;
 
             const int s = 128;
-            const float rMid = 0.60f, band = 0.115f;
-            const float startDeg = 20f, endDeg = 320f;
+            const float rMid = 0.74f, band = 0.075f;
+            const float startDeg = 25f, endDeg = 325f;
 
             // Arrow head sits at the open end of the arc, pointing along the tangent.
             float endRad = endDeg * Mathf.Deg2Rad;
             Vector2 headC = new Vector2(Mathf.Cos(endRad), Mathf.Sin(endRad)) * rMid;
             Vector2 tangent = new Vector2(-Mathf.Sin(endRad), Mathf.Cos(endRad));
             Vector2 radial = headC.normalized;
-            Vector2 tip = headC + tangent * 0.42f;
-            Vector2 b1 = headC + radial * 0.30f;
-            Vector2 b2 = headC - radial * 0.30f;
+            Vector2 tip = headC + tangent * 0.34f;
+            Vector2 b1 = headC + radial * 0.21f;
+            Vector2 b2 = headC - radial * 0.21f;
 
             return restartSprite = PaintSpriteXY("Tex_Restart", s, p =>
             {
@@ -1912,7 +2009,7 @@ namespace PullTheWorld.EditorTools
                 if (ang >= startDeg && ang <= endDeg)
                 {
                     float edge = Mathf.Abs(d - rMid);
-                    a = Mathf.Clamp01((band - edge) / 0.045f);
+                    a = Mathf.Clamp01((band - edge) / 0.016f + 0.5f);
                 }
                 if (InTriangle(p, tip, b1, b2)) a = 1f;
                 return a;
@@ -1935,20 +2032,36 @@ namespace PullTheWorld.EditorTools
             PaintSpriteXY(id, size, p => alpha(p.magnitude,
                 Mathf.Repeat(Mathf.Atan2(p.y, p.x) * Mathf.Rad2Deg, 360f)));
 
-        /// <summary>Paint by position in [-1,1] space centred on the sprite.</summary>
-        static Sprite PaintSpriteXY(string id, int size, System.Func<Vector2, float> alpha)
+        /// <summary>
+        /// Paint by position in [-1,1] space centred on the sprite. A non-zero <paramref name="border"/>
+        /// (left, bottom, right, top, in texels) makes the sprite 9-sliceable.
+        /// </summary>
+        static Sprite PaintSpriteXY(string id, int size, System.Func<Vector2, float> alpha,
+                                    Vector4 border = default)
         {
-            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            float half = size * 0.5f;
+            return PaintSpriteRect(id, size, size,
+                                   p => alpha(p / half), border);
+        }
+
+        /// <summary>
+        /// Paint a w x h sprite by position in PIXELS from its centre (+y up). For shapes that are
+        /// specified in canvas pixels and drawn at 1:1, like the tilt arc.
+        /// </summary>
+        static Sprite PaintSpriteRect(string id, int w, int h, System.Func<Vector2, float> alpha,
+                                      Vector4 border = default)
+        {
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false)
             {
                 name = id,
                 wrapMode = TextureWrapMode.Clamp,
                 filterMode = FilterMode.Bilinear
             };
-            float half = size * 0.5f;
-            for (int y = 0; y < size; y++)
-                for (int x = 0; x < size; x++)
+            float hx = w * 0.5f, hy = h * 0.5f;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
                 {
-                    var p = new Vector2((x + 0.5f - half) / half, (y + 0.5f - half) / half);
+                    var p = new Vector2(x + 0.5f - hx, y + 0.5f - hy);
                     tex.SetPixel(x, y, new Color(1f, 1f, 1f, Mathf.Clamp01(alpha(p))));
                 }
             tex.Apply();
@@ -1957,7 +2070,8 @@ namespace PullTheWorld.EditorTools
             string path = $"{PtwArt.TexDir}/{id}.asset";
             AssetDatabase.DeleteAsset(path);
             AssetDatabase.CreateAsset(tex, path);
-            var sprite = Sprite.Create(tex, new Rect(0f, 0f, size, size), new Vector2(0.5f, 0.5f));
+            var sprite = Sprite.Create(tex, new Rect(0f, 0f, w, h), new Vector2(0.5f, 0.5f),
+                                       100f, 0, SpriteMeshType.FullRect, border);
             sprite.name = "Sprite_" + id;
             AssetDatabase.AddObjectToAsset(sprite, tex);
             return sprite;

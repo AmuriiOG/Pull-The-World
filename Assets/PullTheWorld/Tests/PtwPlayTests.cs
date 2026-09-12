@@ -841,9 +841,9 @@ namespace PullTheWorld.Tests
 
         // ------------------------------------------------------------- capture encoding -----
         /// <summary>Linear float pixels to an 8-bit sRGB PNG, the way a phone screen would show them.</summary>
-        static byte[] ToPng(Color[] px)
+        static byte[] ToPng(Color[] px, int width, int height)
         {
-            var t = new Texture2D(ShotWidth, ShotHeight, TextureFormat.RGB24, false);
+            var t = new Texture2D(width, height, TextureFormat.RGB24, false);
             var c8 = new Color32[px.Length];
             bool linear = QualitySettings.activeColorSpace == ColorSpace.Linear;
             for (int i = 0; i < px.Length; i++)
@@ -901,25 +901,111 @@ namespace PullTheWorld.Tests
             yield return Wait(0.9f);
             yield return Grab(Path.Combine(dir, "ui_01_main_menu.png"));
 
+            // The level picker.
+            var levelsBtn = FindButton("LevelsButton");
+            Assert.IsNotNull(levelsBtn, "Main menu has no LevelsButton");
+            levelsBtn.onClick.Invoke();
+            yield return Wait(1.0f);
+            yield return Grab(Path.Combine(dir, "ui_02_level_select.png"));
+            var closeLevels = FindButton("CloseLevelsButton");
+            Assert.IsNotNull(closeLevels, "Level select has no CloseLevelsButton");
+            closeLevels.onClick.Invoke();
+            yield return Wait(0.5f);
+
+            // Settings from the menu, with one switch turned off so both track states are on
+            // show. The player's real setting is put back afterwards.
             var settingsBtn = FindButton("SettingsButton");
             Assert.IsNotNull(settingsBtn, "Main menu has no SettingsButton");
             settingsBtn.onClick.Invoke();
-            yield return Wait(1.2f);
-            yield return Grab(Path.Combine(dir, "ui_02_settings.png"));
+            yield return Wait(0.8f);
+            var music = FindToggle("MusicToggle");
+            Assert.IsNotNull(music, "Settings has no MusicToggle");
+            bool musicWasOn = music.isOn;
+            music.isOn = false;
+            yield return Wait(0.8f);
+            yield return Grab(Path.Combine(dir, "ui_03_settings.png"));
+            music.isOn = musicWasOn;
 
             var closeBtn = FindButton("CloseButton");
             Assert.IsNotNull(closeBtn, "Settings panel has no CloseButton");
             closeBtn.onClick.Invoke();
             yield return Wait(0.5f);
 
+            // The HUD over level 1, with its tilt cue showing. The cue fades on the return leg of
+            // each sweep, so wait for a moment when it is fully up rather than a fixed time.
+            yield return LoadLevel(0);
+            yield return WaitForHint();
+            yield return Grab(Path.Combine(dir, "ui_04_hud.png"));
+
+            // Settings over a paused level. The clock is stopped, so wait on real time.
+            var pauseBtn = FindButton("PauseButton");
+            Assert.IsNotNull(pauseBtn, "HUD has no PauseButton");
+            pauseBtn.onClick.Invoke();
+            yield return WaitRealtime(1.0f);
+            yield return Grab(Path.Combine(dir, "ui_05_settings_paused.png"));
+            closeBtn.onClick.Invoke();
+            yield return Wait(0.5f);
+
             // Win the level outright rather than trying to solve it - this is a UI capture, and
             // making it depend on a puzzle being solvable would make it fail for the wrong reason.
-            yield return LoadLevel(0);
             levels.ReportWin();
             yield return Wait(1.5f);
-            yield return Grab(Path.Combine(dir, "ui_03_level_complete.png"));
+            yield return Grab(Path.Combine(dir, "ui_06_level_complete.png"));
 
             Debug.Log("PTW_UI_CAPTURES_WRITTEN: " + dir);
+        }
+
+        IEnumerator WaitRealtime(float seconds)
+        {
+            float t = 0f;
+            while (t < seconds) { t += Time.unscaledDeltaTime; yield return null; }
+        }
+
+        /// <summary>Wait until the onboarding tilt cue is fully visible, or give up after a few seconds.</summary>
+        IEnumerator WaitForHint()
+        {
+            CanvasGroup hint = null;
+            foreach (var g in UnityEngine.Object.FindObjectsByType<CanvasGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (g.name == "RotateHint") { hint = g; break; }
+            float t = 0f;
+            while (t < 5f && (hint == null || hint.alpha < 0.97f))
+            {
+                t += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        /// <summary>
+        /// The menu, settings and HUD at other aspect ratios: a tall 19.5:9 phone and a 4:3
+        /// tablet. The canvas lays itself out for the render target it is drawn into, so one
+        /// run covers every size (batch mode's own Screen is a fixed 640x480 and is not used).
+        /// Half resolution: these are layout checks, and a full-size 4:3 float readback at the
+        /// end of the whole suite stalled the batch process for minutes on a low-memory machine.
+        /// </summary>
+        [UnityTest, Timeout(300000)]
+        public IEnumerator CaptureUiAtScreenSize()
+        {
+            string dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Captures"));
+            Directory.CreateDirectory(dir);
+            var sizes = new[] { (540, 1170), (768, 1024) };
+
+            yield return Wait(0.9f);
+            foreach (var (w, h) in sizes)
+                yield return Grab(Path.Combine(dir, $"aspect_{w}x{h}_menu.png"), w, h);
+
+            FindButton("SettingsButton").onClick.Invoke();
+            yield return Wait(1.0f);
+            foreach (var (w, h) in sizes)
+                yield return Grab(Path.Combine(dir, $"aspect_{w}x{h}_settings.png"), w, h);
+            FindButton("CloseButton").onClick.Invoke();
+            yield return Wait(0.5f);
+
+            yield return LoadLevel(0);
+            yield return WaitForHint();
+            foreach (var (w, h) in sizes)
+                yield return Grab(Path.Combine(dir, $"aspect_{w}x{h}_hud.png"), w, h);
+
+            Debug.Log("PTW_ASPECT_CAPTURES_WRITTEN");
         }
 
         static UnityEngine.UI.Button FindButton(string name)
@@ -929,6 +1015,15 @@ namespace PullTheWorld.Tests
                 FindObjectsInactive.Include, FindObjectsSortMode.None);
             foreach (var b in all)
                 if (b.name == name) return b;
+            return null;
+        }
+
+        static UnityEngine.UI.Toggle FindToggle(string name)
+        {
+            var all = UnityEngine.Object.FindObjectsByType<UnityEngine.UI.Toggle>(
+                FindObjectsInactive.Include, FindObjectsSortMode.None);
+            foreach (var t in all)
+                if (t.name == name) return t;
             return null;
         }
 
@@ -961,11 +1056,13 @@ namespace PullTheWorld.Tests
             Debug.LogWarning($"PTW_CAPTURE_LOCKED {Path.GetFileName(path)} -> wrote {Path.GetFileName(alt)}");
         }
 
-        IEnumerator Grab(string path)
+        IEnumerator Grab(string path) => Grab(path, ShotWidth, ShotHeight);
+
+        IEnumerator Grab(string path, int width, int height)
         {
             yield return null;   // let one full frame of animation/VFX advance
 
-            var rt = new RenderTexture(ShotWidth, ShotHeight, 24, RenderTextureFormat.DefaultHDR)
+            var rt = new RenderTexture(width, height, 24, RenderTextureFormat.DefaultHDR)
             {
                 antiAliasing = 1
             };
@@ -974,7 +1071,7 @@ namespace PullTheWorld.Tests
             // PNG produced captures about 40% darker and muddier than the game looks on a phone,
             // and two rounds of art direction chased that artefact (paler sky, lighter mountains)
             // before it was caught. This is the one place the whole visual loop depends on.
-            var tex = new Texture2D(ShotWidth, ShotHeight, TextureFormat.RGBAFloat, false, true);
+            var tex = new Texture2D(width, height, TextureFormat.RGBAFloat, false, true);
             var prevTarget = cam.targetTexture;
             var prevActive = RenderTexture.active;
             var rigCam = cam.GetComponent<PlaneCameraRig>();
@@ -988,11 +1085,11 @@ namespace PullTheWorld.Tests
                 cam.Render();
 
                 RenderTexture.active = rt;
-                tex.ReadPixels(new Rect(0f, 0f, ShotWidth, ShotHeight), 0, 0);
+                tex.ReadPixels(new Rect(0f, 0f, width, height), 0, 0);
                 tex.Apply(false);
 
-                WritePng(path, ToPng(tex.GetPixels()));
-                Debug.Log($"PTW_CAPTURE {Path.GetFileName(path)} {ShotWidth}x{ShotHeight}");
+                WritePng(path, ToPng(tex.GetPixels(), width, height));
+                Debug.Log($"PTW_CAPTURE {Path.GetFileName(path)} {width}x{height}");
             }
             finally
             {
