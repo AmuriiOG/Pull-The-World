@@ -172,8 +172,10 @@ namespace PullTheWorld
         }
 
         [Header("Intro")]
-        [Tooltip("Degrees the level starts tilted before springing to its start angle on load.")]
-        [SerializeField] float introKick = 4f;
+        [Tooltip("Degrees the level starts tilted before springing to its start angle on load. " +
+                 "Zero: the level arrives at rest. The old 4-degree swing read as a bounce on " +
+                 "every load and restart, exactly where the game must feel continuous.")]
+        [SerializeField] float introKick = 0f;
 
         [Header("Menu")]
         [Tooltip("The island breathes slowly behind the main menu. Off the moment a level binds.")]

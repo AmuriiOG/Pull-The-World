@@ -249,6 +249,9 @@ namespace PullTheWorld
         /// <summary>True once the ball died by falling out, so the restart can skip the pause meant for on-screen deaths.</summary>
         public bool Fell { get; private set; }
 
+        /// <summary>Seconds since the last spawn. Read by ImpactFeedback so the drop-in landing does not shake the level.</summary>
+        public float AliveTime => aliveTime;
+
         bool BelowTheWorld()
         {
             // Measured from the ACTIVE level's pivot, not the origin: levels stand in slots up

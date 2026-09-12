@@ -29,6 +29,10 @@ namespace PullTheWorld
         [Tooltip("Particles emitted at a full-strength impact.")]
         [SerializeField] int dustAtFullImpact = 7;
         [SerializeField] float shakeAtFullImpact = 0.55f;
+        [Tooltip("Seconds after a spawn during which an impact puffs and thuds but does NOT shake " +
+                 "the level: the drop-in landing is the game's doing, not the player's, and a " +
+                 "level that wobbles as it starts reads as a bounce.")]
+        [SerializeField] float spawnGrace = 0.8f;
 
         [Header("Rolling")]
         [Tooltip("Speed at which the rolling dust reaches full rate.")]
@@ -74,19 +78,19 @@ namespace PullTheWorld
         LevelManager levelsHooked;
 
         /// <summary>
-        /// The two moments that most need to LAND. A win or a death that just stops the ball reads
-        /// as a bug; a burst at the ball plus a proper shake reads as an event.
+        /// The two moments that most need to LAND: a burst of dust at the ball. They no longer
+        /// shake the level - the door's flare and the ball being drawn in carry the win, the pop
+        /// and the hit-stop carry the death, and a wobble on top read as the game jolting at the
+        /// very moments that must feel continuous.
         /// </summary>
         void HandleWon(LevelDefinition _)
         {
             if (dust && player) { dust.transform.position = player.transform.position; dust.Emit(22); }
-            if (rotator) rotator.AddShake(0.35f);
         }
 
         void HandleFailed(LevelDefinition _)
         {
             if (dust && player) { dust.transform.position = player.transform.position; dust.Emit(28); }
-            if (rotator) rotator.AddShake(0.7f);
         }
 
         void HandleImpact(float strength, Vector3 point)
@@ -103,7 +107,8 @@ namespace PullTheWorld
             PtwAudio.Play(PtwSfx.Impact, Mathf.Lerp(0.10f, 1f, strength * strength),
                           Mathf.Lerp(1.15f, 0.85f, strength));   // heavier hits sound lower
             Haptics.Impact(strength);
-            if (rotator) rotator.AddShake(shakeAtFullImpact * strength);
+            // The player's own collisions shake the level; the drop-in landing does not.
+            if (rotator && player && player.AliveTime >= spawnGrace) rotator.AddShake(shakeAtFullImpact * strength);
         }
 
         void HandleTick()

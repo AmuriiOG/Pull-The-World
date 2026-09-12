@@ -61,7 +61,10 @@ namespace PullTheWorld
             var player = PlayerBody.Instance;
             if (player && player.IsAlive)
             {
-                Vector3 p = player.transform.position;
+                // Relative to the live level's pivot: levels stand at very different world
+                // heights now, and a world-space read pinned the sky to the clamp on every level
+                // past the first.
+                Vector3 p = player.transform.position - LevelManager.PivotOrOrigin;
                 target.x -= Mathf.Clamp(p.x * follow, -followClamp, followClamp);
                 target.y -= Mathf.Clamp(p.y * follow * 0.5f, -followClamp, followClamp);
             }

@@ -88,6 +88,19 @@ namespace PullTheWorld.EditorTools
             PtwPrefabs.Wire(levels, "cameraRig", camRig);
             PtwPrefabs.Wire(levels, "sky", cam.GetComponentInChildren<SkyTheme>());
             levels.EditorSetLevels(PtwLevels.LoadAll());
+            // The pieces the world's small floating rocks are built from at runtime (LevelManager.BuildDecor).
+            PtwPrefabs.WireArray(levels, "decorBlocks", new UnityEngine.Object[]
+            {
+                AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Blocks + "/Block_Grass.prefab"),
+                AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Blocks + "/Block_Stone.prefab"),
+            });
+            PtwPrefabs.WireArray(levels, "decorProps", new UnityEngine.Object[]
+            {
+                AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Props + "/Prop_TreeSmall.prefab"),
+                AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Props + "/Prop_Bush.prefab"),
+                AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Props + "/Prop_Vine.prefab"),
+                AssetDatabase.LoadAssetAtPath<GameObject>(PtwPrefabs.Props + "/Prop_Flower.prefab"),
+            });
 
             // (The far scenery now lives in the sky, built with the camera - see BuildSkyLayers.)
             var (burst, roll) = BuildDust();

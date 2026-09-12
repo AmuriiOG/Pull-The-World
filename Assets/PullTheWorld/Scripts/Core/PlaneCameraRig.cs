@@ -78,18 +78,11 @@ namespace PullTheWorld
         void OnEnable() { cam = GetComponent<Camera>(); Apply(); }
         void OnValidate() { cam = GetComponent<Camera>(); Apply(); }
 
-        float zoom = 1f, zoomVel;
-
-        /// <summary>
-        /// A momentary lens zoom that springs back to 1 over about half a second. Above 1 on level
-        /// load (the island arrives), below 1 on a win (lean in). Visual only; the camera does not
-        /// move, so the framing math and the pivot's screen position are unchanged.
-        /// </summary>
-        public void Kick(float scale)
-        {
-            zoom = Mathf.Clamp(scale, 0.7f, 1.4f);
-            zoomVel = 0f;
-        }
+        // There is deliberately no "kick" here any more. Earlier builds zoomed the lens a few
+        // percent on level load, on a win and on arrival and let a spring settle it; every one of
+        // those read as a small pop exactly at the moments that must feel continuous - the first
+        // frame of a level, the last frame of the push. The camera now does nothing it is not
+        // asked to do: it stands, or it travels, and the travel ends in the standing state.
 
         // ---- travel: the one time this camera moves ------------------------------------------
         // Between levels the camera pushes FORWARD, from its stand in front of the finished island
@@ -122,7 +115,14 @@ namespace PullTheWorld
             FrameExtents(extents);
         }
 
-        /// <summary>Push to a framing over <paramref name="seconds"/>. Poll <see cref="IsTravelling"/>.</summary>
+        /// <summary>The framing extents currently in force.</summary>
+        public Vector2 Extents => new Vector2(minViewWidth, minViewHeight);
+
+        /// <summary>
+        /// Push to a framing over <paramref name="seconds"/>. Poll <see cref="IsTravelling"/>. A
+        /// travel that stays on the same focus (the menu easing into a level's framing) is a pure
+        /// zoom: no lift, no lens widening - those belong to a real journey through the world.
+        /// </summary>
         public void TravelTo(Vector3 worldFocus, Vector2 extents, float seconds)
         {
             travelFrom = focus;
@@ -131,20 +131,27 @@ namespace PullTheWorld
             extTo = new Vector2(Mathf.Max(1f, extents.x), Mathf.Max(1f, extents.y));
             travelSeconds = Mathf.Max(0.05f, seconds);
             travelT = 0f;
+            inPlace = (travelTo - travelFrom).sqrMagnitude < 0.01f;
             travelling = true;
         }
 
+        bool inPlace;
+
         void Update()
         {
-            bool settling = Mathf.Abs(zoom - 1f) > 0.0005f || Mathf.Abs(zoomVel) > 0.0005f;
-            if (settling) Spring.Step(ref zoom, ref zoomVel, 1f, 2.4f, 0.85f, Time.unscaledDeltaTime);
-
             if (travelling && Application.isPlaying)
             {
                 travelT += Time.deltaTime / travelSeconds;
                 float u = Mathf.Clamp01(travelT);
-                float e = u * u * u * (u * (u * 6f - 15f) + 10f);   // smootherstep: gentle start, gentle stop
-                float bump = Mathf.Sin(u * Mathf.PI);               // 0 at both ends, 1 in the middle
+                // Smootherstep: zero velocity AND zero acceleration at both ends, so the last frame
+                // of the push is, to the pixel, the standing frame that gameplay continues from.
+                // The lift and the widening ride on a bump built from the same curve (up over the
+                // first half, back down over the second), so they too arrive with zero velocity.
+                // A plain sin(pi u) was the one thing still moving at the handoff: it is zero at
+                // u = 1 but its slope is not, so the camera was still descending from the lift at
+                // several units a second when the push stopped - a small, definite snap.
+                float e = Smoother(u);
+                float bump = inPlace ? 0f : Smoother(u < 0.5f ? 2f * u : 2f * (1f - u));
                 focus = Vector3.Lerp(travelFrom, travelTo, e);
                 Vector2 ext = Vector2.Lerp(extFrom, extTo, e);
                 minViewWidth = ext.x;
@@ -172,8 +179,16 @@ namespace PullTheWorld
                 return;
             }
 
-            // Otherwise only recomputes on a real resolution change, so this is free at runtime.
-            if (settling || !Mathf.Approximately(lastAspect, CurrentAspect())) Apply();
+            // Otherwise only recomputes on a real resolution change, so this is free at runtime
+            // and, more to the point, the camera cannot drift by itself.
+            if (!Mathf.Approximately(lastAspect, CurrentAspect())) Apply();
+        }
+
+        /// <summary>6x^5 - 15x^4 + 10x^3: zero first AND second derivative at both ends.</summary>
+        static float Smoother(float x)
+        {
+            x = Mathf.Clamp01(x);
+            return x * x * x * (x * (x * 6f - 15f) + 10f);
         }
 
         float CurrentAspect()
@@ -219,13 +234,13 @@ namespace PullTheWorld
             cam.nearClipPlane = nearClip;
             cam.farClipPlane = farClip;
 
-            // The stand distance comes from the BASE lens, so a kick or the travel widening is a
-            // pure zoom: the camera does not move and the pivot stays put on screen.
+            // The stand distance comes from the BASE lens, so the travel widening is a pure zoom:
+            // the camera does not move and the pivot stays put on screen.
             float tanHalf = Mathf.Tan(fieldOfView * 0.5f * Mathf.Deg2Rad);
             float forHeight = minViewHeight * 0.5f / tanHalf;
             float forWidth = minViewWidth * 0.5f / (tanHalf * Mathf.Max(0.01f, aspect));
             float distance = Mathf.Max(forHeight, forWidth);
-            cam.fieldOfView = Mathf.Clamp(fieldOfView * zoom * (1f + widen), 2f, 120f);
+            cam.fieldOfView = Mathf.Clamp(fieldOfView * (1f + widen), 2f, 120f);
 
             // Yaw stays 0. Roll stays 0. Only pitch.
             Quaternion rot = Attitude;

@@ -73,8 +73,20 @@ namespace PullTheWorld
         [SerializeField] float slotWander = 3.5f;
         [Tooltip("Seconds the camera takes to push from a finished level to the next.")]
         [SerializeField] float travelSeconds = 2.2f;
-        [Tooltip("How many levels ahead of the live one stand in the distance as scenery.")]
-        [SerializeField, Range(1, 3)] int lookAhead = 2;
+        [Tooltip("How many levels ahead of the live one stand in the distance as scenery. One: " +
+                 "the next level alone waits in the sky; the one after it appears as the push " +
+                 "towards it begins.")]
+        [SerializeField, Range(1, 3)] int lookAhead = 1;
+
+        [Header("Decoration")]
+        [Tooltip("Blocks the small floating rocks beside and below each level are built from: " +
+                 "grass first, then stone.")]
+        [SerializeField] GameObject[] decorBlocks;
+        [Tooltip("Props for those rocks, any of: a small tree, a bush, a vine, a flower.")]
+        [SerializeField] GameObject[] decorProps;
+        [Tooltip("Rocks per level. Two is deliberately sparse - they are there so the sky is not " +
+                 "empty, not to compete with the next level.")]
+        [SerializeField, Range(0, 4)] int decorPerLevel = 2;
 
         [Header("Timing")]
         [Tooltip("How long the celebration runs before the camera sets off for the next level.")]
@@ -100,6 +112,7 @@ namespace PullTheWorld
         GameObject previous;             // the level just left, frozen into scenery for the journey
         readonly List<GameObject> ahead = new List<GameObject>();   // the levels after index, as scenery, nearest first
         GameObject menuIsland;           // the menu only: the level about to be played, as scenery
+        readonly Dictionary<int, GameObject> decor = new Dictionary<int, GameObject>();   // floating rocks, by level index
 
         public event Action<LevelDefinition> OnLevelLoaded;
         public event Action<LevelDefinition> OnLevelWon;
@@ -204,7 +217,7 @@ namespace PullTheWorld
             // The two beyond it are NOT stood up here - from the menu framing they land exactly
             // behind the logo and read as clutter around the letters. They appear on PLAY, while
             // the menu fades.
-            if (LevelCount > 0) menuIsland = BuildScenery(index, slot);
+            if (LevelCount > 0) { menuIsland = BuildScenery(index, slot); EnsureDecor(index); }
             SetState(LevelState.Menu);
         }
 
@@ -248,12 +261,14 @@ namespace PullTheWorld
 
             // Framed before the player spawns so the first frame is already composed. From the
             // menu the camera is already looking at this slot, so it eases in to the level's
-            // framing rather than cutting; anywhere else it snaps, with a small zoom that settles
-            // over the first half-second: the island arrives.
+            // framing rather than cutting; a restart is already AT the level's framing and the
+            // camera simply stays put; anywhere else it stands straight at the level's framing.
+            // (No settling zoom: it read as a pop on every load and restart.)
             if (cameraRig)
             {
-                if (sameView) cameraRig.TravelTo(SlotFor(index), current.viewExtents, 0.8f);
-                else { cameraRig.SnapTo(SlotFor(index), current.viewExtents); cameraRig.Kick(1.07f); }
+                bool sameFraming = sameView && (cameraRig.Extents - current.viewExtents).sqrMagnitude < 1e-4f;
+                if (sameFraming || !sameView) cameraRig.SnapTo(SlotFor(index), current.viewExtents);
+                else cameraRig.TravelTo(SlotFor(index), current.viewExtents, 0.8f);
             }
             if (sky) sky.Apply(sky.ChapterFor(index, LevelCount));
 
@@ -262,17 +277,23 @@ namespace PullTheWorld
             OnLevelLoaded?.Invoke(current);
 
             TopUpAhead();
+            PruneDecor(index);
         }
 
-        /// <summary>Stand levels in their slots as scenery until <see cref="lookAhead"/> of them wait beyond the live one.</summary>
+        /// <summary>
+        /// Stand levels in their slots as scenery until <see cref="lookAhead"/> of them wait beyond
+        /// the live one, each with its floating rocks.
+        /// </summary>
         void TopUpAhead()
         {
+            EnsureDecor(index);
             while (ahead.Count < lookAhead)
             {
                 int i = index + ahead.Count + 1;
                 var go = BuildScenery(i, SlotFor(i));
                 if (!go) break;                       // past the last level
                 ahead.Add(go);
+                EnsureDecor(i);
             }
         }
 
@@ -389,15 +410,17 @@ namespace PullTheWorld
         void Arrive()
         {
             if (!current) { travelling = false; return; }
+            // Nothing here touches the camera: the push ended in the standing framing, and the
+            // first frame of play must be that same frame.
             if (rotator) rotator.RotationAllowed = current.allowRotation;
-            if (cameraRig) cameraRig.Kick(1.04f);
             if (player) player.Spawn(current.WorldSpawnPoint);
             SetState(LevelState.Playing);
             OnLevelLoaded?.Invoke(current);
 
-            // The finished level is behind the lens now.
+            // The finished level and its rocks are behind the lens now.
             if (previous) Destroy(previous);
             previous = null;
+            PruneDecor(index);
         }
 
         // ---------------------------------------------------------------------- scenery -----
@@ -439,6 +462,102 @@ namespace PullTheWorld
             menuIsland = null;
             foreach (var go in ahead) if (go) Destroy(go);
             ahead.Clear();
+            foreach (var go in decor.Values) if (go) Destroy(go);
+            decor.Clear();
+        }
+
+        // ------------------------------------------------------------------- decoration -----
+        /// <summary>
+        /// The small floating rocks that keep the sky from being empty: two per level, standing
+        /// in the world BESIDE AND BELOW the level (never in the sky above it, which belongs to
+        /// the next level), so from the lens they sit low at the sides of the frame at about
+        /// two-thirds size and drift past as the camera pushes on. Built from the real block and
+        /// prop prefabs, stripped like scenery, with a slow float. Deterministic per level, so a
+        /// restart shows the same rocks.
+        /// </summary>
+        void EnsureDecor(int i)
+        {
+            if (decor.ContainsKey(i) || decorPerLevel <= 0 || !stage) return;
+            if (decorBlocks == null || decorBlocks.Length < 2 || !decorBlocks[0] || !decorBlocks[1]) return;
+
+            var group = new GameObject($"Decor {i + 1}").transform;
+            group.SetParent(stage, false);
+            group.position = SlotFor(i);
+            decor[i] = group.gameObject;
+
+            var rnd = new System.Random(1009 * (i + 1));
+            float R(float a, float b) => a + (float)rnd.NextDouble() * (b - a);
+            for (int k = 0; k < decorPerLevel; k++)
+            {
+                // Alternate sides; the second rock stands deeper and lower. Both land at about a
+                // fifth of the frame height from the bottom, well under the island's tip, and
+                // inside the frame's edges - and from the level before, they are mostly hidden
+                // behind that level's island rather than floating loose in its sky.
+                bool right = ((k + i) & 1) == 0;
+                float x = (right ? 1f : -1f) * R(5.4f, 6.6f);
+                float y = -R(19f, 21f) - k * 5f;
+                float z = R(26f, 31f) + k * 12f;
+                BuildRock(group, new Vector3(x, y, z), rnd);
+            }
+        }
+
+        void BuildRock(Transform parent, Vector3 localPos, System.Random rnd)
+        {
+            var rock = new GameObject("Rock").transform;
+            rock.SetParent(parent, false);
+            rock.localPosition = localPos;
+            rock.localRotation = Quaternion.Euler(0f, 0f, ((float)rnd.NextDouble() - 0.5f) * 10f);
+            rock.localScale = Vector3.one * (0.75f + (float)rnd.NextDouble() * 0.25f);
+
+            // An inverted pyramid: a grass-capped top row of two or three, stone beneath.
+            int w = 2 + rnd.Next(2);
+            int rows = w == 3 ? 2 : 1 + rnd.Next(2);
+            for (int r = 0; r < rows; r++)
+            {
+                int count = Mathf.Max(1, w - r);
+                for (int c = 0; c < count; c++)
+                {
+                    var src = r == 0 ? decorBlocks[0] : decorBlocks[1];
+                    var b = Instantiate(src, rock);
+                    b.transform.localPosition = new Vector3(c - (count - 1) * 0.5f, -r, 0f);
+                    b.transform.localRotation = Quaternion.identity;
+                    b.transform.localScale = Vector3.one;
+                    if (r == 0)
+                    {
+                        var fringe = b.transform.Find("Fringe"); if (fringe) fringe.gameObject.SetActive(true);
+                        var tufts = b.transform.Find("Tufts"); if (tufts) tufts.gameObject.SetActive(rnd.NextDouble() < 0.6);
+                    }
+                }
+            }
+
+            // One prop at most: a small tree or a bush on top, or a vine down a side.
+            if (decorProps != null && decorProps.Length > 0 && rnd.NextDouble() < 0.75)
+            {
+                var src = decorProps[rnd.Next(decorProps.Length)];
+                if (src)
+                {
+                    var p = Instantiate(src, rock);
+                    bool vine = src.name.Contains("Vine");
+                    int side = rnd.NextDouble() < 0.5 ? -1 : 1;
+                    p.transform.localPosition = vine
+                        ? new Vector3(side * ((w - 1) * 0.5f + 0.56f), -0.05f, -0.2f)
+                        : new Vector3(side * (w - 1) * 0.25f, 0.5f, -0.1f);
+                    p.transform.localRotation = Quaternion.identity;
+                }
+            }
+
+            StripToVisual(rock.gameObject);
+            rock.gameObject.AddComponent<SkyBob>();
+        }
+
+        /// <summary>Rocks of levels before <paramref name="firstKept"/> are behind the lens and go.</summary>
+        void PruneDecor(int firstKept)
+        {
+            List<int> gone = null;
+            foreach (var kv in decor)
+                if (kv.Key < firstKept) (gone ??= new List<int>()).Add(kv.Key);
+            if (gone == null) return;
+            foreach (int i in gone) { if (decor[i]) Destroy(decor[i]); decor.Remove(i); }
         }
 
         /// <summary>
@@ -515,7 +634,6 @@ namespace PullTheWorld
             GameProgress.ReportCleared(index);
             OnLevelWon?.Invoke(current);
 
-            if (cameraRig) cameraRig.Kick(0.96f);        // lean in as the ball is drawn into the door
             pending = StartCoroutine(WinRoutine());
         }
 

@@ -183,22 +183,18 @@ namespace PullTheWorld.Tests
             Vector3 camBefore = cam.transform.position;
 
             var next = GameObject.Find("Level_02 [scenery]");
-            var after = GameObject.Find("Level_03 [scenery]");
             Assert.IsNotNull(next, "The next level is not standing in the world ahead");
-            Assert.IsNotNull(after, "The level after next is not standing in the world ahead");
+            Assert.IsNull(GameObject.Find("Level_03 [scenery]"), "Only the next level should wait in the distance");
             Assert.AreEqual(0, next.GetComponentsInChildren<Collider>(true).Length, "Scenery still has colliders");
             Assert.AreEqual(0, next.GetComponentsInChildren<MonoBehaviour>(true).Length, "Scenery still has behaviours");
             Assert.Greater(next.GetComponentsInChildren<Renderer>(true).Length, 20, "The next level is not the complete level");
+            Assert.IsNotNull(GameObject.Find("Decor 1"), "The live level has no floating rocks beside it");
 
             Vector3 live = cam.WorldToViewportPoint(levels.Pivot);
             Vector3 vNext = cam.WorldToViewportPoint(next.transform.position);
-            Vector3 vAfter = cam.WorldToViewportPoint(after.transform.position);
             Assert.Greater(vNext.z, live.z, "The next level is not further from the lens than the live one");
-            Assert.Greater(vAfter.z, vNext.z, "The level after next is not further away than the next");
             Assert.IsTrue(vNext.x > 0.05f && vNext.x < 0.95f && vNext.y > live.y && vNext.y < 0.95f,
                           $"The next level is not in the sky above the live island: viewport {vNext}");
-            Assert.IsTrue(vAfter.x > 0.02f && vAfter.x < 0.98f && vAfter.y > live.y && vAfter.y < 0.98f,
-                          $"The level after next is not in frame: viewport {vAfter}");
 
             levels.ReportWin();
             yield return WaitUntil(() => levels.IsTravelling, 3f, "the camera to set off");
@@ -222,8 +218,93 @@ namespace PullTheWorld.Tests
                         "The orb did not spawn at the next level");
 
             Assert.IsNull(GameObject.Find("Level_01 [scenery]"), "The finished level, now behind the lens, was kept");
+            Assert.IsNull(GameObject.Find("Decor 1"), "The finished level's rocks, now behind the lens, were kept");
             Assert.IsNotNull(GameObject.Find("Level_03 [scenery]"), "The next level is not standing ahead");
-            Assert.IsNotNull(GameObject.Find("Level_04 [scenery]"), "The level after next was not prepared");
+            Assert.IsNull(GameObject.Find("Level_04 [scenery]"), "Only the next level should wait in the distance");
+        }
+
+        /// <summary>
+        /// Nothing may pop. The camera and the level root must be perfectly still from the first
+        /// frame of a level, the push must decelerate into its stop with no step growing at the
+        /// end, the first frames of play after it must be identical to its last frame, and a
+        /// restart after a death must arrive at rest. Earlier builds failed every one of these:
+        /// a settling zoom on load, on a win and on arrival, and a four-degree intro swing.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator HandoffIsSeamless()
+        {
+            yield return LoadLevel(0);
+            yield return Wait(0.4f);                         // past the menu-to-level ease
+            yield return AssertStill(30, "after level start");
+
+            levels.ReportWin();
+            yield return WaitUntil(() => levels.IsTravelling, 3f, "the camera to set off");
+
+            var pos = new System.Collections.Generic.List<Vector3>();
+            var fov = new System.Collections.Generic.List<float>();
+            var dts = new System.Collections.Generic.List<float>();
+            int arrived = -1;
+            float guard = 0f;
+            while (guard < 10f)
+            {
+                pos.Add(cam.transform.position);
+                fov.Add(cam.fieldOfView);
+                dts.Add(Mathf.Max(1e-4f, Time.deltaTime));
+                if (arrived < 0 && levels.IsPlaying && !levels.IsTravelling) arrived = pos.Count - 1;
+                if (arrived >= 0 && pos.Count - arrived > 40) break;
+                guard += Time.deltaTime;
+                yield return null;
+            }
+            Assert.Greater(arrived, 8, "The push never handed over to play");
+
+            // Decelerating into the stop: over the last frames of the push the camera's SPEED (per
+            // second, so an Editor frame hitch cannot fake a jump) never rises, and it is close to
+            // zero on the final step. The lens must come to rest the same way.
+            float Speed(int i) => (pos[i] - pos[i - 1]).magnitude / dts[i];
+            float LensRate(int i) => Mathf.Abs(fov[i] - fov[i - 1]) / dts[i];
+            for (int i = arrived - 6; i <= arrived; i++)
+            {
+                Assert.LessOrEqual(Speed(i), Speed(i - 1) * 1.15f + 0.05f,
+                                   $"The camera sped up {arrived - i} frames before the handoff ({Speed(i - 1):F3} -> {Speed(i):F3} u/s)");
+                Assert.LessOrEqual(LensRate(i), LensRate(i - 1) * 1.15f + 0.05f,
+                                   $"The lens sped up {arrived - i} frames before the handoff ({LensRate(i - 1):F3} -> {LensRate(i):F3} deg/s)");
+            }
+            Assert.Less(Speed(arrived), 1.5f, $"The push ended with a jump ({Speed(arrived):F3} u/s on the last step)");
+            Assert.Less(LensRate(arrived), 1.0f, $"The lens was still moving at the handoff ({LensRate(arrived):F3} deg/s)");
+
+            // And from the handoff on, exactly still.
+            for (int i = arrived + 1; i < pos.Count; i++)
+            {
+                Assert.Less((pos[i] - pos[i - 1]).magnitude, 1e-4f, $"The camera moved {i - arrived} frames into play (by {(pos[i] - pos[i - 1]).magnitude:F5})");
+                Assert.Less(Mathf.Abs(fov[i] - fov[i - 1]), 1e-4f, $"The lens changed {i - arrived} frames into play");
+            }
+            yield return AssertStill(20, "after arriving at the next level");
+
+            // Death and the restart that follows.
+            levels.ReportFail();
+            yield return WaitUntil(() => !levels.IsPlaying, 1f, "the death to register");
+            yield return WaitUntil(() => levels.IsPlaying, 4f, "the restart");
+            yield return Wait(0.4f);
+            yield return AssertStill(30, "after a restart");
+        }
+
+        /// <summary>The camera and the level root do not move by themselves for this many frames.</summary>
+        IEnumerator AssertStill(int frames, string when)
+        {
+            Vector3 p0 = cam.transform.position;
+            Quaternion r0 = cam.transform.rotation;
+            float f0 = cam.fieldOfView;
+            Quaternion root0 = rotator.WorldRoot.rotation;
+            Vector3 pivot0 = levels.Pivot;
+            for (int i = 0; i < frames; i++)
+            {
+                yield return null;
+                Assert.Less(Vector3.Distance(p0, cam.transform.position), 1e-4f, $"The camera moved {when} (frame {i})");
+                Assert.Less(Quaternion.Angle(r0, cam.transform.rotation), 0.01f, $"The camera turned {when} (frame {i})");
+                Assert.Less(Mathf.Abs(f0 - cam.fieldOfView), 1e-4f, $"The lens changed {when} (frame {i})");
+                Assert.Less(Quaternion.Angle(root0, rotator.WorldRoot.rotation), 0.02f, $"The level swung {when} (frame {i})");
+                Assert.Less(Vector3.Distance(pivot0, levels.Pivot), 1e-4f, $"The level moved {when} (frame {i})");
+            }
         }
 
         /// <summary>

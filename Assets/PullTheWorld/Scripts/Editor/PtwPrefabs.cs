@@ -921,6 +921,22 @@ namespace PullTheWorld.EditorTools
             return AddBox(go, center, new Vector3(size.x + overlap, size.y, size.z + overlap));
         }
 
+        /// <summary>Set a private [SerializeField] array of object references.</summary>
+        public static void WireArray(Object target, string field, Object[] values)
+        {
+            var so = new SerializedObject(target);
+            var prop = so.FindProperty(field);
+            if (prop == null || !prop.isArray)
+            {
+                Debug.LogWarning($"PTW: no serialized array '{field}' on {target.GetType().Name}");
+                return;
+            }
+            prop.arraySize = values.Length;
+            for (int i = 0; i < values.Length; i++)
+                prop.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
         /// <summary>Set a private [SerializeField] without making it public just for the builder.</summary>
         public static void Wire(Object target, string field, object value)
         {
