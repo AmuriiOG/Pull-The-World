@@ -495,8 +495,8 @@ namespace PullTheWorld
                 // behind that level's island rather than floating loose in its sky.
                 bool right = ((k + i) & 1) == 0;
                 float x = (right ? 1f : -1f) * R(5.4f, 6.6f);
-                float y = -R(19f, 21f) - k * 5f;
-                float z = R(26f, 31f) + k * 12f;
+                float y = -R(24f, 25.5f) - k * 1.5f;
+                float z = R(36f, 40f) + k * 4f;
                 BuildRock(group, new Vector3(x, y, z), rnd);
             }
         }
