@@ -183,65 +183,85 @@ namespace PullTheWorld.EditorTools
 
         /// <summary>
         /// The sky, built from the artists' painted layers (Art/layered-background) and composed
-        /// after their reference painting: eleven mountain ridges and nine cloud banks, each on a
-        /// quad that is a child of the camera at its own distance down the line of sight, back to
-        /// front. A layer is placed by where its painted CONTENT lands in the reference (viewport
-        /// fractions, y from the bottom) and how tall it is there, so it composes the same on
-        /// every level's framing and every screen shape - see SkyLayer.
+        /// after their reference painting (reference.png, 941 x 1672 - the same 9:16 as the phone,
+        /// so a point in the painting IS a viewport position). Each piece is a quad that is a child
+        /// of the camera at its own distance down the line of sight, placed by its PEAK: the peak
+        /// is the one point of a ridge the painting shows unambiguously - every base is lost in
+        /// haze or a cloud bank - so a ridge is pinned by where its peak is in the painting and
+        /// sized by how far its slopes have to run before the cloud in front of it takes over.
         ///
-        /// What it is arranged around: the live island fills the middle of the frame (0.28-0.66)
-        /// and the next level waits in the sky above it (~0.72-0.86), so the far lilac ridges are
-        /// its backdrop, the main sage and blue ranges stand behind the island and show at its
-        /// shoulders and below its tip, the low ridges and the lower cloud banks fill the bottom
-        /// third, and three foreground clouds sit in front of the island's tip like the mockup's.
-        /// The right-middle cloud and the two centre-low haze ridges of the pack are left out: the
-        /// first lands exactly where the next level stands, the others are fillers the levels'
-        /// own rocks now cover.
+        /// The painting's depth logic, which the ordering here follows exactly: ridges recede UP
+        /// the frame, and between each pair of ranges lies a cloud sea that hides the base of the
+        /// range behind it and is hidden by the peaks of the range in front. Back to front: the
+        /// far lilac skyline and the wisps by the sun; the upper corner clouds (in front of the
+        /// lilac slopes); the middle lavender range; the right-hand cloud bank; the sage and blue
+        /// ranges behind the island; the diagonal cloud row and the low right cloud (over their
+        /// bases); the main sage and blue ranges; the big lower cloud bank; the low lilac range;
+        /// the lower right bank; the bottom ranges; the three foreground clouds. The reconstructed
+        /// pieces end in straight bases and carry stronger colour than the mist-washed painting,
+        /// so each ridge gets a base fade and a haze towards the local sky (PtwArt.SkySprite).
         ///
-        /// Every layer stands behind the level after next (170+) except the three foreground
-        /// clouds; their distances are staggered so they sort back to front, and the parallax
+        /// Left out: the centre-low lavender peak (it stands behind the live island on every
+        /// level) and the very faint haze ridge behind the lower bank.
+        ///
+        /// Every layer stands behind the level after next (185+) except the three foreground
+        /// clouds at ~40; distances are staggered so they sort back to front, and the parallax
         /// share grows with nearness - a far ridge lags the camera's push by a twentieth, a
-        /// foreground cloud by a third.
+        /// foreground cloud by two fifths.
         /// </summary>
         static void BuildSkyLayers(Camera cam)
         {
             var root = new GameObject("Sky");
             root.transform.SetParent(cam.transform, false);
 
-            // (piece, distance, parallax, content centre x, y, content height, sway amplitude, sway period)
+            // The painting's mist, by band: peach up high, blush in the middle, cream-pink low.
+            Color hazeFar = new Color(0.94f, 0.86f, 0.88f), hazeMid = new Color(0.87f, 0.87f, 0.93f),
+                  hazeLow = new Color(0.92f, 0.90f, 0.95f), hazeCloud = new Color(1.0f, 0.935f, 0.87f);
+
+            // (piece, distance, parallax, peak x / y IN THE PAINTING, scale (painting px per piece px),
+            //  base fade (fraction of content height), haze amount, haze colour, sway amplitude, sway period)
             var layers = new[]
             {
-                // Far lilac skyline, the next level's backdrop.
-                (PtwSkyAssets.Mountain01, 460f, 0.05f, 0.52f, 0.797f, 0.085f, 0f, 0f),
-                (PtwSkyAssets.Mountain02, 440f, 0.06f, 0.146f, 0.77f, 0.135f, 0f, 0f),
-                (PtwSkyAssets.Mountain03, 440f, 0.06f, 0.90f, 0.776f, 0.0875f, 0f, 0f),
-                // High clouds: the thin wisp by the sun, the two upper-corner banks.
-                (PtwSkyAssets.Cloud02, 420f, 0.07f, 0.47f, 0.87f, 0.019f, 0.006f, 90f),
-                (PtwSkyAssets.Cloud01, 400f, 0.08f, 0.15f, 0.83f, 0.111f, 0.008f, 75f),
-                (PtwSkyAssets.Cloud04, 400f, 0.08f, 0.956f, 0.86f, 0.057f, 0.008f, 82f),
-                // Middle-distance ranges.
-                (PtwSkyAssets.Mountain04, 380f, 0.09f, 0.678f, 0.68f, 0.091f, 0f, 0f),
-                (PtwSkyAssets.Mountain05, 350f, 0.11f, 0.20f, 0.71f, 0.1375f, 0f, 0f),
-                (PtwSkyAssets.Mountain06, 340f, 0.12f, 0.85f, 0.61f, 0.118f, 0f, 0f),
-                // The diagonal cloud row, then the main ranges behind the island.
-                (PtwSkyAssets.Cloud06, 300f, 0.16f, 0.33f, 0.596f, 0.136f, 0.012f, 64f),
-                (PtwSkyAssets.Mountain07, 280f, 0.18f, 0.32f, 0.53f, 0.175f, 0f, 0f),
-                (PtwSkyAssets.Cloud08, 250f, 0.22f, 0.35f, 0.393f, 0.158f, 0.014f, 58f),
-                (PtwSkyAssets.Mountain09, 240f, 0.24f, 0.83f, 0.44f, 0.109f, 0f, 0f),
-                // The lower bank and the low ridges under the island.
-                (PtwSkyAssets.Cloud09, 210f, 0.28f, 0.776f, 0.267f, 0.119f, 0.016f, 52f),
-                (PtwSkyAssets.Mountain11, 195f, 0.30f, 0.29f, 0.24f, 0.099f, 0f, 0f),
-                (PtwSkyAssets.Mountain12, 185f, 0.32f, 0.74f, 0.15f, 0.111f, 0f, 0f),
-                (PtwSkyAssets.Mountain13, 175f, 0.34f, 0.24f, 0.165f, 0.115f, 0f, 0f),
-                // Foreground clouds, in front of the island's tip.
-                (PtwSkyAssets.Cloud10, 40f, 0.35f, 0.10f, 0.088f, 0.076f, 0.02f, 46f),
-                (PtwSkyAssets.Cloud11, 42f, 0.35f, 0.543f, 0.07f, 0.112f, 0.018f, 50f),
-                (PtwSkyAssets.Cloud12, 38f, 0.36f, 0.946f, 0.10f, 0.097f, 0.02f, 44f),
+                // The wisps by the sun and the far lilac skyline.
+                (PtwSkyAssets.Cloud02, 520f, 0.03f, 380f, 196f, 0.22f, 0f, 0.45f, hazeCloud, 0.004f, 90f),
+                (PtwSkyAssets.Cloud03, 510f, 0.03f, 700f, 264f, 0.14f, 0f, 0.45f, hazeCloud, 0.004f, 95f),
+                (PtwSkyAssets.Mountain01, 480f, 0.04f, 340f, 261f, 0.50f, 0.6f, 0.45f, hazeFar, 0f, 0f),
+                (PtwSkyAssets.Mountain03, 460f, 0.045f, 860f, 300f, 0.32f, 0.6f, 0.45f, hazeFar, 0f, 0f),
+                (PtwSkyAssets.Mountain02, 450f, 0.05f, 40f, 266f, 0.50f, 0.6f, 0.45f, hazeFar, 0f, 0f),
+                // The upper corner clouds, in front of the lilac slopes.
+                (PtwSkyAssets.Cloud04, 440f, 0.05f, 925f, 170f, 0.19f, 0f, 0.45f, hazeCloud, 0.005f, 80f),
+                (PtwSkyAssets.Cloud01, 420f, 0.055f, 180f, 176f, 0.33f, 0f, 0.45f, hazeCloud, 0.006f, 72f),
+                // The middle lavender range and the right-hand bank over its slopes.
+                (PtwSkyAssets.Mountain04, 400f, 0.07f, 500f, 455f, 0.45f, 0.45f, 0.45f, hazeFar, 0f, 0f),
+                (PtwSkyAssets.Cloud05, 380f, 0.08f, 900f, 400f, 0.23f, 0f, 0.45f, hazeCloud, 0.006f, 70f),
+                // The sage and blue ranges behind the island.
+                (PtwSkyAssets.Mountain05, 360f, 0.09f, 75f, 370f, 0.60f, 0.40f, 0.33f, hazeMid, 0f, 0f),
+                (PtwSkyAssets.Mountain06, 350f, 0.10f, 1020f, 516f, 0.50f, 0.40f, 0.35f, hazeMid, 0f, 0f),
+                // The diagonal cloud row and the low right cloud, over their bases.
+                (PtwSkyAssets.Cloud06, 320f, 0.115f, 80f, 540f, 0.48f, 0f, 0.45f, hazeCloud, 0.008f, 62f),
+                (PtwSkyAssets.Cloud07, 300f, 0.13f, 900f, 650f, 0.28f, 0f, 0.45f, hazeCloud, 0.008f, 66f),
+                // The main sage range (left) and blue range (right), whose peaks rise out of that row.
+                (PtwSkyAssets.Mountain07, 290f, 0.14f, 94f, 638f, 0.55f, 0.40f, 0.33f, hazeMid, 0f, 0f),
+                (PtwSkyAssets.Mountain09, 275f, 0.15f, 830f, 862f, 0.50f, 0.40f, 0.35f, hazeMid, 0f, 0f),
+                // The big lower bank over their lower slopes.
+                (PtwSkyAssets.Cloud08, 250f, 0.17f, 70f, 822f, 0.55f, 0f, 0.40f, hazeCloud, 0.010f, 56f),
+                // The low lilac range, the lower right bank, the bottom ranges.
+                (PtwSkyAssets.Mountain11, 230f, 0.19f, 45f, 1190f, 0.42f, 0.50f, 0.55f, hazeLow, 0f, 0f),
+                (PtwSkyAssets.Cloud09, 220f, 0.20f, 900f, 1085f, 0.50f, 0f, 0.40f, hazeCloud, 0.010f, 54f),
+                (PtwSkyAssets.Mountain14, 210f, 0.22f, 470f, 1400f, 0.25f, 0.55f, 0.50f, hazeLow, 0f, 0f),
+                (PtwSkyAssets.Mountain12, 200f, 0.23f, 960f, 1235f, 0.50f, 0.40f, 0.45f, hazeLow, 0f, 0f),
+                (PtwSkyAssets.Mountain13, 185f, 0.25f, 30f, 1300f, 0.45f, 0.35f, 0.30f, hazeLow, 0f, 0f),
+                // The foreground clouds, in front of the island's tip.
+                (PtwSkyAssets.Cloud10, 40f, 0.38f, 60f, 1402f, 0.40f, 0f, 0.35f, hazeCloud, 0.012f, 48f),
+                (PtwSkyAssets.Cloud11, 42f, 0.38f, 370f, 1452f, 0.34f, 0f, 0.35f, hazeCloud, 0.011f, 52f),
+                (PtwSkyAssets.Cloud12, 38f, 0.40f, 880f, 1352f, 0.42f, 0f, 0.35f, hazeCloud, 0.012f, 46f),
             };
 
-            foreach (var (piece, distance, parallax, x, y, height, sway, period) in layers)
+            const float refW = 941f, refH = 1672f;
+            foreach (var (piece, distance, parallax, px, py, scale, baseFade, hazeAmount, haze, sway, period) in layers)
             {
-                var mat = PtwArt.SkySprite(piece);
+                float fadeStart = 1f - piece.Bottom - 0.015f;
+                var mat = PtwArt.SkySprite(piece, haze, hazeAmount, fadeStart, fadeStart + baseFade * piece.Size.y);
                 if (!mat) continue;
                 var go = PtwPrefabs.MeshNode(piece.Id.Substring(6), "Mesh_QuadXY", root.transform, piece.Id);
                 var r = go.GetComponent<MeshRenderer>();
@@ -250,10 +270,10 @@ namespace PullTheWorld.EditorTools
                 var layer = go.AddComponent<SkyLayer>();
                 PtwPrefabs.Wire(layer, "targetCamera", cam);
                 PtwPrefabs.Wire(layer, "distance", distance);
-                PtwPrefabs.Wire(layer, "viewportPos", new Vector2(x, y));
-                PtwPrefabs.Wire(layer, "heightFraction", height);
+                PtwPrefabs.Wire(layer, "viewportPos", new Vector2(px / refW, 1f - py / refH));
+                PtwPrefabs.Wire(layer, "anchor", piece.Peak);
+                PtwPrefabs.Wire(layer, "heightFraction", piece.Size.y * piece.CanvasHeight * scale / refH);
                 PtwPrefabs.Wire(layer, "aspect", piece.Aspect);
-                PtwPrefabs.Wire(layer, "contentCentre", piece.Centre);
                 PtwPrefabs.Wire(layer, "contentSize", piece.Size);
                 PtwPrefabs.Wire(layer, "parallax", parallax);
                 PtwPrefabs.Wire(layer, "swayAmplitude", sway);

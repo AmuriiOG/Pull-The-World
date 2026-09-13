@@ -40,7 +40,7 @@ namespace PullTheWorld
             {
                 name = "Dawn",
                 top = new Color(0.996f, 0.839f, 0.776f),      // #FED6C6 peach, the mockup sky
-                bottom = new Color(0.871f, 0.839f, 0.910f),   // #DED6E8 lilac
+                bottom = new Color(0.945f, 0.890f, 0.905f),   // #F1E3E7 pale blush - the layered painting's low sky is cream, not lilac
                 glow = new Color(1.000f, 0.945f, 0.800f),     // #FFF1CC
             },
             new Palette

@@ -52,7 +52,7 @@ namespace PullTheWorld.EditorTools
         // balance, vignette) and the pastel ambient all pull towards grey, and the first capture
         // came out mauve. These land on the mockup's peach/blush/lilac on screen.
         public static readonly Color BgTop = Hex("#FBDCC6");
-        public static readonly Color BgMid = Hex("#F2CBD6");
+        public static readonly Color BgMid = Hex("#F6D2D8");   // a shade paler: the painting's mid sky is (254,230,209)
         public static readonly Color BgBottom = Hex("#E6DCEF");
         public static readonly Color SunColor = Hex("#FFF0C4");
         public static readonly Color HaloColor = Hex("#FFD6B4");
@@ -566,8 +566,15 @@ namespace PullTheWorld.EditorTools
         }
 
         // ------------------------------------------------------------------ material makers -
-        /// <summary>A painted sky piece (Art/layered-background) on the fog-free sprite shader.</summary>
-        public static Material SkySprite(PtwSkyAssets.Piece piece)
+        /// <summary>
+        /// A painted sky piece (Art/layered-background) on the fog-free sprite shader, with the
+        /// painting's atmosphere put back: a haze towards the local sky (the extracted pieces
+        /// carry ~40% more colour than the mist-washed painting - a sage face measures (140,169,193)
+        /// in the PNG against (180,190,199) in the reference) and a fade over the bottom of the
+        /// content, in canvas v, so a ridge's reconstructed straight base never shows.
+        /// </summary>
+        public static Material SkySprite(PtwSkyAssets.Piece piece, Color haze, float hazeAmount,
+                                         float fadeStart, float fadeEnd)
         {
             var tex = PtwSkyAssets.Load(piece);
             if (tex == null) return null;
@@ -575,6 +582,10 @@ namespace PullTheWorld.EditorTools
             if (m == null) return null;
             m.SetTexture("_BaseMap", tex);
             m.SetColor("_BaseColor", Color.white);
+            m.SetColor("_HazeColor", haze);
+            m.SetFloat("_HazeAmount", hazeAmount);
+            m.SetFloat("_FadeStart", fadeStart);
+            m.SetFloat("_FadeEnd", fadeEnd);
             m.renderQueue = (int)RenderQueue.Transparent;
             EditorUtility.SetDirty(m);
             return m;

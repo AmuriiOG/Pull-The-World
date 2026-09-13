@@ -32,14 +32,15 @@ namespace PullTheWorld
         [SerializeField] float distance = 300f;
 
         [Header("Placement (of the painted content)")]
-        [Tooltip("Where the content's centre lands, as viewport fractions.")]
+        [Tooltip("Where the anchor lands, as viewport fractions.")]
         [SerializeField] Vector2 viewportPos = new Vector2(0.5f, 0.5f);
+        [Tooltip("The canvas point that is placed at viewportPos, as fractions with y from the TOP: " +
+                 "a ridge's peak, a cloud's top.")]
+        [SerializeField] Vector2 anchor = new Vector2(0.5f, 0.5f);
         [Tooltip("Height of the content as a fraction of the frame height.")]
         [SerializeField] float heightFraction = 0.1f;
         [Tooltip("Canvas width / height of the sprite.")]
         [SerializeField] float aspect = 2f;
-        [Tooltip("Content centre within the canvas, as fractions; y from the TOP.")]
-        [SerializeField] Vector2 contentCentre = new Vector2(0.5f, 0.5f);
         [Tooltip("Content size within the canvas, as fractions.")]
         [SerializeField] Vector2 contentSize = new Vector2(0.9f, 0.6f);
 
@@ -77,11 +78,11 @@ namespace PullTheWorld
             float halfW = halfH * aspectScreen;
 
             // The quad from the content: tall enough that the painted part is heightFraction of
-            // the frame, wide by the canvas aspect, and centred so the CONTENT sits at viewportPos.
+            // the frame, wide by the canvas aspect, and placed so the ANCHOR sits at viewportPos.
             float quadH = heightFraction / Mathf.Max(0.05f, contentSize.y) * 2f * halfH;
             float quadW = quadH * aspect;
-            float x = (viewportPos.x - 0.5f) * 2f * halfW - (contentCentre.x - 0.5f) * quadW;
-            float y = (viewportPos.y - 0.5f) * 2f * halfH + (contentCentre.y - 0.5f) * quadH;
+            float x = (viewportPos.x - 0.5f) * 2f * halfW - (anchor.x - 0.5f) * quadW;
+            float y = (viewportPos.y - 0.5f) * 2f * halfH + (anchor.y - 0.5f) * quadH;
 
             // Tilt / follow lean, specified for a ~20-unit frame and scaled with this frame.
             float shiftScale = halfH / 10f;

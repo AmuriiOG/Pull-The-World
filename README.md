@@ -550,14 +550,23 @@ rules change, not a physics one; the ball's body is untouched. Direct loads (PLA
 select, the tests) still cut: `LoadLevel` moves the root, snaps the camera and rebuilds the preview.
 
 **The sky is the artists' painting, in layers.** `Art/layered-background` holds the reference
-painting cut into 14 ridges and 12 cloud banks; `PtwScene.BuildSkyLayers` places 11 ridges and 9
-clouds after that reference (the pieces that would land on the next level or under the levels'
-own rocks are left out). Each is a `SkyLayer` quad, a child of the camera at its own distance -
-far lilac skyline at 460, the main sage and blue ranges at 240-280 behind the island, the low
-ridges at 175-195, three foreground clouds at ~40 in front of the island's tip - placed by where
-its painted CONTENT lands (viewport fractions, measured alpha bounds in `PtwSkyAssets`) and how
-tall it is there, so the composition holds on every level's framing and every screen shape. They
-draw on `PTW/SkySprite`, unlit and fog-free, so the paintings keep their own haze.
+painting (941 x 1672, the phone's own 9:16, so a point in it IS a viewport position) cut into 14
+ridges and 12 cloud banks; `PtwScene.BuildSkyLayers` places 12 ridges and 12 clouds after that
+reference, leaving out only the centre-low peak the live island always hides and a faint haze
+ridge. Each is a `SkyLayer` quad, a child of the camera at its own distance, placed by its
+**peak** - the one point of a ridge the painting shows, since every base there is lost in haze
+or cloud - at the peak's position in the painting, and sized by how far its slopes run before the
+cloud in front takes over (`PtwSkyAssets` records each PNG's measured peak and bounds). The
+painting's depth logic is followed exactly: ridges recede up the frame, and between each pair of
+ranges lies a cloud sea that hides the base of the range behind and is hidden by the peaks of the
+range in front (far lilac skyline 450-480 → corner clouds → lavender range 400 → right bank →
+sage/blue ranges 350-360 → diagonal row 320 → main sage/blue ranges 275-290 → big lower bank 250 →
+low lilac range 230 → lower right bank 220 → bottom ranges 185-210 → foreground clouds ~40). The
+reconstructed pieces end in straight bases and carry ~40% more colour than the mist-washed
+painting, so `PTW/SkySprite` (unlit, fog-free) gives each ridge a base fade and a haze towards
+the local sky - blush up high, a cool lilac-grey over the sage ranges, pale lilac low - tuned by
+sampling matched points in a capture against the painting. The Dawn sky's low colour is a pale
+blush now rather than lilac, after the painting.
 
 The sky moves three ways, each scaled by a layer's depth share (`parallax`: far ridge 0.05,
 foreground cloud 0.35): during the push it **lags the lens** by that share of
