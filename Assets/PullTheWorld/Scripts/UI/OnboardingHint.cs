@@ -172,7 +172,10 @@ namespace PullTheWorld
             // Ease out and hold, so it reads as one deliberate swipe rather than a pendulum.
             float phase = (t / Mathf.Max(0.1f, arcPeriod)) % 1f;
             float e = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(phase / 0.66f));
-            float deg = Mathf.Lerp(-arcSweep * 0.5f, arcSweep * 0.5f, e);
+            // RIGHT to LEFT. A finger below the pivot dragged leftwards turns the island clockwise,
+            // which drops its right side and rolls the orb to the door on the right - the first
+            // level's first move. (It used to sweep the other way and taught the wrong turn.)
+            float deg = Mathf.Lerp(arcSweep * 0.5f, -arcSweep * 0.5f, e);
             float rad = (deg - 90f) * Mathf.Deg2Rad;   // start below the island
 
             rotateFinger.anchoredPosition =

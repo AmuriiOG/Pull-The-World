@@ -6,27 +6,34 @@ using UnityEngine;
 namespace PullTheWorld
 {
     /// <summary>
-    /// The soundtrack: one short, tuneful music-box loop per chapter, synthesised in the
-    /// background on first use, crossfaded on chapter change, gated by the Music setting.
+    /// The soundtrack: one slow, atmospheric loop per chapter, synthesised in the background on
+    /// first use, crossfaded on chapter change, gated by the Music setting.
     ///
-    /// Everything is AUTHORED: a written eight-bar melody over a I-V-vi-IV progression, a harp
-    /// arpeggio under it, a plucked bass on the strong beats and a very quiet pad. Nothing is
-    /// random and nothing is noise-based. The earlier version - a slow drone pad with random
-    /// sparkles, a wind-noise bed underneath and a glass tick on every 18 degrees of rotation -
-    /// was rejected in three rounds ("I don't like it", "sounds like water", "a weird sound when
-    /// I tilt"). A music box is the instrument the theme's glass-bell sound effects already
-    /// imply, and a melody the player can hum is what "music that matches the theme" means for
-    /// a pastel hyper-casual game.
+    /// Everything is AUTHORED. Sixteen bars at a walking sixty-odd BPM (a minute a loop, so it
+    /// does not wear), over lush ninth and suspended chords - Cmaj9, Am9, Fmaj9, Gsus2, Em7, Dm9 -
+    /// voiced low and wide. Five layers, back to front: a warm PAD that holds each chord and
+    /// crossfades into the next; a SUB BASS root under it; a soft FELT-KEY touch of the chord on
+    /// the one and its upper voices on the three; a sparse GLASS-BELL melody of long notes in the
+    /// middle register, pentatonic and unhurried; and a very quiet high SPARKLE every other bar.
+    /// The struck voices are heard in a small ROOM (a handful of taps, no feedback) so they sit
+    /// in a space instead of on top of the mix. Nothing is random and nothing is noise-based.
+    ///
+    /// History, so it is not repeated: the first version - a drone pad with random sparkles, a
+    /// wind-noise bed and a glass tick on rotation - was rejected three times ("sounds like
+    /// water", "a weird sound when I tilt"). The second - a bright music-box tune at 92 BPM over
+    /// harp eighths - was tuneful but read as "childish / baby-like" against the painted world.
+    /// This third one keeps the melody idea but drops the register, the tempo and the plink, and
+    /// puts the weight on atmosphere: relaxing, a little magical, not a nursery.
     ///
     /// Synthesis rules, because every one of these was a bug once:
     ///  * every partial is sin(2*pi*f*t) with a CONSTANT f - never multiply a varying frequency
-    ///    by t (that was the out-of-tune vibrato);
-    ///  * notes that ring past the end of the loop wrap round into its start, so the seam is
-    ///    genuinely seamless rather than faded;
+    ///    by t (that was the out-of-tune vibrato); the pad's warmth is a fixed detuned pair;
+    ///  * anything that rings past the end of the loop wraps round into its start, so the seam
+    ///    is genuinely seamless rather than faded - the pad's last chord IS its first;
     ///  * no noise, no random hits, no per-sample modulation.
     ///
     /// Chapters are built a few thousand samples per frame so nothing hitches, chapter one first;
-    /// the menu is silent for about a second and the music then fades in. Slots for authored
+    /// the menu is silent for a second or two and the music then fades in. Slots for authored
     /// loops exist (<see cref="overrideLoops"/>): drop a clip in per chapter and it replaces the
     /// synthesised one. "Pull The World/Render Music To WAV" writes the loops to Captures/ so they
     /// can be auditioned outside the game.
@@ -36,11 +43,11 @@ namespace PullTheWorld
     {
         public static PtwMusic Instance { get; private set; }
 
-        [SerializeField, Range(0f, 1f)] float volume = 0.30f;
+        [SerializeField, Range(0f, 1f)] float volume = 0.28f;
         [Tooltip("Multiplier while the game is paused (settings open).")]
         [SerializeField, Range(0f, 1f)] float duckVolume = 0.35f;
         [Tooltip("Seconds for a full fade, both the on/off fade and the chapter crossfade.")]
-        [SerializeField] float fadeSeconds = 1.6f;
+        [SerializeField] float fadeSeconds = 2.2f;
         [Tooltip("Optional authored loops, one per chapter. Empty slots use the synthesised loop.")]
         [SerializeField] AudioClip[] overrideLoops = new AudioClip[0];
 
@@ -172,7 +179,7 @@ namespace PullTheWorld
             {
                 if (loops.ContainsKey(c)) continue;
                 float[] data = null;
-                yield return Synthesise(c, 24576, d => data = d);
+                yield return Synthesise(c, 16384, d => data = d);
                 var clip = AudioClip.Create($"ptw_music_{c}", data.Length, 1, Rate, false);
                 clip.SetData(data, 0);
                 loops[c] = clip;
@@ -189,89 +196,86 @@ namespace PullTheWorld
         }
 
         // ------------------------------------------------------------------ the songs -------
-        const int Rate = 44100;
+        // 22.05 kHz: nothing in this music lives above 2 kHz, and three one-minute loops at
+        // 44.1 kHz would be 32 MB of clip on a phone (and twice the synthesis time).
+        const int Rate = 22050;
 
         struct Song
         {
             public string name;
             public float bpm;
-            public int[][] chords;                        // one MIDI triad per bar, low to high
-            public (float beat, int midi, float len)[] melody;   // beat from the loop start
+            public int transpose;                 // semitones, applied to everything
         }
 
-        // Three chapters, one tune each, same family: I-V-vi-IV over eight bars, a music-box
-        // melody that rises through the first half and walks back down to the tonic at the end so
-        // the loop closes on itself. Dawn is C, Morning D (a shade brighter), Golden Hour F (a
-        // shade warmer). MIDI: C4 = 60, C5 = 72.
+        // One composition heard in three keys. Dawn is C at a slow walk; Morning sits a tone
+        // higher and a shade quicker; Golden Hour a tone lower and slower still, warmer.
         static readonly Song[] songs =
         {
-            new Song
-            {
-                name = "Dawn", bpm = 92f,
-                chords = new[]
-                {
-                    new[] { 60, 64, 67 }, new[] { 55, 59, 62 }, new[] { 57, 60, 64 }, new[] { 53, 57, 60 },
-                    new[] { 60, 64, 67 }, new[] { 55, 59, 62 }, new[] { 57, 60, 64 }, new[] { 53, 57, 60 },
-                },
-                melody = new (float, int, float)[]
-                {
-                    ( 0f, 76, 1f), ( 1f, 79, 1f), ( 2f, 84, 1.5f), ( 3.5f, 79, 0.5f),
-                    ( 4f, 83, 1f), ( 5f, 81, 0.5f), ( 5.5f, 79, 0.5f), ( 6f, 74, 2f),
-                    ( 8f, 72, 1f), ( 9f, 76, 1f), (10f, 81, 1.5f), (11.5f, 76, 0.5f),
-                    (12f, 77, 1f), (13f, 81, 1f), (14f, 79, 0.5f), (14.5f, 77, 0.5f), (15f, 76, 1f),
-                    (16f, 76, 1f), (17f, 79, 1f), (18f, 84, 1f), (19f, 86, 1f),
-                    (20f, 83, 1f), (21f, 86, 1f), (22f, 83, 1f), (23f, 79, 1f),
-                    (24f, 81, 1f), (25f, 84, 1f), (26f, 76, 1f), (27f, 79, 1f),
-                    (28f, 77, 1f), (29f, 76, 1f), (30f, 74, 1f), (31f, 72, 1f),
-                },
-            },
-            new Song
-            {
-                name = "Morning", bpm = 96f,
-                chords = new[]
-                {
-                    new[] { 62, 66, 69 }, new[] { 57, 61, 64 }, new[] { 59, 62, 66 }, new[] { 55, 59, 62 },
-                    new[] { 62, 66, 69 }, new[] { 57, 61, 64 }, new[] { 59, 62, 66 }, new[] { 55, 59, 62 },
-                },
-                melody = new (float, int, float)[]
-                {
-                    ( 0f, 78, 1f), ( 1f, 81, 1f), ( 2f, 86, 1.5f), ( 3.5f, 81, 0.5f),
-                    ( 4f, 85, 0.5f), ( 4.5f, 83, 0.5f), ( 5f, 81, 1f), ( 6f, 76, 2f),
-                    ( 8f, 74, 1f), ( 9f, 78, 1f), (10f, 83, 1.5f), (11.5f, 78, 0.5f),
-                    (12f, 79, 1f), (13f, 83, 1f), (14f, 81, 0.5f), (14.5f, 79, 0.5f), (15f, 78, 1f),
-                    (16f, 78, 0.5f), (16.5f, 81, 0.5f), (17f, 86, 1f), (18f, 88, 1f), (19f, 86, 1f),
-                    (20f, 85, 1f), (21f, 88, 1f), (22f, 85, 1f), (23f, 81, 1f),
-                    (24f, 83, 1f), (25f, 86, 1f), (26f, 78, 1f), (27f, 81, 1f),
-                    (28f, 79, 1f), (29f, 78, 1f), (30f, 76, 1f), (31f, 74, 1f),
-                },
-            },
-            new Song
-            {
-                name = "GoldenHour", bpm = 84f,
-                chords = new[]
-                {
-                    new[] { 65, 69, 72 }, new[] { 60, 64, 67 }, new[] { 62, 65, 69 }, new[] { 58, 62, 65 },
-                    new[] { 65, 69, 72 }, new[] { 60, 64, 67 }, new[] { 62, 65, 69 }, new[] { 58, 62, 65 },
-                },
-                melody = new (float, int, float)[]
-                {
-                    ( 0f, 81, 1f), ( 1f, 84, 1f), ( 2f, 86, 1.5f), ( 3.5f, 84, 0.5f),
-                    ( 4f, 88, 0.5f), ( 4.5f, 86, 0.5f), ( 5f, 84, 1f), ( 6f, 79, 2f),
-                    ( 8f, 77, 1f), ( 9f, 81, 1f), (10f, 86, 1.5f), (11.5f, 81, 0.5f),
-                    (12f, 82, 1f), (13f, 86, 1f), (14f, 84, 0.5f), (14.5f, 82, 0.5f), (15f, 81, 1f),
-                    (16f, 81, 1f), (17f, 84, 1f), (18f, 89, 1f), (19f, 86, 1f),
-                    (20f, 88, 1f), (21f, 84, 1f), (22f, 79, 1f), (23f, 84, 1f),
-                    (24f, 86, 1f), (25f, 84, 1f), (26f, 81, 1f), (27f, 77, 1f),
-                    (28f, 82, 1f), (29f, 81, 1f), (30f, 79, 1f), (31f, 77, 1f),
-                },
-            },
+            new Song { name = "Dawn", bpm = 64f, transpose = 0 },
+            new Song { name = "Morning", bpm = 67f, transpose = 2 },
+            new Song { name = "GoldenHour", bpm = 60f, transpose = -2 },
         };
 
-        enum Timbre { MusicBox, Harp, Bass }
+        // Voicings in C, MIDI, low to high (C3 = 48, C4 = 60). Wide, with the ninth on top or in
+        // the middle so nothing sits in a plain triad.
+        static readonly int[] Cmaj9 = { 48, 55, 59, 62, 64 };
+        static readonly int[] Em7   = { 52, 55, 59, 62, 67 };
+        static readonly int[] Fmaj9 = { 53, 57, 60, 64, 67 };
+        static readonly int[] Gsus2 = { 55, 59, 62, 64, 69 };
+        static readonly int[] Am9   = { 57, 60, 64, 67, 71 };
+        static readonly int[] Dm9   = { 50, 53, 57, 60, 64 };
+
+        // Sixteen bars: two bars a chord through the first half, floating; a bar a chord through
+        // the second, a gentle lift that walks back home, so the loop closes on the chord it
+        // opened with.
+        static readonly int[][] progression =
+        {
+            Cmaj9, Cmaj9, Am9, Am9, Fmaj9, Fmaj9, Gsus2, Gsus2,
+            Cmaj9, Em7, Fmaj9, Am9, Dm9, Gsus2, Cmaj9, Cmaj9,
+        };
+
+        // The melody: long notes, mostly pentatonic, G4 to G5, with rests. (beat from the loop
+        // start, MIDI, length in beats.) It rises through the lift in bar nine and settles back
+        // to E4 at the end, under the G4 it starts on.
+        static readonly (float beat, int midi, float len)[] melody =
+        {
+            ( 0f, 67, 3f), ( 3f, 69, 1f),
+            ( 4f, 72, 3.5f),
+            ( 8f, 71, 2f), (10f, 67, 2f),
+            (12f, 69, 4f),
+            (16f, 72, 2f), (18f, 74, 2f),
+            (20f, 76, 3f), (23f, 74, 1f),
+            (24f, 71, 2f), (26f, 69, 2f),
+            (28f, 67, 4f),
+            (32f, 79, 2f), (34f, 76, 2f),
+            (36f, 74, 3f),
+            (40f, 72, 2f), (42f, 69, 2f),
+            (44f, 71, 4f),
+            (48f, 69, 2f), (50f, 65, 2f),
+            (52f, 67, 3f), (55f, 69, 1f),
+            (56f, 72, 4f),
+            (60f, 67, 2f), (62f, 64, 2f),
+        };
+
+        // A very quiet high glint on the and-of-three every other bar, on a chord tone.
+        static readonly (float beat, int midi)[] sparkles =
+        {
+            (3.5f, 91), (11.5f, 88), (19.5f, 91), (27.5f, 86),
+            (35.5f, 93), (43.5f, 88), (51.5f, 89), (59.5f, 91),
+        };
+
+        // The room the struck voices are heard in: early reflections only, no feedback.
+        static readonly (float seconds, float gain)[] room =
+        {
+            (0.071f, 0.28f), (0.131f, 0.22f), (0.197f, 0.17f), (0.283f, 0.13f),
+            (0.359f, 0.10f), (0.449f, 0.075f), (0.557f, 0.055f),
+        };
+
+        enum Timbre { Bell, Keys, Sparkle }
 
         struct Note
         {
-            public float start, hz, gain, decay, hold;
+            public float start, hz, gain, decay, hold, attack;
             public Timbre timbre;
         }
 
@@ -284,40 +288,39 @@ namespace PullTheWorld
         static IEnumerator Synthesise(int chapterIndex, int samplesPerStep, Action<float[]> done)
         {
             var song = songs[Mathf.Clamp(chapterIndex, 0, songs.Length - 1)];
+            int tr = song.transpose;
             float beat = 60f / song.bpm;
-            int bars = song.chords.Length;
+            int bars = progression.Length;
             float barLen = 4f * beat;
             int n = Mathf.RoundToInt(bars * barLen * Rate);
             var data = new float[n];
+            var struck = new float[n];
             bool stepping = samplesPerStep < int.MaxValue;
+            int budget = samplesPerStep;
 
-            // ---- score ----
+            // ---- score: the struck voices ----
             var notes = new List<Note>();
-            foreach (var (b, midi, _) in song.melody)
-                notes.Add(new Note { start = b * beat, hz = Hz(midi), gain = 0.26f, decay = 2.4f, hold = 2.2f, timbre = Timbre.MusicBox });
+            foreach (var (b, midi, len) in melody)
+                notes.Add(new Note { start = b * beat, hz = Hz(midi + tr), gain = 0.19f, decay = 1.4f,
+                                     hold = len * beat + 1.8f, attack = 0.012f, timbre = Timbre.Bell });
 
             for (int bar = 0; bar < bars; bar++)
             {
-                var ch = song.chords[bar];
-                // Harp: root, fifth, third, fifth - the classic music-box left hand, in eighths.
-                int[] pattern = { ch[0], ch[2], ch[1], ch[2], ch[0], ch[2], ch[1], ch[2] };
-                for (int e = 0; e < 8; e++)
-                    notes.Add(new Note
-                    {
-                        start = bar * barLen + e * 0.5f * beat, hz = Hz(pattern[e]),
-                        gain = e % 4 == 0 ? 0.10f : 0.07f, decay = 4.5f, hold = 1.3f, timbre = Timbre.Harp,
-                    });
-                // Bass: the root an octave down, on one and three.
-                for (int k = 0; k < 2; k++)
-                    notes.Add(new Note
-                    {
-                        start = bar * barLen + k * 2f * beat, hz = Hz(ch[0] - 12),
-                        gain = 0.22f, decay = 1.6f, hold = 2f * beat, timbre = Timbre.Bass,
-                    });
+                var ch = progression[bar];
+                // Felt keys: the three middle voices on the one, softly; the top two on the three, softer.
+                for (int k = 1; k <= 3; k++)
+                    notes.Add(new Note { start = bar * barLen, hz = Hz(ch[k] + tr), gain = 0.05f, decay = 1.9f,
+                                         hold = 2.2f * beat, attack = 0.006f, timbre = Timbre.Keys });
+                for (int k = 3; k <= 4; k++)
+                    notes.Add(new Note { start = bar * barLen + 2f * beat, hz = Hz(ch[k] + tr), gain = 0.028f, decay = 2.2f,
+                                         hold = 1.8f * beat, attack = 0.006f, timbre = Timbre.Keys });
             }
 
+            foreach (var (b, midi) in sparkles)
+                notes.Add(new Note { start = b * beat, hz = Hz(midi + tr), gain = 0.045f, decay = 0.9f,
+                                     hold = 3.5f, attack = 0.004f, timbre = Timbre.Sparkle });
+
             // ---- struck notes, wrapping round the loop end ----
-            int budget = samplesPerStep;
             foreach (var note in notes)
             {
                 int s0 = Mathf.RoundToInt(note.start * Rate);
@@ -326,57 +329,90 @@ namespace PullTheWorld
                 for (int j = 0; j < count; j++)
                 {
                     float tau = j / (float)Rate;
-                    float env = Mathf.Exp(-note.decay * tau) * (1f - Mathf.Exp(-tau * 900f))
-                              * Mathf.Clamp01((note.hold - tau) / 0.25f);
+                    float env = Mathf.Exp(-note.decay * tau) * (1f - Mathf.Exp(-tau / note.attack))
+                              * Mathf.Clamp01((note.hold - tau) / 0.4f);
                     float ph = w * tau;
                     float v;
                     switch (note.timbre)
                     {
-                        case Timbre.MusicBox:
-                            // A struck steel tooth: fundamental plus two inharmonic partials that
-                            // die faster than it does. That is what makes it a music box.
+                        case Timbre.Bell:
+                            // A soft glass bell: nearly all fundamental, a fading octave, and one
+                            // faint stretched partial for the glint - not the steel tooth of a
+                            // music box.
                             v = Mathf.Sin(ph)
-                              + 0.18f * Mathf.Sin(2.756f * ph) * Mathf.Exp(-3f * tau)
-                              + 0.06f * Mathf.Sin(5.404f * ph) * Mathf.Exp(-6f * tau);
+                              + 0.22f * Mathf.Sin(2f * ph) * Mathf.Exp(-2.2f * tau)
+                              + 0.05f * Mathf.Sin(3f * ph) * Mathf.Exp(-3f * tau)
+                              + 0.035f * Mathf.Sin(4.16f * ph) * Mathf.Exp(-5f * tau);
                             break;
-                        case Timbre.Harp:
-                            v = Mathf.Sin(ph) + 0.30f * Mathf.Sin(2f * ph) * Mathf.Exp(-2f * tau) + 0.08f * Mathf.Sin(3f * ph);
+                        case Timbre.Keys:
+                            // Felt-dampened keys: a rounder attack, harmonics that die quickly.
+                            v = Mathf.Sin(ph)
+                              + 0.35f * Mathf.Sin(2f * ph) * Mathf.Exp(-3f * tau)
+                              + 0.12f * Mathf.Sin(3f * ph) * Mathf.Exp(-5f * tau)
+                              + 0.04f * Mathf.Sin(4f * ph) * Mathf.Exp(-7f * tau);
                             break;
                         default:
-                            v = Mathf.Sin(ph) + 0.20f * Mathf.Sin(2f * ph);
+                            // A shimmer: two partials a few cents apart beat slowly against each other.
+                            v = Mathf.Sin(ph) + 0.5f * Mathf.Sin(2.004f * ph) + 0.15f * Mathf.Sin(3.01f * ph) * Mathf.Exp(-2f * tau);
                             break;
                     }
-                    data[(s0 + j) % n] += v * env * note.gain;
+                    struck[(s0 + j) % n] += v * env * note.gain;
                 }
                 if (stepping && (budget -= count) <= 0) { budget = samplesPerStep; yield return null; }
             }
 
-            // ---- pad: the triad, very quiet, swelling in and out within each bar ----
-            var padHz = new float[bars][];
+            // ---- the room: early reflections of the struck voices, wrapping like everything else ----
+            foreach (var (seconds, gain) in room)
+            {
+                int d = Mathf.RoundToInt(seconds * Rate);
+                for (int i = 0; i < n; i++) data[(i + d) % n] += struck[i] * gain;
+                if (stepping) yield return null;
+            }
+            for (int i = 0; i < n; i++) data[i] += struck[i];
+
+            // ---- pad and bass: each chord held for its span, crossfading into the next ----
+            // Consecutive bars on the same voicing are one span. Spans fade in over 1.6 s centred
+            // on their start and out the same way on their end, so neighbours cross at half
+            // volume with no dip; the first and last spans are the same chord and wrap into each
+            // other across the loop seam.
+            var spans = new List<(int startBar, int endBar, int[] chord)>();
             for (int bar = 0; bar < bars; bar++)
             {
-                padHz[bar] = new float[3];
-                for (int k = 0; k < 3; k++) padHz[bar][k] = Hz(song.chords[bar][k]);
+                if (spans.Count > 0 && spans[spans.Count - 1].chord == progression[bar])
+                    spans[spans.Count - 1] = (spans[spans.Count - 1].startBar, bar + 1, progression[bar]);
+                else spans.Add((bar, bar + 1, progression[bar]));
             }
-            for (int i0 = 0; i0 < n; i0 += stepping ? samplesPerStep : n)
+
+            const float xfade = 0.8f;                                   // half the crossfade, seconds
+            foreach (var (startBar, endBar, chord) in spans)
             {
-                int end = Mathf.Min(n, i0 + (stepping ? samplesPerStep : n));
-                for (int i = i0; i < end; i++)
+                float t0 = startBar * barLen, t1 = endBar * barLen;
+                int i0 = Mathf.FloorToInt((t0 - xfade) * Rate), i1 = Mathf.CeilToInt((t1 + xfade) * Rate);
+                var hz = new float[chord.Length];
+                for (int k = 0; k < chord.Length; k++) hz[k] = Hz(chord[k] + tr);
+                float bassHz = Hz(chord[0] + tr - 12);
+
+                for (int i = i0; i < i1; i++)
                 {
                     float t = i / (float)Rate;
-                    int bar = Mathf.Min(bars - 1, (int)(t / barLen));
-                    float lt = t - bar * barLen;
-                    float env = Mathf.SmoothStep(0f, 1f, lt / 0.35f) * Mathf.SmoothStep(0f, 1f, (barLen - lt) / 0.45f);
+                    float env = Mathf.SmoothStep(0f, 1f, (t - (t0 - xfade)) / (2f * xfade))
+                              * Mathf.SmoothStep(0f, 1f, ((t1 + xfade) - t) / (2f * xfade));
+                    // A slow breath on the pad, a different phase per chord so it never pumps.
+                    env *= 1f + 0.10f * Mathf.Sin(2f * Mathf.PI * 0.06f * t + startBar);
+
                     float pad = 0f;
-                    var hz = padHz[bar];
-                    for (int k = 0; k < 3; k++)
+                    for (int k = 0; k < hz.Length; k++)
                     {
                         float ph = 2f * Mathf.PI * hz[k] * t;
-                        pad += Mathf.Sin(ph) + 0.12f * Mathf.Sin(2f * ph) + 0.5f * Mathf.Sin(ph * 1.003f);
+                        pad += Mathf.Sin(ph) + 0.85f * Mathf.Sin(ph * 1.0025f) + 0.10f * Mathf.Sin(2f * ph);
                     }
-                    data[i] += pad * env * 0.035f;
+                    float bph = 2f * Mathf.PI * bassHz * t;
+                    float bass = Mathf.Sin(bph) + 0.15f * Mathf.Sin(2f * bph);
+
+                    int idx = ((i % n) + n) % n;
+                    data[idx] += (pad * 0.024f + bass * 0.06f) * env;
+                    if (stepping && ((i - i0) & (samplesPerStep - 1)) == samplesPerStep - 1) yield return null;
                 }
-                if (stepping && end < n) yield return null;
             }
 
             // ---- normalise ----

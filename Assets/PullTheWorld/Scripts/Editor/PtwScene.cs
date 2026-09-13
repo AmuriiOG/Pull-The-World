@@ -992,10 +992,10 @@ namespace PullTheWorld.EditorTools
             Gloss(card, 0.985f, 0.06f, -16f);
 
             // Title: cap 62, centred 99 px below the card's top edge.
-            Text(card.transform, "SettingsTitle", "SETTINGS", bold, 89f,
-                 new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 492f),
-                 new Vector2(800f, 120f), TextAlignmentOptions.Center, UiSettingsInk, null)
-                .characterSpacing = 4f;
+            var settingsTitle = Text(card.transform, "SettingsTitle", "SETTINGS", bold, 89f,
+                                     new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, 492f),
+                                     new Vector2(800f, 120f), TextAlignmentOptions.Center, UiSettingsInk, null);
+            settingsTitle.characterSpacing = 4f;
 
             // Three rows 147 px apart; label cap 41 at 76 px in, switch right edge 71 px in.
             var soundToggle = ToggleRow(card.transform, "SoundToggle", "SOUND", bold, 335f);
@@ -1013,6 +1013,13 @@ namespace PullTheWorld.EditorTools
             var unlockAllBtn = PillButton(card.transform, "UnlockAllButton", PtwUiAssets.PillWide,
                                           new Vector2(0f, -301f), new Vector2(707f, 133f));
             Label(unlockAllBtn.transform, "UNLOCK ALL LEVELS (DEV)", bold, 44f, dropBold);
+
+            // MAIN MENU, for the pause menu only: UiRoot shows it when settings open during play
+            // and lays the card out around it (UiRoot.LayoutSettings, which owns every y here);
+            // opened from the main menu itself it is hidden and the card is the mockup's.
+            var mainMenuBtn = PillButton(card.transform, "MainMenuButton", PtwUiAssets.PillWide,
+                                         new Vector2(0f, -462f), new Vector2(707f, 133f));
+            Label(mainMenuBtn.transform, "MAIN MENU", bold, 46f, dropBold);
 
             var closeBtn = PillButton(card.transform, "CloseButton", PtwUiAssets.PillClose,
                                       new Vector2(0f, -472f), new Vector2(452f, 117f));
@@ -1166,6 +1173,13 @@ namespace PullTheWorld.EditorTools
             PtwPrefabs.Wire(root, "restartAllButton", restartAllBtn);
             PtwPrefabs.Wire(root, "restartAllLabel", restartAllBtn.GetComponentInChildren<TMP_Text>());
             PtwPrefabs.Wire(root, "unlockAllButton", unlockAllBtn);
+            PtwPrefabs.Wire(root, "mainMenuButton", mainMenuBtn);
+            PtwPrefabs.Wire(root, "settingsCard", cardRt);
+            PtwPrefabs.WireArray(root, "settingsTopBlock", new UnityEngine.Object[]
+            {
+                settingsTitle.rectTransform, soundToggle.GetComponent<RectTransform>(),
+                musicToggle.GetComponent<RectTransform>(), hapticsToggle.GetComponent<RectTransform>(),
+            });
             PtwPrefabs.Wire(root, "soundToggle", soundToggle);
             PtwPrefabs.Wire(root, "musicToggle", musicToggle);
             PtwPrefabs.Wire(root, "hapticsToggle", hapticsToggle);

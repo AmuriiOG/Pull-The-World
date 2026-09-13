@@ -59,6 +59,12 @@ namespace PullTheWorld
         [SerializeField] Toggle hapticsToggle;
         [Tooltip("Seconds the armed 'tap again' state lasts before it quietly disarms.")]
         [SerializeField] float restartArmSeconds = 3.5f;
+        [Tooltip("Back to the main menu. Offered only when settings open during play; hidden on the menu itself.")]
+        [SerializeField] Button mainMenuButton;
+        [Tooltip("The settings card, resized around whichever buttons are showing (LayoutSettings).")]
+        [SerializeField] RectTransform settingsCard;
+        [Tooltip("Title, SOUND, MUSIC, HAPTICS rows - in that order - kept at fixed distances from the card's top.")]
+        [SerializeField] RectTransform[] settingsTopBlock;
 
         [Header("Level select")]
         [Tooltip("Development convenience in Settings: unlocks every level so a build can be tested " +
@@ -131,6 +137,7 @@ namespace PullTheWorld
                 unlockAllButton.gameObject.SetActive(showDevUnlock);
             }
             if (closeLevelsButton) closeLevelsButton.onClick.AddListener(CloseLevelSelect);
+            if (mainMenuButton) mainMenuButton.onClick.AddListener(OnMainMenu);
             if (skipButton) { skipButton.onClick.AddListener(OnSkipLevel); skipButton.gameObject.SetActive(false); }
 
             if (soundToggle) soundToggle.onValueChanged.AddListener(v => SetSetting(() => GameProgress.SoundOn = v));
@@ -324,6 +331,7 @@ namespace PullTheWorld
             Click();
             PullSettingsIntoToggles();
             SetRestartArmed(false);
+            LayoutSettings(showMainMenu: screen == Screen.Playing);
             if (settings) settings.Show();
 
             // Rotation input has to stop or a drag behind the overlay still turns the world - and
@@ -341,6 +349,57 @@ namespace PullTheWorld
             if (settings) settings.Hide();
             SetPaused(false);
             SetRotationInput(screen == Screen.Playing);
+        }
+
+        /// <summary>
+        /// The pause menu's way home: unpause, drop the level, and the menu comes up over the
+        /// level the player will play next (LevelManager.ReturnToMenu frames it in its slot).
+        /// </summary>
+        void OnMainMenu()
+        {
+            Click();
+            SetRestartArmed(false);
+            if (settings) settings.Hide();
+            SetPaused(false);
+            if (onboarding) onboarding.Stop();
+            SetRotationInput(false);
+            if (levels) levels.ReturnToMenu();
+            GoTo(Screen.MainMenu);
+        }
+
+        // The settings card after the mockup: title 99 px below the card's top, the three rows
+        // 256 / 404 / 551 below it, the first wide button 731 below it, further wide buttons 161
+        // apart, CLOSE 171 under the last one and 119 above the bottom edge. The card is sized
+        // around whichever wide buttons are showing - RESTART always, UNLOCK while the dev
+        // toggle is on, MAIN MENU only from play - so the mockup's proportions hold in every case.
+        static readonly float[] SettingsTopOffsets = { 99f, 256f, 404f, 551f };
+        const float SettingsFirstButton = 731f, SettingsButtonStep = 161f, SettingsCloseGap = 171f, SettingsBottom = 119f;
+
+        void LayoutSettings(bool showMainMenu)
+        {
+            if (mainMenuButton) mainMenuButton.gameObject.SetActive(showMainMenu);
+            if (!settingsCard) return;
+
+            var wide = new System.Collections.Generic.List<RectTransform>();
+            if (restartAllButton) wide.Add(restartAllButton.transform as RectTransform);
+            if (unlockAllButton && unlockAllButton.gameObject.activeSelf) wide.Add(unlockAllButton.transform as RectTransform);
+            if (showMainMenu && mainMenuButton) wide.Add(mainMenuButton.transform as RectTransform);
+
+            float closeFromTop = SettingsFirstButton + SettingsButtonStep * Mathf.Max(0, wide.Count - 1) + SettingsCloseGap;
+            float height = closeFromTop + SettingsBottom;
+            settingsCard.sizeDelta = new Vector2(settingsCard.sizeDelta.x, height);
+            float top = height * 0.5f;      // children are anchored at the card's centre
+
+            if (settingsTopBlock != null)
+                for (int i = 0; i < settingsTopBlock.Length && i < SettingsTopOffsets.Length; i++)
+                {
+                    var rt = settingsTopBlock[i];
+                    if (rt) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, top - SettingsTopOffsets[i]);
+                }
+            for (int i = 0; i < wide.Count; i++)
+                wide[i].anchoredPosition = new Vector2(0f, top - (SettingsFirstButton + SettingsButtonStep * i));
+            if (closeSettingsButton)
+                (closeSettingsButton.transform as RectTransform).anchoredPosition = new Vector2(0f, top - closeFromTop);
         }
 
         void SetPaused(bool on)

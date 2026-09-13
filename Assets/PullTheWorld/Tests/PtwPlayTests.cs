@@ -519,6 +519,68 @@ namespace PullTheWorld.Tests
             Assert.AreEqual(1f, Time.timeScale, 0.0001f, "Closing settings did not resume");
         }
 
+        /// <summary>
+        /// MAIN MENU lives in the pause menu: from play it is offered and takes the player back
+        /// to the menu with the clock running; opened from the menu itself it is not shown.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator MainMenuButtonReturnsToTheMenu()
+        {
+            yield return LoadLevel(2);
+            FindButton("PauseButton").onClick.Invoke();
+            yield return null;
+            yield return null;
+
+            var mainMenu = FindButton("MainMenuButton");
+            Assert.IsNotNull(mainMenu, "Settings has no MainMenuButton");
+            Assert.IsTrue(mainMenu.gameObject.activeInHierarchy, "MAIN MENU is not offered from the pause menu");
+            mainMenu.onClick.Invoke();
+            yield return null;
+            yield return null;
+
+            Assert.AreEqual(LevelState.Menu, levels.State, "Did not return to the menu");
+            Assert.AreEqual(1f, Time.timeScale, 0.0001f, "Left the game paused");
+            Assert.IsTrue(FindButton("PlayButton").gameObject.activeInHierarchy, "The main menu is not showing");
+
+            FindButton("SettingsButton").onClick.Invoke();
+            yield return null;
+            yield return null;
+            Assert.IsFalse(mainMenu.gameObject.activeInHierarchy, "MAIN MENU is offered on the main menu itself");
+        }
+
+        /// <summary>
+        /// The first level's tilt cue sweeps RIGHT TO LEFT: that is the drag that turns the island
+        /// clockwise and rolls the orb to the door on the right.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator RotateHintSweepsRightToLeft()
+        {
+            yield return LoadLevel(0);
+            CanvasGroup hint = null;
+            foreach (var g in UnityEngine.Object.FindObjectsByType<CanvasGroup>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+                if (g.name == "RotateHint") { hint = g; break; }
+            Assert.IsNotNull(hint, "Level 1 has no RotateHint");
+            var finger = hint.transform.Find("Finger") as RectTransform;
+            Assert.IsNotNull(finger, "RotateHint has no Finger");
+
+            int leftward = 0, rightward = 0;
+            float prevX = finger.anchoredPosition.x, prevA = hint.alpha;
+            for (float t = 0f; t < 3f; t += Time.deltaTime)
+            {
+                yield return null;
+                float x = finger.anchoredPosition.x;
+                if (hint.alpha > 0.6f && prevA > 0.6f)
+                {
+                    if (x < prevX - 0.01f) leftward++;
+                    else if (x > prevX + 0.01f) rightward++;
+                }
+                prevX = x;
+                prevA = hint.alpha;
+            }
+            Assert.Greater(leftward, 10, "The tilt cue never showed a visible sweep");
+            Assert.Greater(leftward, rightward * 3, $"The finger should sweep right to left while visible (left {leftward}, right {rightward})");
+        }
+
         /// <summary>The two-tap restart: first tap arms, second wipes progress and goes to level 1.</summary>
         [OneTimeTearDown]
         public void RestoreProgress()
