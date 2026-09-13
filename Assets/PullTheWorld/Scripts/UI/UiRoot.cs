@@ -551,7 +551,9 @@ namespace PullTheWorld
         /// <summary>A gem icon flies from a world point to the HUD counter, which punches when it lands.</summary>
         public void FlyKey(Vector3 worldPosition)
         {
-            if (!flyIcon || !keyGroup) return;
+            // No UI, no flight: a gem picked up while the canvas is hidden (a capture, a cutscene)
+            // must not try to start a coroutine on an inactive object.
+            if (!flyIcon || !keyGroup || !isActiveAndEnabled) return;
             StartCoroutine(FlyRoutine(worldPosition));
         }
 

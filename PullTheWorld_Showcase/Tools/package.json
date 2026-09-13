@@ -1,0 +1,13 @@
+{
+  "name": "pull-the-world-showcase-tools",
+  "private": true,
+  "description": "Assembles the Pull the World showcase from the frames rendered by the PtwShowcase Unity tests.",
+  "scripts": {
+    "video": "node build_video.js",
+    "deck": "node build_deck.js",
+    "images": "powershell -NoProfile -ExecutionPolicy Bypass -File compose.ps1 all"
+  },
+  "dependencies": {
+    "pptxgenjs": "^3.12.0"
+  }
+}
