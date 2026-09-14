@@ -385,16 +385,20 @@ namespace PullTheWorld.EditorTools
             RenderSettings.reflectionIntensity = 0.2f;
             RenderSettings.skybox = null;
 
-            // Atmospheric depth, cheaply: linear fog towards the horizon's lilac. The live island
-            // stands ~70 units from the lens and takes nothing; the next level at ~200 takes ~17%,
-            // the one after it at ~330 about a third, and the ridges at 340-460 take 35-50% and
-            // recede the way the painting's do. A fog keyword on URP Lit/Unlit costs nothing on a
-            // phone; the custom island shaders ignore it.
+            // Atmospheric depth, cheaply: linear fog towards the painting's blush haze. It starts
+            // beyond the live island (~70 units from the lens; the biggest level stands ~140 and
+            // takes a few percent) and has taken almost half of the next level at ~320, so that
+            // island stands IN the haze as a distant thing rather than a small crisp copy of the
+            // live one; the level after it (~570) is all but dissolved and emerges as the push
+            // begins. The fog keyword on URP Lit/Unlit costs nothing on a phone, and the custom
+            // shaders (foliage, water, the portal field) take the same fog, or the far island's
+            // grass and doorway would stay saturated while its stone faded. The painted sky
+            // sprites are deliberately fog-free (see PtwSkySprite.shader).
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogColor = PtwArt.Hex("#E6DCEC");
-            RenderSettings.fogStartDistance = 80f;
-            RenderSettings.fogEndDistance = 800f;
+            RenderSettings.fogColor = PtwArt.Hex("#EDDBE2");
+            RenderSettings.fogStartDistance = 110f;
+            RenderSettings.fogEndDistance = 580f;
         }
 
         // ================================================================ post processing =====
@@ -536,7 +540,8 @@ namespace PullTheWorld.EditorTools
                 SetProp(so, "m_RenderScale", 1f);
                 // Two cascades: the first covers the live island (~70 units out) at about the
                 // resolution one cascade over 45 units used to give it, the second reaches the
-                // next level standing ~200 units back so it is shaded like the one being played.
+                // floating rocks and the next level as the push brings it in. Standing ~320 units
+                // back, the next level is beyond both - unshaded and flat, as a distant island is.
                 SetProp(so, "m_ShadowDistance", 240f);
                 SetProp(so, "m_ShadowCascadeCount", 2);
                 SetProp(so, "m_Cascade2Split", 0.4f);

@@ -195,6 +195,14 @@ namespace PullTheWorld.Tests
             Assert.Greater(vNext.z, live.z, "The next level is not further from the lens than the live one");
             Assert.IsTrue(vNext.x > 0.05f && vNext.x < 0.95f && vNext.y > live.y && vNext.y < 0.95f,
                           $"The next level is not in the sky above the live island: viewport {vNext}");
+            // It has to read as DISTANT, not as a small copy: several times as deep as the live
+            // island, and well into a fog that never reaches the island being played.
+            Assert.Greater(vNext.z, live.z * 3.5f,
+                           $"The next level stands only {vNext.z / live.z:0.0}x as deep as the live one - too near to read as distant");
+            Assert.IsTrue(RenderSettings.fog, "Scene fog is off; the far levels have no atmospheric depth");
+            Assert.Greater(RenderSettings.fogStartDistance, live.z + 5f, "The fog reaches the live island");
+            float fogAtNext = Mathf.InverseLerp(RenderSettings.fogStartDistance, RenderSettings.fogEndDistance, vNext.z);
+            Assert.Greater(fogAtNext, 0.35f, $"The next level is barely fogged ({fogAtNext:0.00})");
 
             levels.ReportWin();
             yield return WaitUntil(() => levels.IsTravelling, 3f, "the camera to set off");

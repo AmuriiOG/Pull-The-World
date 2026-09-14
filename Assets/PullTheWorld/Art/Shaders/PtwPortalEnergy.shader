@@ -15,6 +15,10 @@
 // Mapped from OBJECT space via _Center/_Extents (the fill mesh is a procedural rectangle-plus-fan
 // with no clean UVs). Ring, spoke, glow and haze geometry is in object units so it is round on
 // screen.
+//
+// Takes the scene fog: the doorway of the next level, 300-odd units out, dims into the haze with
+// the rest of that island (and drops under the bloom threshold) instead of burning through it as
+// the one bright, sharp thing in the distance.
 Shader "PTW/PortalEnergy"
 {
     Properties
@@ -50,6 +54,7 @@ Shader "PTW/PortalEnergy"
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile_fog
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
             struct Attributes
@@ -63,6 +68,7 @@ Shader "PTW/PortalEnergy"
                 float4 positionCS : SV_POSITION;
                 float2 local      : TEXCOORD0;   // -1..1 across the opening
                 float2 units      : TEXCOORD1;   // object units from the fill centre
+                float  fogFactor  : TEXCOORD2;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -96,6 +102,7 @@ Shader "PTW/PortalEnergy"
                 OUT.positionCS = TransformObjectToHClip(IN.positionOS.xyz);
                 OUT.units = IN.positionOS.xy - _Center.xy;
                 OUT.local = OUT.units / max(float2(0.001, 0.001), _Extents.xy);
+                OUT.fogFactor = ComputeFogFactor(OUT.positionCS.z);
                 return OUT;
             }
 
@@ -147,7 +154,7 @@ Shader "PTW/PortalEnergy"
                 col = lerp(col, half3(1.0, 0.99, 0.95), hot);
                 col += half3(1.0, 0.95, 0.82) * (core * 0.50 + glow * 0.06) * pulse;
 
-                return half4(col * _Intensity, 1.0);
+                return half4(MixFog(col * _Intensity, IN.fogFactor), 1.0);
             }
             ENDHLSL
         }

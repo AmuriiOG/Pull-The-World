@@ -16,8 +16,9 @@ namespace PullTheWorld
     /// +Z, a little lower (the camera looks down, so a deeper island at the same height would
     /// climb up the screen) and weaving a little sideways. Seen through the narrow perspective
     /// lens (see <see cref="PlaneCameraRig"/>) that puts the next level in the upper part of the
-    /// frame at about a third of the size - the mockup's far island, except that it is the real
-    /// level. What exists at once:
+    /// frame at under a quarter of the size and half lost in the fog - the mockup's far island,
+    /// except that it is the real level. Distance is what makes it read as far, not scale: the
+    /// scenery is never shrunk, it simply stands 320 units out. What exists at once:
     ///
     ///  * CURRENT - the live one, under the rotating root, the only thing with physics.
     ///  * NEXT (<see cref="lookAhead"/> of them) - the complete prefab, stripped to its meshes (see
@@ -64,18 +65,21 @@ namespace PullTheWorld
         [Header("World")]
         [Tooltip("World units each level stands DEEPER (+Z) than the one before, down the line of " +
                  "sight. With the 18-degree lens ~70 units in front of a level, this puts the next " +
-                 "one at about a third of the size.")]
-        [SerializeField] float slotDepth = 126f;
+                 "one about 320 units out: under a quarter of the size and half taken by the fog, " +
+                 "a distant island rather than a small copy of the live one.")]
+        [SerializeField] float slotDepth = 245f;
         [Tooltip("World units each level stands LOWER than the one before. The camera looks down " +
                  "20 degrees, so a deeper island at the same height would climb up the screen; " +
-                 "this drop holds the next level at about 78% of the frame height, in the sky " +
-                 "above the live island, and the one after it a little higher.")]
-        [SerializeField] float slotDrop = 27f;
+                 "this drop holds the next level at about 80% of the frame height, in the sky " +
+                 "above the live island, and the one after it a little higher. Derived with the " +
+                 "depth: up = 0.94 y + 0.342 z, depth = 0.94 z - 0.342 y.")]
+        [SerializeField] float slotDrop = 52f;
         [Tooltip("Sideways wander of the slots (0, right, left, 0, ...) so the path into the " +
                  "distance weaves and the far levels stand beside each other, not in a stack.")]
-        [SerializeField] float slotWander = 3.5f;
-        [Tooltip("Seconds the camera takes to push from a finished level to the next.")]
-        [SerializeField] float travelSeconds = 2.2f;
+        [SerializeField] float slotWander = 5f;
+        [Tooltip("Seconds the camera takes to push from a finished level to the next. Scaled " +
+                 "with the slot depth so the push does not turn into a lunge.")]
+        [SerializeField] float travelSeconds = 2.6f;
         [Tooltip("How many levels ahead of the live one stand in the distance as scenery. One: " +
                  "the next level alone waits in the sky; the one after it appears as the push " +
                  "towards it begins.")]
@@ -381,8 +385,9 @@ namespace PullTheWorld
             current = SpawnLevel(index);
             if (rotator) rotator.RotationAllowed = false;             // not until the camera has settled
             if (sky) sky.Apply(sky.ChapterFor(index, LevelCount));
-            // The new far level stands up NOW, tiny and fogged at the top of the frame, so it is
-            // simply there as the camera approaches rather than popping in on arrival.
+            // The new far level stands up NOW, tiny and all but dissolved in the fog at the top of
+            // the frame, so it emerges from the haze as the camera approaches rather than popping
+            // in on arrival.
             TopUpAhead();
 
             // 3. The push forward.

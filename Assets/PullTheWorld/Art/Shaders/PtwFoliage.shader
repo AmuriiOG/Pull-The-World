@@ -4,7 +4,9 @@
 // in a slow sine driven by world position, weighted by height from a pivot so the base of a tuft
 // stays planted and the tips move. _WeightSign is +1 for things that grow UP from their pivot
 // (grass tufts, flowers) and -1 for things that hang DOWN from it (vines), so one shader serves
-// both. Cheap enough for a hundred instances on a phone: one light, no textures.
+// both. Cheap enough for a hundred instances on a phone: one light, no textures. Takes the scene
+// fog like URP Lit does, so the grass on a far level fades into the haze with its stone instead
+// of staying a saturated green speck that gives the distance away.
 Shader "PTW/Foliage"
 {
     Properties
@@ -32,6 +34,7 @@ Shader "PTW/Foliage"
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile_fog
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
@@ -47,6 +50,7 @@ Shader "PTW/Foliage"
                 float4 positionCS : SV_POSITION;
                 float3 normalWS   : TEXCOORD0;
                 float  weight     : TEXCOORD1;
+                float  fogFactor  : TEXCOORD2;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -72,6 +76,7 @@ Shader "PTW/Foliage"
                 OUT.positionCS = TransformWorldToHClip(posWS);
                 OUT.normalWS = TransformObjectToWorldNormal(IN.normalOS);
                 OUT.weight = w;
+                OUT.fogFactor = ComputeFogFactor(OUT.positionCS.z);
                 return OUT;
             }
 
@@ -89,7 +94,7 @@ Shader "PTW/Foliage"
                 half3 albedo = lerp(_BaseColor.rgb, _TipColor.rgb, IN.weight);
                 half3 ambient = SampleSH(n) * albedo;
                 half3 lit = albedo * light.color * lambert;
-                return half4(ambient + lit, 1.0);
+                return half4(MixFog(ambient + lit, IN.fogFactor), 1.0);
             }
             ENDHLSL
         }

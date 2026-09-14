@@ -64,6 +64,8 @@ Shader "PTW/Water"
             // a solid object floating above a static sea.
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile _ _SHADOWS_SOFT
+            // Scene fog, like URP Lit: the pools on a far level fade into the haze with its stone.
+            #pragma multi_compile_fog
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
@@ -82,6 +84,7 @@ Shader "PTW/Water"
                 float4 screenPos   : TEXCOORD1;
                 float2 pattern     : TEXCOORD2;
                 float2 local       : TEXCOORD3;
+                float  fogFactor   : TEXCOORD4;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -167,6 +170,7 @@ Shader "PTW/Water"
                 OUT.screenPos = ComputeScreenPos(OUT.positionCS);
                 OUT.pattern = patternP;
                 OUT.local = pos.xz;
+                OUT.fogFactor = ComputeFogFactor(OUT.positionCS.z);
                 return OUT;
             }
 
@@ -229,7 +233,7 @@ Shader "PTW/Water"
                 col += _FoamColor.rgb * saturate(h0) * _CrestAmount;
 
                 float alpha = saturate(max(bodyOpacity, foam) + fres * 0.5);
-                return half4(col, alpha);
+                return half4(MixFog(col, IN.fogFactor), alpha);
             }
             ENDHLSL
         }
