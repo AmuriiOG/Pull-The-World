@@ -185,11 +185,13 @@ namespace PullTheWorld
         void OnEnable()
         {
             if (player) player.OnDied += HandlePlayerDied;
+            GameProgress.OnReloaded += HandleProgressReloaded;
         }
 
         void OnDisable()
         {
             if (player) player.OnDied -= HandlePlayerDied;
+            GameProgress.OnReloaded -= HandleProgressReloaded;
             // Time.timeScale is global and outlives this object. Going away mid hit-stop (a scene
             // reload, the test harness between tests) must not leave the world at 12 % speed.
             CancelPending();
@@ -202,6 +204,19 @@ namespace PullTheWorld
             // two after it in the distance, so PLAY is a zoom into the same view rather than a
             // cut to somewhere else.
             ShowMenuWorld();
+        }
+
+        // A YouTube cloud save landed after Start built the menu world from the defaults: the menu
+        // must stand on the saved level (island and sky chapter), not level 1. Only on the menu -
+        // a level in play is never swapped out from under the player. (Never fires outside
+        // YouTube Playables: PlayerPrefs is read synchronously before Start.)
+        void HandleProgressReloaded()
+        {
+            if (state != LevelState.Menu || LevelCount == 0) return;
+            int want = Mathf.Clamp(GameProgress.UnlockedIndex, 0, LevelCount - 1);
+            if (want == index) return;
+            ShowMenuWorld();
+            Debug.Log($"PTW menu world now on level {index + 1} (cloud save)");
         }
 
         /// <summary>The menu world: the level about to be played, in its slot, under the wide menu framing.</summary>

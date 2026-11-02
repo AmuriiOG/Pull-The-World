@@ -134,8 +134,10 @@ namespace PullTheWorld
             if (unlockAllButton)
             {
                 unlockAllButton.onClick.AddListener(OnUnlockAll);
-                unlockAllButton.gameObject.SetActive(showDevUnlock);
+                unlockAllButton.gameObject.SetActive(showDevUnlock && !IsWebPlayer);
             }
+            // Haptics do nothing in a browser, so the web build does not offer the switch.
+            if (HapticsRowHidden) settingsTopBlock[3].gameObject.SetActive(false);
             if (closeLevelsButton) closeLevelsButton.onClick.AddListener(CloseLevelSelect);
             if (mainMenuButton) mainMenuButton.onClick.AddListener(OnMainMenu);
             if (skipButton) { skipButton.onClick.AddListener(OnSkipLevel); skipButton.gameObject.SetActive(false); }
@@ -155,6 +157,14 @@ namespace PullTheWorld
                 levels.OnKeysChanged += HandleKeysChanged;
                 levels.ArrivalGate = ArrivalGate;
             }
+            GameProgress.OnReloaded += HandleProgressReloaded;
+        }
+
+        // A YouTube cloud save arrived after the menu was built: show its level and settings.
+        void HandleProgressReloaded()
+        {
+            PullSettingsIntoToggles();
+            RefreshProgressLabel();
         }
 
         void OnDisable()
@@ -167,6 +177,7 @@ namespace PullTheWorld
                 levels.OnKeysChanged -= HandleKeysChanged;
                 if (levels.ArrivalGate == (System.Action<int, System.Action>)ArrivalGate) levels.ArrivalGate = null;
             }
+            GameProgress.OnReloaded -= HandleProgressReloaded;
             SetPaused(false);
         }
 
@@ -375,6 +386,21 @@ namespace PullTheWorld
         static readonly float[] SettingsTopOffsets = { 99f, 256f, 404f, 551f };
         const float SettingsFirstButton = 731f, SettingsButtonStep = 161f, SettingsCloseGap = 171f, SettingsBottom = 119f;
 
+        /// <summary>The WebGL player (YouTube Playables): no dev unlock, no haptics switch, Esc closes panels.</summary>
+        static bool IsWebPlayer
+        {
+            get
+            {
+#if UNITY_WEBGL && !UNITY_EDITOR
+                return true;
+#else
+                return false;
+#endif
+            }
+        }
+
+        bool HapticsRowHidden => IsWebPlayer && settingsTopBlock != null && settingsTopBlock.Length > 3 && settingsTopBlock[3];
+
         void LayoutSettings(bool showMainMenu)
         {
             if (mainMenuButton) mainMenuButton.gameObject.SetActive(showMainMenu);
@@ -385,7 +411,9 @@ namespace PullTheWorld
             if (unlockAllButton && unlockAllButton.gameObject.activeSelf) wide.Add(unlockAllButton.transform as RectTransform);
             if (showMainMenu && mainMenuButton) wide.Add(mainMenuButton.transform as RectTransform);
 
-            float closeFromTop = SettingsFirstButton + SettingsButtonStep * Mathf.Max(0, wide.Count - 1) + SettingsCloseGap;
+            // Without the HAPTICS row the buttons move up by one row's spacing.
+            float firstButton = SettingsFirstButton - (HapticsRowHidden ? SettingsTopOffsets[3] - SettingsTopOffsets[2] : 0f);
+            float closeFromTop = firstButton + SettingsButtonStep * Mathf.Max(0, wide.Count - 1) + SettingsCloseGap;
             float height = closeFromTop + SettingsBottom;
             settingsCard.sizeDelta = new Vector2(settingsCard.sizeDelta.x, height);
             float top = height * 0.5f;      // children are anchored at the card's centre
@@ -397,7 +425,7 @@ namespace PullTheWorld
                     if (rt) rt.anchoredPosition = new Vector2(rt.anchoredPosition.x, top - SettingsTopOffsets[i]);
                 }
             for (int i = 0; i < wide.Count; i++)
-                wide[i].anchoredPosition = new Vector2(0f, top - (SettingsFirstButton + SettingsButtonStep * i));
+                wide[i].anchoredPosition = new Vector2(0f, top - (firstButton + SettingsButtonStep * i));
             if (closeSettingsButton)
                 (closeSettingsButton.transform as RectTransform).anchoredPosition = new Vector2(0f, top - closeFromTop);
         }
@@ -655,6 +683,16 @@ namespace PullTheWorld
 
         void Update()
         {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // YouTube Playables best practice: Esc closes menus. Web player only - on Android the
+            // Back button arrives as Escape and keeps its existing behaviour.
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb != null && kb.escapeKey.wasPressedThisFrame)
+            {
+                if (settings && settings.Visible) CloseSettings();
+                else if (levelSelect && levelSelect.Visible) CloseLevelSelect();
+            }
+#endif
             if (flash.a > 0.001f)
             {
                 flash.a = Mathf.MoveTowards(flash.a, 0f, flashFade * Time.unscaledDeltaTime);

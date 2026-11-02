@@ -9,6 +9,11 @@
 // straight horizontal base that the painting never shows, because every base there is lost in
 // haze or a cloud bank. UVs come from object space (the quad spans -0.5..0.5) so the sprite is
 // upright whichever way the generated quad's winding faces.
+//
+// _UVScale is (1,1) everywhere except WebGL Playables builds: WebGL only GPU-compresses
+// power-of-two textures, so that build pads each layer to the next power of two (content at the
+// bottom-left, transparent texels beyond) and sets _UVScale = content / padded size so the painted
+// pixels land exactly where they always did. See PtwWebGLSky.
 Shader "PTW/SkySprite"
 {
     Properties
@@ -19,6 +24,7 @@ Shader "PTW/SkySprite"
         _HazeAmount ("Haze Amount", Range(0, 1)) = 0
         _FadeStart  ("Base Fade Start (v)", Range(0, 1)) = 0
         _FadeEnd    ("Base Fade End (v)", Range(0, 1)) = 0
+        _UVScale    ("Content UV Scale (WebGL padding)", Vector) = (1, 1, 0, 0)
     }
 
     SubShader
@@ -46,6 +52,7 @@ Shader "PTW/SkySprite"
                 float4 _HazeColor;
                 float  _HazeAmount;
                 float  _FadeStart, _FadeEnd;
+                float4 _UVScale;
             CBUFFER_END
 
             struct Attributes
@@ -74,7 +81,8 @@ Shader "PTW/SkySprite"
             half4 frag(Varyings IN) : SV_Target
             {
                 UNITY_SETUP_INSTANCE_ID(IN);
-                half4 c = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.uv) * _BaseColor;
+                // The base fade below stays on the quad's own uv; only the texture lookup is scaled.
+                half4 c = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, IN.uv * _UVScale.xy) * _BaseColor;
                 c.rgb = lerp(c.rgb, _HazeColor.rgb, _HazeAmount);
                 if (_FadeEnd > _FadeStart)
                     c.a *= smoothstep(_FadeStart, _FadeEnd, IN.uv.y);

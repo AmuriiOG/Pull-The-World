@@ -66,17 +66,23 @@ namespace PullTheWorld.Ads
         public string ProviderName => provider?.Name ?? "none";
         public int SkipAfterFails => skipAfterFails;
 
+        /// <summary>
+        /// A future "remove ads" purchase. Never inside YouTube Playables: purchases are not allowed
+        /// there, and nothing may be stored outside the YouTube cloud save.
+        /// </summary>
         public static bool AdsRemoved
         {
-            get => PlayerPrefs.GetInt(KeyNoAds, 0) != 0;
-            set { PlayerPrefs.SetInt(KeyNoAds, value ? 1 : 0); PlayerPrefs.Save(); }
+            get => !Playables.InEnvironment && PlayerPrefs.GetInt(KeyNoAds, 0) != 0;
+            set { if (Playables.InEnvironment) return; PlayerPrefs.SetInt(KeyNoAds, value ? 1 : 0); PlayerPrefs.Save(); }
         }
 
         void Awake()
         {
             Instance = this;
             provider = GetComponent<IAdProvider>();
-            if (provider == null && fakeWhenNoProvider) provider = gameObject.AddComponent<FakeAdProvider>();
+            // Inside YouTube Playables the only allowed ads are YouTube's own.
+            if (provider == null && Playables.InEnvironment) provider = gameObject.AddComponent<YouTubeAdProvider>();
+            if (provider == null && fakeWhenNoProvider && FakeAdsAllowed) provider = gameObject.AddComponent<FakeAdProvider>();
             provider?.Initialize(ok => ready = ok);
         }
 
@@ -86,6 +92,31 @@ namespace PullTheWorld.Ads
             // Never leave the game frozen because we vanished mid-ad (scene reload, app teardown).
             if (showing) { Time.timeScale = pausedScale <= 0f ? 1f : pausedScale; AudioListener.pause = false; showing = false; }
         }
+
+        // The on-screen TEST AD stand-in: Editor, Android and development web builds as before, but
+        // never in a release web build - one served outside YouTube gets no ads at all.
+        static bool FakeAdsAllowed
+        {
+            get
+            {
+#if UNITY_WEBGL && !UNITY_EDITOR
+                return Debug.isDebugBuild && !Playables.InEnvironment;
+#else
+                return true;
+#endif
+            }
+        }
+
+#if DEVELOPMENT_BUILD
+        /// <summary>Development builds only: run an interstitial now, bypassing the cadence, so the
+        /// pause/mute/resume path can be tested without playing six levels.</summary>
+        public void DevShowInterstitialNow(Action then)
+        {
+            if (!Ready || showing) { then?.Invoke(); return; }
+            BeginShow();
+            provider.ShowInterstitial(() => { EndShow("interstitial"); then?.Invoke(); });
+        }
+#endif
 
         /// <summary>Install a real network adapter (call before Awake runs, or replace at runtime).</summary>
         public void SetProvider(IAdProvider p)

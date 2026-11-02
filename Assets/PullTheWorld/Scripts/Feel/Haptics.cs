@@ -42,7 +42,9 @@ namespace PullTheWorld
         /// </summary>
         static void ManifestPermissionHint()
         {
+#if !UNITY_WEBGL   // Handheld does not exist in the WebGL player API; Android still compiles this.
             Handheld.Vibrate();
+#endif
         }
 
         public static void Light() => Tap(12, 55);

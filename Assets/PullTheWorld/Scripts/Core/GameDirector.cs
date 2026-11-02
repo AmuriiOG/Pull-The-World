@@ -32,10 +32,25 @@ namespace PullTheWorld
         [Header("Orientation")]
         [SerializeField] bool lockPortrait = true;
 
+        static bool IsWebPlayer
+        {
+            get
+            {
+#if UNITY_WEBGL && !UNITY_EDITOR
+                return true;
+#else
+                return false;
+#endif
+            }
+        }
+
         void Awake()
         {
             if (disableVSync) QualitySettings.vSyncCount = 0;
-            Application.targetFrameRate = targetFrameRate;
+            // In a browser any target other than -1 makes Unity drive its loop from setTimeout
+            // instead of requestAnimationFrame (stutter, and a console warning). -1 lets the
+            // browser pace frames; physics still steps at the fixed 60 Hz set below.
+            Application.targetFrameRate = IsWebPlayer ? -1 : targetFrameRate;
             if (neverSleep) Screen.sleepTimeout = SleepTimeout.NeverSleep;
 
             // Straight down the screen, constant, never touched again. This single line is the

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <!-- YouTube Playables SDK: MUST load before any game code. Outside YouTube it is a no-op and
+         ytgame.IN_PLAYABLES_ENV is false, so the page still runs as a plain WebGL build. -->
+    <script src="https://www.youtube.com/game_api/v1"></script>
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
+    <link rel="icon" href="data:,">
+    <title>{{{ PRODUCT_NAME }}}</title>
+#if SHOW_DIAGNOSTICS
+    <link rel="stylesheet" href="<<<TemplateData/diagnostics.css>>>">
+    <script src="<<<TemplateData/diagnostics.js>>>"></script>
+#endif
+    <link rel="stylesheet" href="TemplateData/ptw.css">
+  </head>
+  <body>
+    <div id="ptw-frame">
+      <canvas id="unity-canvas" tabindex="-1"></canvas>
+      <div id="ptw-loading">
+        <img class="logo" src="TemplateData/ptw-logo.png" alt="Pull The World">
+        <div class="panel">
+          <div id="ptw-status">Preparing your world…</div>
+          <div id="ptw-track"><div id="ptw-fill"></div></div>
+          <div id="ptw-detail"></div>
+          <button id="ptw-retry" type="button">TRY AGAIN</button>
+        </div>
+      </div>
+#if SHOW_DIAGNOSTICS
+      <div id="diagnostics-icon">diag</div>
+#endif
+    </div>
+    <script>
+      // ---- Pausable intervals. Pausing Unity's main loop is not enough on its own: the engine
+      // also keeps a 1 s background tick (emscripten_set_interval) that renders a full frame, and
+      // the audio runtime polls to resume its AudioContext every 400 ms. YouTube requires ALL
+      // execution and rendering to stop between onPause and onResume, so every interval created
+      // from here on is tracked; the bridge (PtwPlayables.jslib) suspends and recreates them.
+      (function () {
+        var nativeSet = window.setInterval, nativeClear = window.clearInterval;
+        var live = {}, next = 1, suspended = false;
+        window.setInterval = function (fn, ms) {
+          var args = Array.prototype.slice.call(arguments, 2);
+          var h = 0x40000000 + (next++);   // numeric: Emscripten hands the id to wasm as an int32
+          live[h] = { fn: fn, ms: ms, args: args,
+                      id: suspended ? null : nativeSet.apply(window, [fn, ms].concat(args)) };
+          return h;
+        };
+        window.clearInterval = function (h) {
+          var t = live[h];
+          if (!t) return nativeClear.call(window, h);   // an interval from before this wrapper
+          if (t.id !== null) nativeClear.call(window, t.id);
+          delete live[h];
+        };
+        window.ptwSuspendTimers = function () {
+          if (suspended) return;
+          suspended = true;
+          for (var h in live) if (live[h].id !== null) { nativeClear.call(window, live[h].id); live[h].id = null; }
+        };
+        window.ptwResumeTimers = function () {
+          if (!suspended) return;
+          suspended = false;
+          for (var h in live) { var t = live[h]; if (t.id === null) t.id = nativeSet.apply(window, [t.fn, t.ms].concat(t.args)); }
+        };
+      })();
+
+      (function () {
+        var inEnv = typeof ytgame !== "undefined" && !!ytgame.IN_PLAYABLES_ENV;
+
+        // ---- Cloud save: start loadData at once, in parallel with the game download. The game
+        // reads window.ptwSave through the bridge (PtwPlayables.jslib) and calls ptwLoadSave
+        // again to retry. state: 0 pending, 1 loaded, 2 failed, 3 not available (outside YouTube).
+        window.ptwSave = { state: inEnv ? 0 : 3, data: null };
+        window.ptwLoadSave = function () {
+          if (!inEnv) return;
+          window.ptwSave.state = 0;
+          ytgame.game.loadData().then(function (data) {
+            window.ptwSave.data = typeof data === "string" ? data : "";
+            window.ptwSave.state = 1;
+          }, function () {
+            window.ptwSave.state = 2;
+          });
+        };
+        window.ptwLoadSave();
+
+        // ---- Layout: fill the window, clamped to a portrait aspect range.
+        var frame = document.getElementById("ptw-frame");
+        var MAX_ASPECT = 3 / 4, MIN_ASPECT = 9 / 21;   // width / height
+        function layout() {
+          var w = window.innerWidth, h = window.innerHeight, a = w / h;
+          if (a > MAX_ASPECT) w = Math.round(h * MAX_ASPECT);
+          else if (a < MIN_ASPECT) h = Math.round(w / MIN_ASPECT);
+          frame.style.width = w + "px";
+          frame.style.height = h + "px";
+        }
+        window.addEventListener("resize", layout);
+        layout();
+
+        // ---- Render scale. The game is drawn for 1080x1920; a desktop browser frame is often a
+        // third to a half of that, which made edges stair-step. Measured: rendering low-DPI
+        // displays at 1.5x and letting the browser scale down halves the visible aliasing.
+        // Phones (pixel ratio >= 1.5) already render at native resolution and keep it. Capped at
+        // ~2.5 MP (the design resolution plus headroom), never below native, and dropped back
+        // to native if the frame rate cannot hold.
+        var SUPERSAMPLE = 1.5, MAX_PIXELS = 1080 * 1920 * 1.2;
+        var supersampleAllowed = true;
+        function ptwPixelRatio() {
+          var dpr = window.devicePixelRatio || 1;
+          if (!supersampleAllowed || dpr >= 1.5) return dpr;
+          var css = Math.max(1, frame.clientWidth * frame.clientHeight);
+          return Math.max(dpr, Math.min(dpr * SUPERSAMPLE, Math.sqrt(MAX_PIXELS / css)));
+        }
+        window.addEventListener("resize", function () {
+          if (window.ptwUnity) window.ptwUnity.Module.devicePixelRatio = ptwPixelRatio();
+        });
+        // After start-up settles, sample the frame rate for 3 s; below 45 fps, give back the extra
+        // pixels. requestAnimationFrame only - no Page Visibility API (YouTube forbids it).
+        function ptwWatchFrameRate(unityInstance) {
+          if (ptwPixelRatio() <= (window.devicePixelRatio || 1)) return;
+          var frames = 0, busy = 0, last = 0, until = 0;
+          function tick(t) {
+            if (!until) until = t + 3000;
+            // A gap over 1 s means YouTube paused us; anything shorter is real (if slow) frame time.
+            if (last && t - last < 1000) { frames++; busy += t - last; }
+            last = t;
+            if (t < until) { requestAnimationFrame(tick); return; }
+            var fps = busy > 0 ? frames * 1000 / busy : 0;
+            if (fps < 45) {
+              supersampleAllowed = false;
+              unityInstance.Module.devicePixelRatio = ptwPixelRatio();
+            }
+            console.log("PTW render scale " + ptwPixelRatio().toFixed(2) + " (median " + fps.toFixed(0) + " fps)");
+          }
+          setTimeout(function () { requestAnimationFrame(tick); }, 2000);
+        }
+
+        // ---- Texture set: one .wasm, two .data files. ASTC where the GPU has it (phones,
+        // Apple-silicon Macs), otherwise the BC7/DXT set. Only one .data is downloaded.
+        function ptwUseAstc() {
+          try {
+            var gl = document.createElement("canvas").getContext("webgl2");
+            return !!(gl && gl.getExtension("WEBGL_compressed_texture_astc"));
+          } catch (e) { return false; }
+        }
+        var buildUrl = "Build";
+        var dataFile = ptwUseAstc()
+          ? "{{{ DATA_FILENAME }}}".replace(/\.data$/, "_mobile.data")
+          : "{{{ DATA_FILENAME }}}";
+
+        var config = {
+          arguments: [],
+          dataUrl: buildUrl + "/" + dataFile,
+          frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
+#if USE_THREADS
+          workerUrl: buildUrl + "/{{{ WORKER_FILENAME }}}",
+#endif
+#if USE_WASM
+          codeUrl: buildUrl + "/{{{ CODE_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+          symbolsUrl: buildUrl + "/{{{ SYMBOLS_FILENAME }}}",
+#endif
+          streamingAssetsUrl: "StreamingAssets",
+          devicePixelRatio: ptwPixelRatio(),
+          companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+          productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+          productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+        };
+
+        // ---- firstFrameReady once the loading screen is actually on screen (two animation
+        // frames after layout), as the certification rules ask.
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () { if (inEnv) ytgame.game.firstFrameReady(); });
+        });
+
+        // ---- Loading screen. Real bytes, not Unity's progress estimate (which mixes file counts
+        // with bytes): the game data and code files are counted as their bodies stream in. The
+        // build step writes their sizes below (PtwBuild.MergeMobileData), so "MB of total" is exact.
+        var PTW_SIZES = /*PTW_SIZES*/{};
+        var canvas = document.getElementById("unity-canvas");
+        var loading = document.getElementById("ptw-loading");
+        var statusEl = document.getElementById("ptw-status");
+        var detailEl = document.getElementById("ptw-detail");
+        var track = document.getElementById("ptw-track");
+        var fill = document.getElementById("ptw-fill");
+        var codeFile = "{{{ CODE_FILENAME }}}";
+        var totalBytes = (PTW_SIZES[dataFile] || 0) + (PTW_SIZES[codeFile] || 0);
+        var loadedBytes = 0, lastBytesAt = performance.now(), stage = "download", failed = false;
+
+        function mb(n) { return (n / 1048576).toFixed(1); }
+        function show(s) {
+          stage = s.stage || stage;
+          statusEl.textContent = s.status;
+          detailEl.textContent = s.detail || "";
+          track.classList.toggle("busy", !!s.busy);
+          loading.classList.toggle("error", !!s.error);
+          if (typeof s.pct === "number") fill.style.width = s.pct + "%";
+        }
+        // Bytes arrive in many small chunks: redraw at most every 50 ms, plus a trailing redraw so
+        // the last chunk always shows. A timer, not requestAnimationFrame: rAF callbacks were
+        // measured lagging seconds behind while the engine streams and compiles.
+        var lastDraw = 0, drawTimer = null;
+        function downloadProgress() {
+          var now = performance.now();
+          if (now - lastDraw >= 50) { lastDraw = now; drawProgress(); return; }
+          if (!drawTimer) drawTimer = setTimeout(function () { drawTimer = null; lastDraw = performance.now(); drawProgress(); }, 50);
+        }
+        function drawProgress() {
+          if (failed || stage !== "download") return;
+          if (totalBytes > 0) {
+            var f = Math.min(1, loadedBytes / totalBytes);
+            show({ status: "Preparing your world…", pct: Math.round(f * 1000) / 10,
+                   detail: mb(Math.min(loadedBytes, totalBytes)) + " MB of " + mb(totalBytes) + " MB" });
+            if (f >= 1) show({ stage: "starting", status: "Starting the engine…", busy: true, detail: "" });
+          }
+        }
+        function fail(message) {
+          if (failed || stage === "ready") return;
+          failed = true;
+          if (inEnv) ytgame.health.logError();
+          console.error("PTW load failed: " + message);
+          show({ stage: "error", status: "Couldn't reach the game.", detail: "Check your connection, then try again.", error: true });
+        }
+        // Read-only status, for automated tests of the loading screen.
+        window.ptwLoadStatus = function () { return { stage: stage, loaded: loadedBytes, total: totalBytes, failed: failed }; };
+        // TRY AGAIN starts over cleanly: a half-initialised Unity instance cannot be restarted.
+        document.getElementById("ptw-retry").onclick = function () { location.reload(); };
+
+        // Count bytes of the game's own data and code as Unity reads them. Everything else
+        // (and any browser without stream support) goes straight through untouched.
+        var nativeFetch = window.fetch;
+        window.fetch = function (input, init) {
+          var url = typeof input === "string" ? input : (input && input.url) || "";
+          var name = url.split("?")[0].split("/").pop();
+          var p = nativeFetch.apply(this, arguments);
+          if (!(name in PTW_SIZES) || typeof ReadableStream === "undefined") return p;
+          return p.then(function (res) {
+            if (!res.ok) { fail("HTTP " + res.status + " for " + name); return res; }
+            if (!res.body) return res;
+            var reader = res.body.getReader();
+            var counted = new ReadableStream({
+              pull: function (c) {
+                return reader.read().then(function (r) {
+                  if (r.done) { c.close(); return; }
+                  loadedBytes += r.value.byteLength;
+                  lastBytesAt = performance.now();
+                  downloadProgress();
+                  c.enqueue(r.value);
+                }, function (e) {
+                  fail("connection lost while downloading " + name);   // dropped mid-transfer
+                  c.error(e);
+                });
+              },
+              cancel: function (why) { return reader.cancel(why); }
+            });
+            return new Response(counted, { status: res.status, statusText: res.statusText, headers: res.headers });
+          }, function (e) {
+            fail("could not download " + name);   // offline, blocked, DNS... before any byte arrived
+            throw e;
+          });
+        };
+        // A download that stops moving for 20 s is treated as interrupted.
+        var stallTimer = setInterval(function () {
+          if (stage === "download" && !failed && performance.now() - lastBytesAt > 20000) fail("download stalled");
+          if (stage !== "download") clearInterval(stallTimer);
+        }, 1000);
+        config.showBanner = function (msg, type) { if (type === "error") fail(msg); };
+        show({ status: "Preparing your world…", pct: 0, detail: totalBytes ? "0.0 MB of " + mb(totalBytes) + " MB" : "" });
+
+        var script = document.createElement("script");
+        script.src = buildUrl + "/{{{ LOADER_FILENAME }}}";
+        script.onerror = function () { fail("loader script"); };
+        script.onload = function () {
+          createUnityInstance(canvas, config, function (progress) {
+            // Measured bytes decide the download stage (Unity's figure jumps early). Only without
+            // measured sizes - a template rendered outside the build - is Unity's figure used.
+            if (totalBytes || stage !== "download" || failed) return;
+            show({ pct: Math.min(100, Math.round(progress / 0.9 * 100)), status: "Preparing your world…" });
+            if (progress >= 0.9) show({ stage: "starting", status: "Starting the engine…", busy: true, detail: "" });
+          }).then(function (unityInstance) {
+            window.ptwUnity = unityInstance;
+            show({ stage: "ready", status: "Ready to play!", pct: 100, busy: false, detail: "" });
+            setTimeout(function () { loading.classList.add("done"); }, 350);   // Unity's splash, then the menu
+            ptwWatchFrameRate(unityInstance);
+#if SHOW_DIAGNOSTICS
+            document.getElementById("diagnostics-icon").onclick = function () {
+              unityDiagnostics.openDiagnosticsDiv(unityInstance.GetMetricsInfo);
+            };
+#endif
+          }).catch(function (message) { fail(message); });
+        };
+        document.body.appendChild(script);
+      })();
+    </script>
+  </body>
+</html>
